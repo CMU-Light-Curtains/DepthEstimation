@@ -1,0 +1,3 @@
+[submodule "external/lcsim"]
+	path = external/lcsim
+	url = https://github.com/soulslicer/lcsim.git
