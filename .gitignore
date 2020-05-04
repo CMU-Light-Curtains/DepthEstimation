@@ -3,6 +3,7 @@ code/runs/
 *.tar
 results/*
 data/*
+kittiloader/kitti/
 
 # Compiled Object files
 *.slo
