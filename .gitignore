@@ -10,6 +10,7 @@ kittiloader/kitti/
 *.lo
 *.o
 *.cuo
+*.egg
 
 # Compiled Dynamic libraries
 *.so*
