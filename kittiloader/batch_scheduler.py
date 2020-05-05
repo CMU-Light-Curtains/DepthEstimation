@@ -4,10 +4,10 @@ import time
 import cv2
 
 # Custom
-import kitti
-import batch_loader
-#import kittiloader.kitti as kitti
-#import kittiloader.batch_loader as batch_loader
+#import kitti
+#import batch_loader
+import kittiloader.kitti as kitti
+import kittiloader.batch_loader as batch_loader
 
 # Data Loading Module
 import torch.multiprocessing
@@ -21,19 +21,18 @@ class BatchSchedulerMP:
         self.inputs = inputs
         self.queue = Queue()
         self.control = Value('i', 1)
-        if self.mode == 0:
-            self.process = Process(target=self.worker, args=(self.inputs, self.queue, self.control))
-            self.process.start()
-        # self.worker(self.inputs, self.queue, self.control)
 
     def stop(self):
         self.control.value = 0
 
-    def get_mp(self):
+    def enumerate(self):
         if self.mode == 0:
+            self.process = Process(target=self.worker, args=(self.inputs, self.queue, self.control))
+            self.process.start()
             while 1:
                 items = self.queue.get()
-                if items is None: break
+                if items is None:
+                    break
                 yield items
         else:
             for items in self.single(self.inputs):
@@ -81,7 +80,6 @@ class BatchSchedulerMP:
         n_scenes, _, _, _, _ = fun_get_paths(0)
         traj_Indx = np.arange(0, n_scenes)
         fldr_path, img_paths, dmap_paths, poses, intrin_path = fun_get_paths(0)
-        print("------")
 
         #print(len(dmap_paths))
         #stop
@@ -160,7 +158,6 @@ class BatchSchedulerMP:
                     start = time.time()
                     if frame_count < BatchScheduler.traj_len - 1:
                         BatchScheduler.proceed_frame()
-                    print("Forward: " + str(time.time() - start))
 
                     # print(batch_idx, frame_count)
                     if broken: break
@@ -196,24 +193,27 @@ if __name__ == "__main__":
 
     bs = BatchSchedulerMP(testing_inputs, 1) # Multiprocessing misses last image for some reason
 
-    for items in bs.get_mp():
+    for epoch in range(0, 2):
+        print("Epoch: " + str(epoch))
 
-        # Get data
-        local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+        for items in bs.enumerate():
 
-        # # Visualize
-        global_item = []
-        for b in range(0, len(local_info["src_dats"])):
-            batch_item = []
-            for i in range(0, len(local_info["src_dats"][b])):
-                if i > 1: continue
-                batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
-            batch_item = torch.cat(batch_item, dim = 3)
-            global_item.append(batch_item)
-        global_item = torch.cat(global_item, dim=2)
-        cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
-        cv2.waitKey(15)
+            # Get data
+            local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
 
-        # Print
-        print('video batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
-              % (batch_idx + 1, batch_length, 0, frame_count, iepoch + 1, 0, 0))
+            # # Visualize
+            global_item = []
+            for b in range(0, len(local_info["src_dats"])):
+                batch_item = []
+                for i in range(0, len(local_info["src_dats"][b])):
+                    if i > 1: continue
+                    batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
+                batch_item = torch.cat(batch_item, dim = 3)
+                global_item.append(batch_item)
+            global_item = torch.cat(global_item, dim=2)
+            cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
+            cv2.waitKey(15)
+
+            # Print
+            print('video batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
+                  % (batch_idx + 1, batch_length, 0, frame_count, iepoch + 1, 0, 0))

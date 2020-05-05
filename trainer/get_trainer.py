@@ -1,9 +1,9 @@
-from . import sintel_trainer
+from . import default_trainer
 
 def get_trainer(cfg):
-    if cfg.trainer_name == 'Sintel':
-        TrainFramework = sintel_trainer.TrainFramework
+    if cfg.data.trainer_name == 'default':
+        TrainFramework = default_trainer.DefaultTrainer
     else:
-        raise NotImplementedError(cfg.trainer_name)
+        raise NotImplementedError(cfg.data.trainer_name)
 
     return TrainFramework

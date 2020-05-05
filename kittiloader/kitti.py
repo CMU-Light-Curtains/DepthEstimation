@@ -219,7 +219,7 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
     drive = name_contents[4]
     p_data_full = pykitti.raw(basedir, date, drive)
     nimg = len(p_data_full)
-    print("Loaded Scene: " + str(sceneName))
+    #print("Loaded Scene: " + str(sceneName))
 
     #
     # assume: the depth frames for one traj. is always nimg - 10 (ignoring the first and last 5 frames)

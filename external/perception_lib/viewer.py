@@ -1,4 +1,4 @@
-import perception_lib.pyperception_lib as pylib
+import external.perception_lib.pyperception_lib as pylib
 import numpy as np
 import time
 import threading

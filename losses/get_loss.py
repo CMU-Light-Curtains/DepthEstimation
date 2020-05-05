@@ -1,8 +1,8 @@
-from .flow_loss import unFlowLoss
+from .losses import DefaultLoss
 
 def get_loss(cfg):
-    if cfg.data.loss_name == 'unflow':
-        loss = unFlowLoss(cfg)
+    if cfg.data.loss_name == 'default':
+        loss = DefaultLoss(cfg)
     else:
         raise NotImplementedError(cfg.data.loss_name)
     return loss
