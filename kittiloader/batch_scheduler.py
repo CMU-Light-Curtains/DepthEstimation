@@ -15,6 +15,135 @@ from torch.multiprocessing import Process, Queue, Value, cpu_count
 import utils.img_utils as img_utils
 import utils.misc_utils as misc_utils
 
+def generate_model_input(id, local_info_valid, cfg, camside="left"):
+    # Device
+    n_gpu_use = cfg.train.n_gpu
+    device = torch.device('cuda:' + str(id) if n_gpu_use > 0 else 'cpu')
+
+    # Ensure same size
+    valid = (len(local_info_valid[camside + "_cam_intrins"]) == len(
+        local_info_valid[camside + "_src_cam_poses"]) == len(local_info_valid["src_dats"]))
+    if not valid:
+        raise Exception('Batch size invalid')
+
+    # Keep to middle only
+    midval = int(len(local_info_valid["src_dats"][0]) / 2)
+    preval = 0
+
+    # Grab ground truth digitized map
+    dmap_imgsize_digit_arr = []
+    dmap_digit_arr = []
+    dmap_imgsize_arr = []
+    dmap_arr = []
+    dmap_imgsize_prev_arr = []
+    dmap_prev_arr = []
+    for i in range(0, len(local_info_valid["src_dats"])):
+        dmap_imgsize_digit = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_imgsize_digit"]
+        dmap_imgsize_digit_arr.append(dmap_imgsize_digit)
+        dmap_digit = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap"]
+        dmap_imgsize = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_imgsize"]
+        dmap = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_raw"]
+        dmap_digit_arr.append(dmap_digit)
+        dmap_imgsize_arr.append(dmap_imgsize)
+        dmap_arr.append(dmap)
+        dmap_imgsize_prev = local_info_valid["src_dats"][i][preval][camside + "_camera"]["dmap_imgsize"]
+        dmap_prev = local_info_valid["src_dats"][i][preval][camside + "_camera"]["dmap_raw"]
+        dmap_imgsize_prev_arr.append(dmap_imgsize_prev)
+        dmap_prev_arr.append(dmap_prev)
+    dmap_imgsize_digits = torch.cat(dmap_imgsize_digit_arr).to(device)  # [B,256,384] uint64
+    dmap_digits = torch.cat(dmap_digit_arr).to(device)  # [B,64,96] uint64
+    dmap_imgsizes = torch.cat(dmap_imgsize_arr).to(device)
+    dmaps = torch.cat(dmap_arr).to(device)
+    dmap_imgsizes_prev = torch.cat(dmap_imgsize_prev_arr).to(device)
+    dmaps_prev = torch.cat(dmap_prev_arr).to(device)
+
+    intrinsics_arr = []
+    intrinsics_up_arr = []
+    unit_ray_arr = []
+    for i in range(0, len(local_info_valid[camside + "_cam_intrins"])):
+        intr = local_info_valid[camside + "_cam_intrins"][i]["intrinsic_M_cuda"]
+        intr_up = intr * 4;
+        intr_up[2, 2] = 1;
+        intrinsics_arr.append(intr.unsqueeze(0))
+        intrinsics_up_arr.append(intr_up.unsqueeze(0))
+        unit_ray_arr.append(local_info_valid[camside + "_cam_intrins"][i]["unit_ray_array_2D"].unsqueeze(0))
+    intrinsics = torch.cat(intrinsics_arr).to(device)
+    intrinsics_up = torch.cat(intrinsics_up_arr).to(device)
+    unit_ray = torch.cat(unit_ray_arr).to(device)
+
+    src_cam_poses_arr = []
+    for i in range(0, len(local_info_valid[camside + "_src_cam_poses"])):
+        pose = local_info_valid[camside + "_src_cam_poses"][i]
+        src_cam_poses_arr.append(pose[:, 0:midval + 1, :, :])  # currently [1x3x4x4]
+    src_cam_poses = torch.cat(src_cam_poses_arr).to(device)
+    if cfg.var.pnoise: src_cam_poses = img_utils.add_noise2pose(src_cam_poses, cfg.var.pnoise).to(device)
+
+    mask_imgsize_arr = []
+    mask_arr = []
+    rgb_arr = []
+    debug_path = []
+    for i in range(0, len(local_info_valid["src_dats"])):
+        rgb_set = []
+        debug_path_int = []
+        for j in range(0, len(local_info_valid["src_dats"][i])):
+            rgb_set.append(local_info_valid["src_dats"][i][j][camside + "_camera"]["img"])
+            debug_path_int.append(local_info_valid["src_dats"][i][j][camside + "_camera"]["img_path"])
+            if j == midval: break
+        rgb_arr.append(torch.cat(rgb_set).unsqueeze(0))
+        debug_path.append(debug_path_int)
+        mask_imgsize_arr.append(local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_mask_imgsize"])
+        mask_arr.append(local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_mask"])
+    rgb = torch.cat(rgb_arr).to(device)
+    masks_imgsize = torch.cat(mask_imgsize_arr).float().to(device)
+    masks = torch.cat(mask_arr).float().to(device)
+
+    # Create Soft Label
+    d_candi = local_info_valid["d_candi"]
+    if cfg.var.softce:
+        soft_labels_imgsize = []
+        soft_labels = []
+        variance = torch.tensor(cfg.var.softce)
+        for i in range(0, dmap_imgsizes.shape[0]):
+            # Clamping
+            dmap_imgsize = dmap_imgsizes[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks_imgsize[i, 0, :, :]
+            dmap = dmaps[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks[i, 0, :, :]
+            soft_labels_imgsize.append(
+                img_utils.gen_soft_label_torch(d_candi, dmap_imgsize.cuda(), variance, zero_invalid=True))
+            soft_labels.append(img_utils.gen_soft_label_torch(d_candi, dmap.cuda(), variance, zero_invalid=True))
+            # Generate Fake one with all 1
+            # soft_labels.append(util.digitized_to_dpv(dmap_digits[i,:,:].unsqueeze(0), len(d_candi)).squeeze(0).cuda())
+            # soft_labels_imgsize.append(util.digitized_to_dpv(dmap_imgsize_digits[i,:,:].unsqueeze(0), len(d_candi)).squeeze(0).cuda())
+    else:
+        soft_labels_imgsize = []
+        soft_labels = []
+
+    model_input = {
+        "intrinsics": intrinsics,
+        "intrinsics_up": intrinsics_up,
+        "unit_ray": unit_ray,
+        "src_cam_poses": src_cam_poses,
+        "rgb": rgb,
+        "prev_output": None,  # Has to be [B, 64, H, W],
+        "dmaps": dmaps,
+        "masks": masks,
+        "d_candi": d_candi,
+    }
+
+    gt_input = {
+        "masks_imgsizes": masks_imgsize,
+        "masks": masks,
+        "dmap_imgsize_digits": dmap_imgsize_digits,
+        "dmap_digits": dmap_digits,
+        "dmap_imgsizes": dmap_imgsizes,
+        "dmaps": dmaps,
+        "dmap_imgsizes_prev": dmap_imgsizes_prev,
+        "dmaps_prev": dmaps_prev,
+        "soft_labels_imgsize": soft_labels_imgsize,
+        "soft_labels": soft_labels
+    }
+
+    return model_input, gt_input
+
 class BatchSchedulerMP:
     def __init__(self, inputs, mode):
         self.mode = mode

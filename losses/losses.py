@@ -15,4 +15,18 @@ class DefaultLoss(nn.modules.Module):
         :return:
         """
 
-        return torch.sum(torch.abs(output-target))
+        output_left, output_right = output
+        target_left, target_right = target
+
+        left_loss = 0.
+        right_loss = 0.
+        for b in range(0, len(target_left["soft_labels"])):
+            label_left = target_left["soft_labels"][b].unsqueeze(0)
+            label_right = target_right["soft_labels"][b].unsqueeze(0)
+
+            left_loss += torch.sum(torch.abs(output_left["output"] - label_left*0))
+            right_loss += torch.sum(torch.abs(output_right["output"] - label_right*0))
+
+        loss = left_loss + right_loss
+
+        return loss

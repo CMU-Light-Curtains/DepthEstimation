@@ -2,30 +2,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=True):
+
+def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=0, padding=1, isReLU=True):
     if isReLU:
         return nn.Sequential(
             nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                      dilation=dilation,
-                      padding=((kernel_size - 1) * dilation) // 2, bias=True),
+                      padding=padding, bias=True),
             nn.LeakyReLU(0.1, inplace=True)
         )
     else:
         return nn.Sequential(
             nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
                       dilation=dilation,
-                      padding=((kernel_size - 1) * dilation) // 2, bias=True)
+                      padding=padding, bias=True),
+            nn.LeakyReLU(0.1, inplace=True)
         )
+
 
 class DefaultModel(nn.Module):
     def __init__(self, cfg):
         super(DefaultModel, self).__init__()
         self.cfg = cfg
-        self.conv_1x1 = nn.ModuleList([conv(3, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(128, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(96, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(64, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(32, 32, kernel_size=1, stride=1, dilation=1)])
+        self.conv_1x1 = nn.Sequential(conv(3, 32, kernel_size=3, stride=1, dilation=0, padding=1),
+                                      nn.MaxPool2d(2),
+                                      conv(32, self.cfg.var.ndepth, kernel_size=3, stride=1, dilation=0, padding=1),
+                                      nn.MaxPool2d(2),
+                                      )
 
     def num_parameters(self):
         return sum(
@@ -44,5 +46,6 @@ class DefaultModel(nn.Module):
                     nn.init.constant_(layer.bias, 0)
 
     def forward(self, input):
-        output = self.conv_1x1(input)
-        return output
+        images = input["rgb"][:, -1, :, :, :]
+        output = self.conv_1x1(images)
+        return {"output": output, "output_refined": None, "flow": None, "flow_refined": None}

@@ -1,10 +1,11 @@
 import torch
+import time
 import numpy as np
 from abc import abstractmethod
 from tensorboardX import SummaryWriter
+import torch.distributed as dist
 from utils.torch_utils import bias_parameters, weight_parameters, \
     load_checkpoint, save_checkpoint, AdamW
-
 
 class BaseTrainer:
     """
@@ -49,6 +50,11 @@ class BaseTrainer:
                     '{}: {:.2f}'.format(*t) for t in zip(error_names, errors))
                 self._log.info(self.id, ' * Epoch {} '.format(self.i_epoch) + valid_res)
 
+            if self.i_epoch in self.cfg.train.halflr:
+                self._log.info(self.id, 'Halfving LR')
+                for g in self.optimizer.param_groups:
+                    g['lr'] /= 2
+
     def _init_model(self, model):
         # Load Model to Device
         n_gpu_use = self.cfg.train.n_gpu
@@ -88,7 +94,7 @@ class BaseTrainer:
             if n_gpu_use > 0:
                 model = torch.nn.DataParallel(model, device_ids=self.device_ids)
             else:
-                model = torch.nn.DataParallel(model)
+                model = torch.nn.DataParallel(model).to(self.device)
 
         return model
 

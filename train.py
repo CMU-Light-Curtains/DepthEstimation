@@ -113,6 +113,10 @@ def worker(id, cfg):
     trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg)
     trainer.train()
 
+    # Destroy
+    if cfg.mp.enabled:
+        dist.destroy_process_group()
+
     #print(id)
     #print("Done")
 

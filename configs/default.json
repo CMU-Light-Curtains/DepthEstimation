@@ -18,7 +18,8 @@
     "qpower": 1.0,
     "viz": false,
     "img_size": [768, 256],
-    "crop_w": 384
+    "crop_w": 384,
+    "pnoise": 0.0
   },
   "loss": {
     "dsc_mul": 1.0,
@@ -32,15 +33,15 @@
     "epoch_num": 2,
     "lr": 1e-5,
     "momentum": 0.9,
-    "n_gpu": 0,
+    "n_gpu": 1,
     "optim": "adam",
     "bias_decay": 0,
     "weight_decay": 1e-06,
-    "halflr": [0.5, 0.9],
+    "halflr": [1, 5],
     "pretrained_model": null,
     "print_freq": 10,
     "record_freq": 50,
-    "save_iter": 5000,
+    "save_epoch": 1,
     "val_epoch_size": 1
   },
   "mp": {

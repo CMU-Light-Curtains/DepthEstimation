@@ -8,7 +8,7 @@ import utils.img_utils as img_utils
 
 from external.perception_lib import viewer
 from kittiloader import batch_scheduler
-
+import torch.distributed as dist
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config):
@@ -61,6 +61,15 @@ class DefaultTrainer(BaseTrainer):
         self._log.info(self.id, "=> Setting Batch Size {}.".format(batch_size))
         self.train_loader = batch_scheduler.BatchSchedulerMP(train_loader_params, 1)
         self.val_loader = batch_scheduler.BatchSchedulerMP(val_loader_params, 1)
+        self.prev_output = None
+
+
+        # PIN MEMORY?
+
+        # DIST CLEANUP ? - Look at the pytorc distributed data parallel doc
+
+        # During testing..we want to make sure only one validates?
+
 
         # Create Visualizer?
 
@@ -71,31 +80,54 @@ class DefaultTrainer(BaseTrainer):
     def _run_one_epoch(self):
         am_batch_time = AverageMeter()
         am_data_time = AverageMeter()
-
         key_meter_names = ['Loss', 'l_ph', 'l_sm', 'flow_mean']
         key_meters = AverageMeter(i=len(key_meter_names), precision=4)
 
         self.model.train()
         end = time.time()
 
-        #self.i_iter += 1
-        #self.i_epoch += 1
-
+        # Iterate Train Loader
         for items in self.train_loader.enumerate():
 
             # Get data
             local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+            if local_info['is_valid'].sum() == 0:
+                raise Exception("Not supposed to happen")
+
+            # Reset Stage
+            if frame_count == 0:
+                self._log.info(self.id, "Reset Previous Output")
+                self.prev_output = {"left": None, "right": None}
+
+            # Create inputs
+            local_info["d_candi"] = self.d_candi
+            model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
+            model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
+            model_input_left["prev_output"] = self.prev_output["left"]
+            model_input_right["prev_output"] = self.prev_output["right"]
+
+            # Model
+            output_left = self.model(model_input_left)
+            output_right = self.model(model_input_right)
+
+            # Set Prev
+            self.prev_output = {"left": output_left["output"].detach(), "right": output_right["output"].detach()}
+
+            # Loss Function
+            loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
+
+            # Opt
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
             # String
             loader_str = 'video batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
-                  % (batch_idx + 1, batch_length, 0, frame_count, iepoch + 1, 0, 0)
-
+            % (batch_idx + 1, batch_length, self.i_iter, frame_count, self.i_epoch + 1, self.cfg.train.epoch_num, loss)
             self._log.info(self.id, loader_str)
-
             self.i_iter += 1
 
         self.i_epoch += 1
-
 
         # for i_step, data in enumerate(self.train_loader):
         #     if i_step > self.cfg.epoch_size:
@@ -161,6 +193,12 @@ class DefaultTrainer(BaseTrainer):
     @torch.no_grad()
     def _validate_with_gt(self):
         batch_time = AverageMeter()
+        if self.cfg.mp.enabled:
+            dist.barrier()
+
+        print("VALIDATION")
+
+        # The validation should only occur on one GPU across all?
 
         return [0], ["error"]
 
