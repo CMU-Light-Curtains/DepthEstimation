@@ -49,7 +49,7 @@ def main():
     if cfg.mp.enabled:
         # Checks
         if cfg.train.n_gpu > 0:
-            if cfg.train.n_gpu < torch.cuda.device_count():
+            if cfg.train.n_gpu > torch.cuda.device_count():
                 raise RuntimeError("Total GPU size is incorrect")
             cfg.mp.workers = cfg.train.n_gpu
         else:
