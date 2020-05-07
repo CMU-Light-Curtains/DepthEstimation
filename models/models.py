@@ -131,7 +131,7 @@ class BaseEncoder(nn.Module):
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion), )
+                nn.BatchNorm2d(planes * block.expansion, track_running_stats=False), )
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, pad, dilation))

@@ -89,9 +89,9 @@ class BaseTrainer:
         # Model Type
         if self.cfg.mp.enabled:
             if n_gpu_use > 0:
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=self.device_ids)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=self.device_ids, find_unused_parameters=True)
             else:
-                model = torch.nn.parallel.DistributedDataParallel(model)
+                model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
         else:
             if n_gpu_use > 0:
                 model = torch.nn.DataParallel(model, device_ids=self.device_ids)
