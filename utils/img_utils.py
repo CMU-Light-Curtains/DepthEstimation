@@ -7,6 +7,18 @@ import torch
 import torch.nn.functional as F
 import torchvision
 import cv2
+import external.deval_lib.pyevaluatedepth_lib as dlib
+epsilon = torch.finfo(float).eps
+
+def eval_errors(errors):
+    return dlib.evaluateErrors(errors)
+
+def depth_error(predicted, truth):
+    predicted_copy = predicted.copy()
+    truth_copy = truth.copy()
+    predicted_copy[predicted_copy == 0] = -1
+    truth_copy[truth_copy == 0] = -1
+    return dlib.depthError(predicted_copy + epsilon, truth_copy + epsilon)
 
 def gaussian_torch(x, mu, sig, pow=2.):
     return torch.exp(-torch.pow(torch.abs(x - mu), pow) / (2 * torch.pow(sig, pow)))

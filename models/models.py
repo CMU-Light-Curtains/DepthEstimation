@@ -48,4 +48,7 @@ class DefaultModel(nn.Module):
     def forward(self, input):
         images = input["rgb"][:, -1, :, :, :]
         output = self.conv_1x1(images)
-        return {"output": output, "output_refined": None, "flow": None, "flow_refined": None}
+        output_refined = F.interpolate(output, None, 4.)
+        output_lsm = F.log_softmax(output, dim=1)
+        output_refined_lsm = F.log_softmax(output_refined, dim=1)
+        return {"output": output_lsm, "output_refined": output_refined_lsm, "flow": None, "flow_refined": None}

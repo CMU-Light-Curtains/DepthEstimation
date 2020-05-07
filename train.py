@@ -61,19 +61,17 @@ def main():
         os.environ["MASTER_PORT"] = str(cfg.mp.master_port)
         os.environ["WORLD_SIZE"] = str(cfg.mp.workers)
         os.environ["RANK"] = str(0)
+        shared = torch.zeros((cfg.mp.workers, 10)).share_memory_()
 
         # Spawn Worker
-        mp.spawn(worker, nprocs=cfg.mp.workers, args=([cfg]))
+        mp.spawn(worker, nprocs=cfg.mp.workers, args=(cfg, shared))
     else:
         # Spawn Worker
-        worker(0, cfg)
-
-        # Create Trainer
-        #trainer = get_trainer(cfg)(model, loss, _log, cfg.save_root, cfg)
-        #trainer.train()
+        shared = torch.zeros((1, 10)).share_memory_()
+        worker(0, cfg, shared)
 
 
-def worker(id, cfg):
+def worker(id, cfg, shared):
     # init logger
     curr_time = datetime.datetime.now().strftime("%y%m%d%H%M%S")
     _log = init_logger(log_dir=cfg.save_root, filename=curr_time[6:] + '.log')
@@ -82,19 +80,6 @@ def worker(id, cfg):
     # show configurations
     cfg_str = pprint.pformat(cfg)
     if id == 0: _log.info(id, '=> configurations \n ' + cfg_str)
-
-    # # Logger for first process
-    # if id == 0:
-    #     # init logger
-    #     curr_time = datetime.datetime.now().strftime("%y%m%d%H%M%S")
-    #     _log = init_logger(log_dir=cfg.save_root, filename=curr_time[6:] + '.log')
-    #     _log.info('=> will save everything to {}'.format(cfg.save_root))
-    #
-    #     # show configurations
-    #     cfg_str = pprint.pformat(cfg)
-    #     _log.info('=> configurations \n ' + cfg_str)
-    # else:
-    #     _log = dummy_logger()
 
     # Distributed
     if cfg.mp.enabled:
@@ -110,15 +95,13 @@ def worker(id, cfg):
     loss = get_loss(cfg)
 
     # Create Trainer
-    trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg)
+    trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg, shared)
     trainer.train()
 
     # Destroy
     if cfg.mp.enabled:
         dist.destroy_process_group()
 
-    #print(id)
-    #print("Done")
 
     pass
 

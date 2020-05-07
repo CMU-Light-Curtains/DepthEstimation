@@ -11,8 +11,8 @@ from kittiloader import batch_scheduler
 import torch.distributed as dist
 
 class DefaultTrainer(BaseTrainer):
-    def __init__(self, id, model, loss_func, _log, save_root, config):
-        super(DefaultTrainer, self).__init__(id, model, loss_func, _log, save_root, config)
+    def __init__(self, id, model, loss_func, _log, save_root, config, shared):
+        super(DefaultTrainer, self).__init__(id, model, loss_func, _log, save_root, config, shared)
         self.cfg = config
         self.id = id
 
@@ -84,7 +84,9 @@ class DefaultTrainer(BaseTrainer):
         key_meters = AverageMeter(i=len(key_meter_names), precision=4)
 
         self.model.train()
-        end = time.time()
+
+        #self._validate_with_gt()
+        #stop
 
         # Iterate Train Loader
         for items in self.train_loader.enumerate():
@@ -122,7 +124,7 @@ class DefaultTrainer(BaseTrainer):
             self.optimizer.step()
 
             # String
-            loader_str = 'video batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
+            loader_str = 'Train batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
             % (batch_idx + 1, batch_length, self.i_iter, frame_count, self.i_epoch + 1, self.cfg.train.epoch_num, loss)
             self._log.info(self.id, loader_str)
             self.i_iter += 1
@@ -196,11 +198,88 @@ class DefaultTrainer(BaseTrainer):
         if self.cfg.mp.enabled:
             dist.barrier()
 
-        print("VALIDATION")
+        print(self.shared.shape) # [Process, Errors]
+
+        self.model.eval()
+
+        # Variables
+        errors = []
+        errors_refined = []
+
+        # Iterate Train Loader
+        for items in self.val_loader.enumerate():
+
+            # Get data
+            local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+            if local_info['is_valid'].sum() == 0:
+                raise Exception("Not supposed to happen")
+
+            # Reset Stage
+            if frame_count == 0:
+                self._log.info(self.id, "Reset Previous Output")
+                self.prev_output = {"left": None, "right": None}
+
+            # Create inputs
+            local_info["d_candi"] = self.d_candi
+            model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
+            model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
+            model_input_left["prev_output"] = self.prev_output["left"]
+            model_input_right["prev_output"] = self.prev_output["right"]
+
+            # Model
+            output_left = self.model(model_input_left)
+            output_right = self.model(model_input_right)
+
+            # Set Prev
+            self.prev_output = {"left": output_left["output"].detach(), "right": output_right["output"].detach()}
+
+            # Eval
+            for b in range(0, output_left["output"].shape[0]):
+                dpv_predicted = output_left["output"][b, :, :, :].unsqueeze(0)
+                dpv_refined_predicted = output_left["output_refined"][b, :, :, :].unsqueeze(0)
+                depth_predicted = img_utils.dpv_to_depthmap(dpv_predicted, self.d_candi, BV_log=True)
+                depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, self.d_candi, BV_log=True)
+                mask = gt_input_left["masks"][b, :, :, :]
+                mask_refined = gt_input_left["masks_imgsizes"][b, :, :, :]
+                depth_truth = gt_input_left["dmaps"][b, :, :].unsqueeze(0)
+                depth_refined_truth = gt_input_left["dmap_imgsizes"][b, :, :].unsqueeze(0)
+
+                # Eval
+                depth_truth_eval = depth_truth.clone()
+                depth_truth_eval[depth_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+                depth_refined_truth_eval = depth_refined_truth.clone()
+                depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+                depth_predicted_eval = depth_predicted.clone()
+                depth_predicted_eval = depth_predicted_eval * mask
+                depth_refined_predicted_eval = depth_refined_predicted.clone()
+                depth_refined_predicted_eval = depth_refined_predicted_eval * mask_refined
+                errors.append(img_utils.depth_error(depth_predicted_eval.squeeze(0).cpu().numpy(), depth_truth_eval.squeeze(0).cpu().numpy()))
+                errors_refined.append(img_utils.depth_error(depth_refined_predicted_eval.squeeze(0).cpu().numpy(), depth_refined_truth_eval.squeeze(0).cpu().numpy()))
+
+            # String
+            loader_str = 'Val batch %d / %d, frame_count: %d' \
+            % (batch_idx + 1, batch_length, frame_count)
+            self._log.info(self.id, loader_str)
+            self.i_iter += 1
+
+        # Evaluate Errors
+        results = img_utils.eval_errors(errors)
+        results_refined = img_utils.eval_errors(errors_refined)
+        sil = results["scale invariant log"][0]
+        sil_refined = results_refined["scale invariant log"][0]
+        rmse = results["rmse"][0]
+        rmse_refined = results_refined["rmse"][0]
+        error_keys = ["rmse", "rmse_refined", "sil", "sil_refined"]
+        error_list = [rmse, rmse_refined, sil, sil_refined]
+
+        # Copy to Shared
+
+        # Save Model
+        self.save_model(rmse_refined, self.cfg.data.exp_name)
 
         # The validation should only occur on one GPU across all?
 
-        return [0], ["error"]
+        return error_list, error_keys
 
         # if type(self.valid_loader) is not list:
         #     self.valid_loader = [self.valid_loader]

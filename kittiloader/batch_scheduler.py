@@ -4,10 +4,12 @@ import time
 import cv2
 
 # Custom
-#import kitti
-#import batch_loader
-import kittiloader.kitti as kitti
-import kittiloader.batch_loader as batch_loader
+try:
+    import kittiloader.kitti as kitti
+    import kittiloader.batch_loader as batch_loader
+except:
+    import kitti
+    import batch_loader
 
 # Data Loading Module
 import torch.multiprocessing
@@ -314,15 +316,15 @@ if __name__ == "__main__":
         "d_candi_up": img_utils.powerf(5., 40., 64, 1.5),
         "dataset_name": "kitti",
         "hack_num": 0,
-        "batch_size": 2,
+        "batch_size": 4,
         "n_epoch": 1,
         "qmax": 1,
-        "mode": "train"
+        "mode": "val"
     }
 
     bs = BatchSchedulerMP(testing_inputs, 1) # Multiprocessing misses last image for some reason
 
-    for epoch in range(0, 2):
+    for epoch in range(0, 1):
         print("Epoch: " + str(epoch))
 
         for items in bs.enumerate():

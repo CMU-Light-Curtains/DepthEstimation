@@ -24,8 +24,8 @@ class DefaultLoss(nn.modules.Module):
             label_left = target_left["soft_labels"][b].unsqueeze(0)
             label_right = target_right["soft_labels"][b].unsqueeze(0)
 
-            left_loss += torch.sum(torch.abs(output_left["output"] - label_left*0))
-            right_loss += torch.sum(torch.abs(output_right["output"] - label_right*0))
+            left_loss += torch.sum(torch.abs(output_left["output"] - 0))
+            right_loss += torch.sum(torch.abs(output_right["output"] - 0))
 
         loss = left_loss + right_loss
 

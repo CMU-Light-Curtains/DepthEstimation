@@ -12,9 +12,10 @@ class BaseTrainer:
     Base class for all trainers
     """
 
-    def __init__(self, id, model, loss_func, _log, save_root, config):
+    def __init__(self, id, model, loss_func, _log, save_root, config, shared):
         self.id = id
         self._log = _log
+        self.shared = shared
 
         self.cfg = config
         self.save_root = save_root
@@ -23,14 +24,14 @@ class BaseTrainer:
         else:
             self.summary_writer = None
 
+        self.best_error = np.inf
+        self.i_epoch = 0
+        self.i_iter = 0
+
         self.device, self.device_ids = self._prepare_device()
         self.model = self._init_model(model)
         self.optimizer = self._create_optimizer()
         self.loss_func = loss_func
-
-        self.best_error = np.inf
-        self.i_epoch = 0
-        self.i_iter = 0
 
     @abstractmethod
     def _run_one_epoch(self):
@@ -71,6 +72,7 @@ class BaseTrainer:
             self._log.info(self.id, "=> using pre-trained weights {}.".format(
                 self.cfg.train.pretrained_model))
             epoch, weights = load_checkpoint(self.cfg.train.pretrained_model)
+            self.i_epoch = epoch
 
             from collections import OrderedDict
             new_weights = OrderedDict()
@@ -154,5 +156,7 @@ class BaseTrainer:
 
         models = {'epoch': self.i_epoch,
                   'state_dict': self.model.module.state_dict()}
+
+        self._log.info(self.id, "=> Saving Model..")
 
         save_checkpoint(self.save_root, models, name, is_best)

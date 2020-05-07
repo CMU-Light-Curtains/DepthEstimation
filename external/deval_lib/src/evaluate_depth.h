@@ -132,7 +132,7 @@ std::map<std::string, std::vector<float>> evaluateErrors(std::vector<std::vector
                              "abs relative",
                              "squared relative"};
     // write mean, min and max
-    std::cout << "Done. Your evaluation results are:" << std::endl;
+    // std::cout << "Done. Your evaluation results are:" << std::endl;
     std::map<std::string, std::vector<float>> results;
     for (int32_t i = 0; i < errors_out[0].size(); i++) {
       //std::cout << "mean " << metrics[i] << ": " << statMean(errors_out, i) << std::endl;

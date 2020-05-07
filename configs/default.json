@@ -30,7 +30,7 @@
   "train": {
     "batch_size": 4,
     "beta": 0.999,
-    "epoch_num": 2,
+    "epoch_num": 4,
     "lr": 1e-5,
     "momentum": 0.9,
     "n_gpu": 1,
@@ -45,7 +45,7 @@
     "val_epoch_size": 1
   },
   "mp": {
-    "enabled": true,
+    "enabled": false,
     "master_addr": "localhost",
     "master_port": 8080,
     "workers": 2
