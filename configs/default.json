@@ -1,11 +1,11 @@
 {
   "data": {
     "exp_name": "default",
-    "model_name": "default",
-    "loss_name": "default",
+    "model_name": "base",
+    "loss_name": "base",
     "trainer_name": "default",
-    "dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
-    "dataset_split": "./kittiloader/k2/"
+    "dataset_path": "/media/raaj/Storage/kitti/",
+    "dataset_split": "./kittiloader/k1/"
   },
   "var": {
     "sigma_soft_max": 10.0,
@@ -19,21 +19,24 @@
     "viz": false,
     "img_size": [768, 256],
     "crop_w": 384,
-    "pnoise": 0.0
+    "pnoise": 0.0,
+    "mload": false
   },
   "loss": {
+    "ce_mul": 1.0,
     "dsc_mul": 1.0,
     "rsc_mul": 1.0,
     "smooth_mul": 0.5,
-    "dc_mul": 0.5
+    "dc_mul": 0.5,
+    "rsc_low_mul": 0.0
   },
   "train": {
-    "batch_size": 4,
+    "batch_size": 8,
     "beta": 0.999,
     "epoch_num": 4,
     "lr": 1e-5,
     "momentum": 0.9,
-    "n_gpu": 1,
+    "n_gpu": 4,
     "optim": "adam",
     "bias_decay": 0,
     "weight_decay": 1e-06,
@@ -45,7 +48,7 @@
     "val_epoch_size": 1
   },
   "mp": {
-    "enabled": false,
+    "enabled": true,
     "master_addr": "localhost",
     "master_port": 8080,
     "workers": 2

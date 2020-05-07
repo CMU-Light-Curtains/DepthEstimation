@@ -159,7 +159,7 @@ def quaternion_to_rotation(q, is_tensor = False, R_tensor=None, TUM_format=True)
     if is_tensor and R_tensor is not None:
         Rot = R_tensor
     elif is_tensor and R_tensor is None:
-        Rot = torch.zeros(3,3).cuda()
+        Rot = torch.zeros(3,3).to(q.device)
     else:
         Rot = np.zeros((3,3))
 
@@ -226,14 +226,14 @@ def rotation_to_quaternion(R, quat):
 
 def unitquat_to_rotation(r_uq):
     assert isinstance(r_uq, torch.Tensor)
-    r_q = torch.zeros(4).cuda()
+    r_q = torch.zeros(4).to(r_uq.device)
     unitQ_to_quat(r_uq, r_q)
     R = quaternion_to_rotation(r_q, is_tensor=True)
     return R
 
 def rotation_to_unitquat(R):
-    r_q = torch.zeros(4).cuda()
-    r_uq = torch.zeros(3).cuda()
+    r_q = torch.zeros(4).to(R.device)
+    r_uq = torch.zeros(3).to(R.device)
     rotation_to_quaternion(R, r_q)
     quat_to_unitQ( r_q, r_uq)
     return r_uq
@@ -255,17 +255,17 @@ def add_noise2pose(src_cam_poses_in, noise_level =.2):
             src_cam_pose = src_cam_poses_perbatch[icam, ...]
 
             # convert to unit quaternion #
-            r = rotation_to_unitquat(src_cam_pose[:3, :3].cuda())
+            r = rotation_to_unitquat(src_cam_pose[:3, :3].to(src_cam_pose.device))
             t = src_cam_pose[:3, 3]
 
             # add noise to r and t #
             sigma_r = noise_level * r.norm()
             sigma_t = noise_level * t.norm()
-            r = r + torch.randn(r.shape).cuda() * sigma_r
+            r = r + torch.randn(r.shape).to(src_cam_pose.device) * sigma_r
             t = t + torch.randn(t.shape) * sigma_t
 
             # put back in to src_cam_poses_out #
-            src_cam_poses_out[ibatch, icam, :3, :3] = unitquat_to_rotation( r).cpu()
+            src_cam_poses_out[ibatch, icam, :3, :3] = unitquat_to_rotation(r)
             src_cam_poses_out[ibatch, icam, :3, 3] = t
 
     return src_cam_poses_out

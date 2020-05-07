@@ -110,8 +110,8 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
             dmap_imgsize = dmap_imgsizes[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks_imgsize[i, 0, :, :]
             dmap = dmaps[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks[i, 0, :, :]
             soft_labels_imgsize.append(
-                img_utils.gen_soft_label_torch(d_candi, dmap_imgsize.cuda(), variance, zero_invalid=True))
-            soft_labels.append(img_utils.gen_soft_label_torch(d_candi, dmap.cuda(), variance, zero_invalid=True))
+                img_utils.gen_soft_label_torch(d_candi, dmap_imgsize, variance, zero_invalid=True))
+            soft_labels.append(img_utils.gen_soft_label_torch(d_candi, dmap, variance, zero_invalid=True))
             # Generate Fake one with all 1
             # soft_labels.append(util.digitized_to_dpv(dmap_digits[i,:,:].unsqueeze(0), len(d_candi)).squeeze(0).cuda())
             # soft_labels_imgsize.append(util.digitized_to_dpv(dmap_imgsize_digits[i,:,:].unsqueeze(0), len(d_candi)).squeeze(0).cuda())
@@ -141,14 +141,19 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "dmap_imgsizes_prev": dmap_imgsizes_prev,
         "dmaps_prev": dmaps_prev,
         "soft_labels_imgsize": soft_labels_imgsize,
-        "soft_labels": soft_labels
+        "soft_labels": soft_labels,
+        "d_candi": d_candi,
+        "T_left2right": local_info_valid["T_left2right"],
+        "rgb": rgb,
+        "intrinsics": intrinsics,
+        "intrinsics_up": intrinsics_up,
     }
 
     return model_input, gt_input
 
 class BatchSchedulerMP:
-    def __init__(self, inputs, mode):
-        self.mode = mode
+    def __init__(self, inputs, mload):
+        self.mload = mload
         self.inputs = inputs
         self.queue = Queue()
         self.control = Value('i', 1)
@@ -157,7 +162,7 @@ class BatchSchedulerMP:
         self.control.value = 0
 
     def enumerate(self):
-        if self.mode == 0:
+        if self.mload:
             self.process = Process(target=self.worker, args=(self.inputs, self.queue, self.control))
             self.process.start()
             while 1:
@@ -322,7 +327,9 @@ if __name__ == "__main__":
         "mode": "val"
     }
 
-    bs = BatchSchedulerMP(testing_inputs, 1) # Multiprocessing misses last image for some reason
+    # Add feature to control lidar params
+
+    bs = BatchSchedulerMP(testing_inputs, False) # Multiprocessing misses last image for some reason
 
     for epoch in range(0, 1):
         print("Epoch: " + str(epoch))
