@@ -272,7 +272,9 @@ class BatchSchedulerMP:
 
             if broken: break
         queue.put(None)
-        time.sleep(1)
+        #queue.close()
+        time.sleep(5)
+        print("Ended")
 
     def single(self, inputs):
         qmax = inputs["qmax"]
@@ -349,18 +351,18 @@ if __name__ == "__main__":
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
 
-            # # Visualize
-            global_item = []
-            for b in range(0, len(local_info["src_dats"])):
-                batch_item = []
-                for i in range(0, len(local_info["src_dats"][b])):
-                    if i > 1: continue
-                    batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
-                batch_item = torch.cat(batch_item, dim = 3)
-                global_item.append(batch_item)
-            global_item = torch.cat(global_item, dim=2)
-            cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
-            cv2.waitKey(15)
+            # # # Visualize
+            # global_item = []
+            # for b in range(0, len(local_info["src_dats"])):
+            #     batch_item = []
+            #     for i in range(0, len(local_info["src_dats"][b])):
+            #         if i > 1: continue
+            #         batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
+            #     batch_item = torch.cat(batch_item, dim = 3)
+            #     global_item.append(batch_item)
+            # global_item = torch.cat(global_item, dim=2)
+            # cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
+            # cv2.waitKey(15)
 
             # Print
             print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
