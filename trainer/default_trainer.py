@@ -71,9 +71,7 @@ class DefaultTrainer(BaseTrainer):
         self.val_loader = batch_scheduler.BatchSchedulerMP(val_loader_params, self.cfg.var.mload)
         self.prev_output = None
 
-
         # PIN MEMORY?
-
 
     def __del__(self):
         if self.viz is not None:
@@ -85,6 +83,10 @@ class DefaultTrainer(BaseTrainer):
         key_meter_names = ['Loss', 'l_ph', 'l_sm', 'flow_mean']
         key_meters = AverageMeter(i=len(key_meter_names), precision=4)
 
+        # Zero out shared
+        self.shared[:] = 0
+
+        # Model Train
         self.model.train()
 
         # Iterate Train Loader
@@ -117,6 +119,17 @@ class DefaultTrainer(BaseTrainer):
             # Loss Function
             loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
 
+            # ** Signal **
+            if self.cfg.mp.enabled:
+                signal = torch.tensor([1]).to(self.device)
+                work = dist.all_reduce(signal, async_op=True)
+                work.wait()
+                #self._log.info(self.id, "SIG: " + str(signal.item()))
+                if signal.item() < self.cfg.mp.workers:
+                    #self._log.info(self.id, "EXIT: " + str(signal.item()))
+                    self.train_loader.stop()
+                    break
+
             # Opt
             self.optimizer.zero_grad()
             loss.backward()
@@ -128,6 +141,14 @@ class DefaultTrainer(BaseTrainer):
             self._log.info(self.id, loader_str)
             self.i_iter += 1
 
+        # ** Signal **
+        if self.cfg.mp.enabled:
+            signal = torch.tensor([0]).to(self.device)
+            sflag = self.shared[0, -1]
+            if sflag == 0:
+                self.shared[0, -1] = 1
+                dist.all_reduce(signal)
+
         self.i_epoch += 1
 
     @torch.no_grad()
@@ -136,8 +157,10 @@ class DefaultTrainer(BaseTrainer):
         if self.cfg.mp.enabled:
             dist.barrier()
 
-        print(self.shared.shape) # [Process, Errors]
+        # Zero out shared
+        self.shared[:] = 0
 
+        # Eval Mode
         self.model.eval()
 
         # Variables

@@ -157,15 +157,14 @@ class BatchSchedulerMP:
         self.mload = mload
         self.inputs = inputs
 
-        smp = mp.get_context('spawn')
-        self.queue = smp.Queue()
-        self.control = smp.Value('i', 1)
-
     def stop(self):
         self.control.value = 0
 
     def enumerate(self):
         if self.mload:
+            smp = mp.get_context('spawn')
+            self.queue = smp.Queue()
+            self.control = smp.Value('i', 1)
             mp.spawn(self.worker, nprocs=1, args=(self.inputs, self.queue, self.control), join=False)
             #self.process = Process(target=self.worker, args=(0, self.inputs, self.queue, self.control))
             #self.process.start()
@@ -209,6 +208,7 @@ class BatchSchedulerMP:
             scene_names_split[i] = []
         for i in range(0, len(scene_names)):
             vi = i % total_processes
+            if len(scene_names[i]) == 0: continue
             scene_names_split[vi].append(scene_names[i])
 
         dataset_init = kitti.KITTI_dataset
@@ -250,10 +250,14 @@ class BatchSchedulerMP:
                     # Queue Max
                     while queue.qsize() >= qmax:
                         if control.value == 0:
+                            while not queue.empty():
+                                queue.get()
                             broken = True
                             break
                         time.sleep(0.01)
                     if control.value == 0:
+                        while not queue.empty():
+                            queue.get()
                         broken = True
                         break
 
@@ -272,8 +276,7 @@ class BatchSchedulerMP:
 
             if broken: break
         queue.put(None)
-        #queue.close()
-        time.sleep(5)
+        time.sleep(2)
         print("Ended")
 
     def single(self, inputs):
@@ -343,6 +346,7 @@ if __name__ == "__main__":
 
     bs = BatchSchedulerMP(testing_inputs, True) # Multiprocessing misses last image for some reason
 
+    counter = 0
     for epoch in range(0, 1):
         print("Epoch: " + str(epoch))
 
@@ -350,6 +354,11 @@ if __name__ == "__main__":
 
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
+
+            # Test Stop
+            counter += 1
+            if counter == 5:
+                bs.stop()
 
             # # # Visualize
             # global_item = []
