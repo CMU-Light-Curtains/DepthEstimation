@@ -13,6 +13,7 @@ except:
 
 # Data Loading Module
 import torch.multiprocessing
+import torch.multiprocessing as mp
 from torch.multiprocessing import Process, Queue, Value, cpu_count
 import utils.img_utils as img_utils
 import utils.misc_utils as misc_utils
@@ -155,16 +156,19 @@ class BatchSchedulerMP:
     def __init__(self, inputs, mload):
         self.mload = mload
         self.inputs = inputs
-        self.queue = Queue()
-        self.control = Value('i', 1)
+
+        smp = mp.get_context('spawn')
+        self.queue = smp.Queue()
+        self.control = smp.Value('i', 1)
 
     def stop(self):
         self.control.value = 0
 
     def enumerate(self):
         if self.mload:
-            self.process = Process(target=self.worker, args=(self.inputs, self.queue, self.control))
-            self.process.start()
+            mp.spawn(self.worker, nprocs=1, args=(self.inputs, self.queue, self.control), join=False)
+            #self.process = Process(target=self.worker, args=(0, self.inputs, self.queue, self.control))
+            #self.process.start()
             while 1:
                 items = self.queue.get()
                 if items is None:
@@ -230,7 +234,7 @@ class BatchSchedulerMP:
             hack_num=hack_num)
         return BatchScheduler
 
-    def worker(self, inputs, queue, control):
+    def worker(self, id, inputs, queue, control):
         qmax = inputs["qmax"]
         n_epoch = inputs["n_epoch"]
 
@@ -329,7 +333,13 @@ if __name__ == "__main__":
 
     # Add feature to control lidar params
 
-    bs = BatchSchedulerMP(testing_inputs, False) # Multiprocessing misses last image for some reason
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from models import models
+    x = models.BaseDecoder(3,3,3)
+
+    bs = BatchSchedulerMP(testing_inputs, True) # Multiprocessing misses last image for some reason
 
     for epoch in range(0, 1):
         print("Epoch: " + str(epoch))
