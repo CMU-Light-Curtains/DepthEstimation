@@ -91,7 +91,7 @@ class DefaultTrainer(BaseTrainer):
         for items in self.train_loader.enumerate():
 
             # Get data
-            local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+            local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
             if local_info['is_valid'].sum() == 0:
                 raise Exception("Not supposed to happen")
 
@@ -123,8 +123,8 @@ class DefaultTrainer(BaseTrainer):
             self.optimizer.step()
 
             # String
-            loader_str = 'Train batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
-            % (batch_idx + 1, batch_length, self.i_iter, frame_count, self.i_epoch + 1, self.cfg.train.epoch_num, loss)
+            loader_str = 'Train batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
+            % (batch_idx + 1, batch_length, self.i_iter, frame_count + 1, frame_length, self.i_epoch + 1, self.cfg.train.epoch_num, loss)
             self._log.info(self.id, loader_str)
             self.i_iter += 1
 
@@ -148,7 +148,7 @@ class DefaultTrainer(BaseTrainer):
         for items in self.val_loader.enumerate():
 
             # Get data
-            local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+            local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
             if local_info['is_valid'].sum() == 0:
                 raise Exception("Not supposed to happen")
 
@@ -195,8 +195,8 @@ class DefaultTrainer(BaseTrainer):
                 errors_refined.append(img_utils.depth_error(depth_refined_predicted_eval.squeeze(0).cpu().numpy(), depth_refined_truth_eval.squeeze(0).cpu().numpy()))
 
             # String
-            loader_str = 'Val batch %d / %d, frame_count: %d' \
-            % (batch_idx + 1, batch_length, frame_count)
+            loader_str = 'Val batch %d / %d, frame_count: %d / %d' \
+            % (batch_idx + 1, batch_length, frame_count + 1, frame_length)
             self._log.info(self.id, loader_str)
             self.i_iter += 1
 

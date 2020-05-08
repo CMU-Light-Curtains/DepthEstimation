@@ -258,7 +258,7 @@ class BatchSchedulerMP:
                         break
 
                     # Put in Q
-                    queue.put([local_info, len(BatchScheduler), batch_idx, frame_count, ref_indx, iepoch])
+                    queue.put([local_info, len(BatchScheduler), batch_idx, frame_count, BatchScheduler.traj_len, iepoch])
 
                     # Update dat_array
                     if frame_count < BatchScheduler.traj_len - 1:
@@ -292,7 +292,7 @@ class BatchSchedulerMP:
                     #   print(local_info["src_dats"][0][0]["left_camera"]["img_path"])
 
                     # Put in Q
-                    yield [local_info, len(BatchScheduler), batch_idx, frame_count, ref_indx, iepoch]
+                    yield [local_info, len(BatchScheduler), batch_idx, frame_count, BatchScheduler.traj_len, iepoch]
 
                     # Update dat_array
                     start = time.time()
@@ -347,7 +347,7 @@ if __name__ == "__main__":
         for items in bs.enumerate():
 
             # Get data
-            local_info, batch_length, batch_idx, frame_count, ref_indx, iepoch = items
+            local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
 
             # # Visualize
             global_item = []
@@ -363,5 +363,5 @@ if __name__ == "__main__":
             cv2.waitKey(15)
 
             # Print
-            print('video batch %d / %d, iter: %d, frame_count: %d; Epoch: %d / %d, loss = %.5f' \
-                  % (batch_idx + 1, batch_length, 0, frame_count, iepoch + 1, 0, 0))
+            print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
+                  % (batch_idx + 1, batch_length, 0, frame_count + 1, frame_length, iepoch + 1, 0, 0))
