@@ -128,7 +128,7 @@ class DefaultTrainer(BaseTrainer):
                 if signal.item() < self.cfg.mp.workers:
                     #self._log.info(self.id, "EXIT: " + str(signal.item()))
                     self.train_loader.stop()
-                    break
+                    #break
 
             # Opt
             self.optimizer.zero_grad()

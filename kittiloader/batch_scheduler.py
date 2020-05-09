@@ -156,25 +156,34 @@ class BatchSchedulerMP:
     def __init__(self, inputs, mload):
         self.mload = mload
         self.inputs = inputs
+        self.qmax = self.inputs["qmax"]
 
     def stop(self):
-        self.control.value = 0
+        if self.mload:
+            self.control.value = 0
+        else:
+            self.control = 0
 
     def enumerate(self):
         if self.mload:
             smp = mp.get_context('spawn')
-            self.queue = smp.Queue()
+            queue = smp.Queue(maxsize=self.qmax)
             self.control = smp.Value('i', 1)
-            mp.spawn(self.worker, nprocs=1, args=(self.inputs, self.queue, self.control), join=False)
+            mp.spawn(self.worker, nprocs=1, args=(self.inputs, queue, self.control), join=False)
             #self.process = Process(target=self.worker, args=(0, self.inputs, self.queue, self.control))
             #self.process.start()
             while 1:
-                items = self.queue.get()
-                if items is None:
+                if self.control.value == 0:
+                    _ = queue.get()
                     break
+                items = queue.get()
+                if items is None: break
                 yield items
         else:
+            self.control = 1
             for items in self.single(self.inputs):
+                if self.control == 0:
+                    break
                 if items is None: break
                 yield items
 
@@ -247,22 +256,13 @@ class BatchSchedulerMP:
                 for frame_count, ref_indx in enumerate(range(BatchScheduler.traj_len)):
                     local_info = BatchScheduler.local_info_full()
 
-                    # Queue Max
-                    while queue.qsize() >= qmax:
-                        if control.value == 0:
-                            while not queue.empty():
-                                queue.get()
-                            broken = True
-                            break
-                        time.sleep(0.01)
-                    if control.value == 0:
-                        while not queue.empty():
-                            queue.get()
-                        broken = True
-                        break
-
                     # Put in Q
                     queue.put([local_info, len(BatchScheduler), batch_idx, frame_count, BatchScheduler.traj_len, iepoch])
+
+                    # Break
+                    if control.value == 0:
+                        broken = True
+                        break
 
                     # Update dat_array
                     if frame_count < BatchScheduler.traj_len - 1:
@@ -275,9 +275,21 @@ class BatchSchedulerMP:
                 BatchScheduler.proceed_batch()
 
             if broken: break
-        queue.put(None)
-        time.sleep(2)
-        print("Ended")
+
+        # If we prematurely stopped the process, then empty the queue
+        if control.value == 0:
+            time.sleep(1)
+            while not queue.empty():
+                _ = queue.get()
+        # If it naturally ended, we need to wait for queue to clear
+        else:
+            while queue.qsize():
+                time.sleep(0.1)
+            time.sleep(1)
+            queue.put(None)
+
+        #print(queue.qsize())
+        print("DataLoader End")
 
     def single(self, inputs):
         qmax = inputs["qmax"]
@@ -338,13 +350,21 @@ if __name__ == "__main__":
 
     # Add feature to control lidar params
 
+    # train regular on other server
+
+    # add lidar control stuff?
+
+    # Should we clamp the count?? so every batch looks at mixed or max no of images
+
+    # Save Every 5k iter
+
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
     from models import models
     x = models.BaseDecoder(3,3,3)
 
-    bs = BatchSchedulerMP(testing_inputs, True) # Multiprocessing misses last image for some reason
+    bs = BatchSchedulerMP(testing_inputs, False) # Multiprocessing misses last image for some reason
 
     counter = 0
     for epoch in range(0, 1):
@@ -355,10 +375,17 @@ if __name__ == "__main__":
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
 
-            # Test Stop
-            counter += 1
-            if counter == 5:
-                bs.stop()
+            # Print
+            print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
+                  % (batch_idx + 1, batch_length, 0, frame_count + 1, frame_length, iepoch + 1, 0, 0))
+
+            time.sleep(1)
+
+            # # Test Stop
+            # counter += 1
+            # if counter == 6:
+            #     bs.stop()
+            #     #break
 
             # # # Visualize
             # global_item = []
@@ -373,6 +400,26 @@ if __name__ == "__main__":
             # cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
             # cv2.waitKey(15)
 
-            # Print
-            print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
-                  % (batch_idx + 1, batch_length, 0, frame_count + 1, frame_length, iepoch + 1, 0, 0))
+    print("Ended")
+
+    # counter = 0
+    # for epoch in range(0, 1):
+    #     print("Epoch: " + str(epoch))
+    #
+    #     for items in bs.enumerate():
+    #
+    #         # Get data
+    #         local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
+    #
+    #         # Print
+    #         print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
+    #               % (batch_idx + 1, batch_length, 0, frame_count + 1, frame_length, iepoch + 1, 0, 0))
+    #
+    #         time.sleep(1)
+    #
+    #         # Test Stop
+    #         counter += 1
+    #         if counter == 6:
+    #             bs.stop()
+    #
+    # print("Ended")
