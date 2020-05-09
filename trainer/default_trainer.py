@@ -90,7 +90,9 @@ class DefaultTrainer(BaseTrainer):
         self.model.train()
 
         # Iterate Train Loader
+        early_stop = False
         for items in self.train_loader.enumerate():
+            if early_stop: break
 
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
@@ -128,7 +130,8 @@ class DefaultTrainer(BaseTrainer):
                 if signal.item() < self.cfg.mp.workers:
                     #self._log.info(self.id, "EXIT: " + str(signal.item()))
                     self.train_loader.stop()
-                    #break
+                    early_stop = True
+                    continue
 
             # Opt
             self.optimizer.zero_grad()
