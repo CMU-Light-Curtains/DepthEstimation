@@ -205,6 +205,7 @@ class BatchSchedulerMP:
         split_path = inputs["split_path"]
         total_processes = inputs["total_processes"]
         process_num = inputs["process_num"]
+        cfg = inputs["cfg"]
         if mode == "train":
             split_txt = split_path + '/training.txt'
         elif mode == "val":
@@ -236,7 +237,7 @@ class BatchSchedulerMP:
         dataset = dataset_init(True, img_paths, dmap_paths, poses,
                                intrin_path=intrin_path, img_size=img_size, digitize=True,
                                d_candi=d_candi, d_candi_up=d_candi_up, resize_dmap=.25,
-                               crop_w=crop_w, velodyne_depth=velodyne_depth, pytorch_scaling=pytorch_scaling)
+                               crop_w=crop_w, velodyne_depth=velodyne_depth, pytorch_scaling=pytorch_scaling, cfg=cfg)
         BatchScheduler = batch_loader.Batch_Loader(
             batch_size=batch_size, fun_get_paths=fun_get_paths,
             dataset_traj=dataset, nTraj=len(traj_Indx), dataset_name=dataset_name, t_win_r=t_win_r,

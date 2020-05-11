@@ -64,7 +64,8 @@ class DefaultTrainer(BaseTrainer):
             "batch_size": batch_size,
             "n_epoch": 1,
             "qmax": 1,
-            "mode": "train"
+            "mode": "train",
+            "cfg": self.cfg
         }
         val_loader_params = copy.deepcopy(train_loader_params)
         val_loader_params["mode"] = "val"
@@ -300,14 +301,21 @@ class DefaultTrainer(BaseTrainer):
             img_color_low = img_utils.torchrgb_to_cv2(img)
             img_depth = cv2.cvtColor(depth_refined_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             img_depth_low = cv2.cvtColor(depth_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
-            combined = np.hstack([img_color_low, img_depth_low])
-            combined = np.hstack([img_color, img_depth])
-            cv2.imshow("win", combined)
+            truth_depth = cv2.cvtColor(depth_refined_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
+            truth_depth_low = cv2.cvtColor(depth_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
+            #combined_low = np.hstack([img_color_low, img_depth_low])
+            #combined = np.hstack([img_color, img_depth])
+            combined = np.hstack([img_color, truth_depth])
+            combined_low = np.hstack([img_color_low, truth_depth_low])
+            cv2.imshow("combined", combined)
+            cv2.imshow("combined_low", combined_low)
 
             # Cloud
+            cloud_truth = img_utils.tocloud(depth_truth_eval, img_utils.demean(img), intr)
+            cloud_predicted = img_utils.tocloud(depth_predicted_eval, img_utils.demean(img), intr)
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
-            self.viz.addCloud(cloud_refined_predicted, 1)
+            self.viz.addCloud(cloud_refined_truth, 1)
 
             # Swap
             self.viz.swapBuffer()
