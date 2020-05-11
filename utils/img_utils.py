@@ -58,6 +58,14 @@ def dpv_to_depthmap(dpv, d_candi, BV_log=False):
 
     return depth_regress
 
+def demean(input):
+    __imagenet_stats = {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}
+    output = input.detach().clone()
+    output[0, :, :] = input[0, :, :] * __imagenet_stats["std"][0] + __imagenet_stats["mean"][0]
+    output[1, :, :] = input[1, :, :] * __imagenet_stats["std"][1] + __imagenet_stats["mean"][1]
+    output[2, :, :] = input[2, :, :] * __imagenet_stats["std"][2] + __imagenet_stats["mean"][2]
+    return output
+
 def torchrgb_to_cv2(input, demean=True):
     __imagenet_stats = {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}
     input = input.detach().clone()
@@ -97,6 +105,65 @@ def intr_scale_unit(intr, scale=1.):
     intr_small[0, :] *= scale
     intr_small[1, :] *= scale
     return intr_small
+
+def depth_to_pts(depthf, intr):
+    if depthf.shape[0] != 1:
+        raise Exception('Unable to handle this case')
+
+    depth = depthf[0,:,:]
+
+    # Extract Params
+    fx = intr[0,0]
+    cx = intr[0,2]
+    fy = intr[1,1]
+    cy = intr[1,2]
+
+    # Faster
+    yfield, xfield = torch.meshgrid([torch.arange(0, depth.shape[0]).float().to(depthf.device),
+                                     torch.arange(0, depth.shape[1]).float().to(depthf.device)])
+    yfield = (yfield - cy) / fy
+    xfield = (xfield - cx) / fx
+
+    # Multiply
+    X = torch.mul(xfield, depth)
+    Y = torch.mul(yfield, depth)
+    Z = depth
+    ptcloud = torch.cat([X.unsqueeze(0),Y.unsqueeze(0),Z.unsqueeze(0)], 0)
+
+    return ptcloud
+
+def tocloud(depth, rgb, intr, extr=None, rgbr=None):
+    pts = depth_to_pts(depth, intr)
+    pts = pts.reshape((3, pts.shape[1] * pts.shape[2]))
+    # pts_numpy = pts.numpy()
+
+    # Attempt to transform
+    pts = torch.cat([pts, torch.ones((1, pts.shape[1])).to(depth.device)])
+    if extr is not None:
+        transform = torch.inverse(extr)
+        pts = torch.matmul(transform, pts)
+    pts_numpy = pts[0:3, :].cpu().numpy()
+
+    # Convert Color
+    pts_color = (rgb.reshape((3, rgb.shape[1] * rgb.shape[2])) * 255).cpu().numpy()
+    pts_normal = np.zeros((3, rgb.shape[1] * rgb.shape[2]))
+
+    # RGBR
+    if rgbr is not None:
+        pts_color[0, :] = rgbr[0]
+        pts_color[1, :] = rgbr[1]
+        pts_color[2, :] = rgbr[2]
+
+    def hack(cloud):
+        fcloud = np.zeros(cloud.shape).astype(np.float32)
+        for i in range(0, cloud.shape[0]):
+            fcloud[i] = cloud[i]
+        return fcloud
+
+    # Visualize
+    all_together = np.concatenate([pts_numpy, pts_color, pts_normal], 0).astype(np.float32).T
+    all_together = hack(all_together)
+    return all_together
 
 def unitQ_to_quat( unitQ, quat):
     '''

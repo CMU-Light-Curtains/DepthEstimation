@@ -25,6 +25,7 @@ def main():
     parser.add_argument('-e', '--evaluate', action='store_true')
     parser.add_argument('-m', '--model', default=None)
     parser.add_argument('--viz', action='store_true', help='viz', default=False)
+    parser.add_argument('--eval', action='store_true', help='viz', default=False)
 
     args = parser.parse_args()
 
@@ -44,6 +45,18 @@ def main():
     curr_time = datetime.datetime.now().strftime("%y%m%d%H%M%S")
     cfg.save_root = Path('./outputs/checkpoints/') + exp_name
     cfg.save_root.makedirs_p()
+
+    # Eval Mode
+    if args.eval:
+        model_path = Path('./outputs/checkpoints/') + exp_name + "/" + exp_name + "_model_best.pth.tar"
+        if not os.path.isfile(model_path):
+            raise RuntimeError("Unable to find model at default location")
+        cfg.train.pretrained_model = model_path
+        cfg.var.mload = False
+        cfg.mp.enabled = False
+        cfg.train.n_gpu = 1
+        cfg.train.batch_size = 1
+        cfg.eval = True
 
     # Multiprocessing (Number of Workers = Number of GPU)
     if cfg.mp.enabled:
@@ -96,14 +109,16 @@ def worker(id, cfg, shared):
 
     # Create Trainer
     trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg, shared)
-    trainer.train()
+
+    # Train or Test
+    if cfg.eval:
+        trainer.eval()
+    else:
+        trainer.train()
 
     # Destroy
     if cfg.mp.enabled:
         dist.destroy_process_group()
-
-
-    pass
 
 if __name__ == '__main__':
     main()

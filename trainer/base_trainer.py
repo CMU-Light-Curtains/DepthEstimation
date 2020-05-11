@@ -56,6 +56,9 @@ class BaseTrainer:
                 for g in self.optimizer.param_groups:
                     g['lr'] /= 2
 
+    def eval(self):
+        errors, error_names = self._validate_with_gt()
+
     def _init_model(self, model):
         # Load Model to Device
         n_gpu_use = self.cfg.train.n_gpu

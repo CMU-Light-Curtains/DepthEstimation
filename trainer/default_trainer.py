@@ -10,6 +10,7 @@ import utils.img_utils as img_utils
 from external.perception_lib import viewer
 from kittiloader import batch_scheduler
 import torch.distributed as dist
+import torch.nn.functional as F
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
@@ -191,11 +192,17 @@ class DefaultTrainer(BaseTrainer):
             model_input_right["prev_output"] = self.prev_output["right"]
 
             # Model
+            start = time.time()
             output_left = self.model(model_input_left)
-            output_right = self.model(model_input_right)
+            #output_right = self.model(model_input_right)
+            print("Forward: " + str(time.time() - start))
 
             # Set Prev
-            self.prev_output = {"left": output_left["output"][-1].detach(), "right": output_right["output"][-1].detach()}
+            self.prev_output = {"left": output_left["output"][-1].detach(), "right": None}
+
+            # Visualization
+            if self.cfg.var.viz:
+                self.visualize(model_input_left, gt_input_left, output_left)
 
             # Eval
             for b in range(0, output_left["output"][-1].shape[0]):
@@ -257,60 +264,51 @@ class DefaultTrainer(BaseTrainer):
 
         return error_list, error_keys
 
-        # if type(self.valid_loader) is not list:
-        #     self.valid_loader = [self.valid_loader]
-        #
-        # # only use the first GPU to run validation, multiple GPUs might raise error.
-        # # https://github.com/Eromera/erfnet_pytorch/issues/2#issuecomment-486142360
-        # self.model = self.model.module
-        # self.model.eval()
-        #
-        # end = time.time()
-        #
-        # all_error_names = []
-        # all_error_avgs = []
-        #
-        # n_step = 0
-        # for i_set, loader in enumerate(self.valid_loader):
-        #     error_names = ['EPE']
-        #     error_meters = AverageMeter(i=len(error_names))
-        #     for i_step, data in enumerate(loader):
-        #         img1, img2 = data['img1'], data['img2']
-        #         img_pair = torch.cat([img1, img2], 1).to(self.device)
-        #         gt_flows = data['target']['flow'].numpy().transpose([0, 2, 3, 1])
-        #
-        #         # compute output
-        #         flows = self.model(img_pair)['flows_fw']
-        #         pred_flows = flows[0].detach().cpu().numpy().transpose([0, 2, 3, 1])
-        #
-        #         es = evaluate_flow(gt_flows, pred_flows)
-        #         error_meters.update([l.item() for l in es], img_pair.size(0))
-        #
-        #         # measure elapsed time
-        #         batch_time.update(time.time() - end)
-        #         end = time.time()
-        #
-        #         if i_step % self.cfg.print_freq == 0 or i_step == len(loader) - 1:
-        #             self._log.info('Test: {0}[{1}/{2}]\t Time {3}\t '.format(
-        #                 i_set, i_step, self.cfg.valid_size, batch_time) + ' '.join(
-        #                 map('{:.2f}'.format, error_meters.avg)))
-        #
-        #         if i_step > self.cfg.valid_size:
-        #             break
-        #     n_step += len(loader)
-        #
-        #     # write error to tf board.
-        #     for value, name in zip(error_meters.avg, error_names):
-        #         self.summary_writer.add_scalar(
-        #             'Valid_{}_{}'.format(name, i_set), value, self.i_epoch)
-        #
-        #     all_error_avgs.extend(error_meters.avg)
-        #     all_error_names.extend(['{}_{}'.format(name, i_set) for name in error_names])
-        #
-        # self.model = torch.nn.DataParallel(self.model, device_ids=self.device_ids)
-        # # In order to reduce the space occupied during debugging,
-        # # only the model with more than cfg.save_iter iterations will be saved.
-        # if self.i_iter > self.cfg.save_iter:
-        #     self.save_model(all_error_avgs[0] + all_error_avgs[1], name='Sintel')
-        #
-        # return all_error_avgs, all_error_names
+    def visualize(self, model_input, gt_input, output):
+        import cv2
+
+        # Eval
+        for b in range(0, output["output"][-1].shape[0]):
+            dpv_predicted = output["output"][-1][b, :, :, :].unsqueeze(0)
+            dpv_refined_predicted = output["output_refined"][-1][b, :, :, :].unsqueeze(0)
+            depth_predicted = img_utils.dpv_to_depthmap(dpv_predicted, self.d_candi, BV_log=True)
+            depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, self.d_candi, BV_log=True)
+            mask = gt_input["masks"][b, :, :, :]
+            mask_refined = gt_input["masks_imgsizes"][b, :, :, :]
+            depth_truth = gt_input["dmaps"][b, :, :].unsqueeze(0)
+            depth_refined_truth = gt_input["dmap_imgsizes"][b, :, :].unsqueeze(0)
+            intr = model_input["intrinsics"][b, :, :]
+            intr_refined = model_input["intrinsics_up"][b, :, :]
+            img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
+            img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
+
+            # Eval
+            tophalf_refined = torch.ones(depth_refined_predicted.shape).bool().to(depth_refined_predicted.device)
+            tophalf_refined[:, 0:int(tophalf_refined.shape[1] / 2), :] = False
+            depth_truth_eval = depth_truth.clone()
+            depth_truth_eval[depth_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+            depth_refined_truth_eval = depth_refined_truth.clone()
+            depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+            depth_predicted_eval = depth_predicted.clone()
+            #depth_predicted_eval = depth_predicted_eval *
+            depth_refined_predicted_eval = depth_refined_predicted.clone()
+            depth_refined_predicted_eval = depth_refined_predicted_eval * tophalf_refined.float()
+
+            #img_refined_demeaned = img_utils.torchrgb_to_cv2(img_refined)
+
+
+
+            cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
+            cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
+            self.viz.addCloud(cloud_refined_predicted, 1)
+            self.viz.swapBuffer()
+
+            # print(depth_refined_truth.shape)
+            # cv2.imshow("win", depth_refined_truth[0,:,:].cpu().numpy()/50)
+            # cv2.imshow("win", depth_refined_predicted[0, :, :].cpu().numpy() / 50)
+            # cv2.waitKey(15)
+
+
+
+
+        pass
