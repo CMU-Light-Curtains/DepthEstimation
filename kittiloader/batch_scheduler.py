@@ -364,11 +364,13 @@ if __name__ == "__main__":
     from models import models
     x = models.BaseDecoder(3,3,3)
 
-    bs = BatchSchedulerMP(testing_inputs, False) # Multiprocessing misses last image for some reason
+    bs = BatchSchedulerMP(testing_inputs, True) # Multiprocessing misses last image for some reason
 
     counter = 0
+    early_stop = False
     for epoch in range(0, 1):
         print("Epoch: " + str(epoch))
+        if early_stop: break
 
         for items in bs.enumerate():
 
@@ -381,11 +383,11 @@ if __name__ == "__main__":
 
             time.sleep(1)
 
-            # # Test Stop
-            # counter += 1
-            # if counter == 6:
-            #     bs.stop()
-            #     #break
+            # Test Stop
+            counter += 1
+            if counter == 6:
+                bs.stop()
+                early_stop = True
 
             # # # Visualize
             # global_item = []
