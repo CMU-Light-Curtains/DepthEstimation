@@ -11,6 +11,7 @@ from external.perception_lib import viewer
 from kittiloader import batch_scheduler
 import torch.distributed as dist
 import torch.nn.functional as F
+import numpy as np
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
@@ -294,14 +295,23 @@ class DefaultTrainer(BaseTrainer):
             depth_refined_predicted_eval = depth_refined_predicted.clone()
             depth_refined_predicted_eval = depth_refined_predicted_eval * tophalf_refined.float()
 
-            #img_refined_demeaned = img_utils.torchrgb_to_cv2(img_refined)
+            # Display Image/Depth
+            img_color = img_utils.torchrgb_to_cv2(img_refined)
+            img_color_low = img_utils.torchrgb_to_cv2(img)
+            img_depth = cv2.cvtColor(depth_refined_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
+            img_depth_low = cv2.cvtColor(depth_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
+            combined = np.hstack([img_color_low, img_depth_low])
+            combined = np.hstack([img_color, img_depth])
+            cv2.imshow("win", combined)
 
-
-
+            # Cloud
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
             self.viz.addCloud(cloud_refined_predicted, 1)
+
+            # Swap
             self.viz.swapBuffer()
+            cv2.waitKey(15)
 
             # print(depth_refined_truth.shape)
             # cv2.imshow("win", depth_refined_truth[0,:,:].cpu().numpy()/50)

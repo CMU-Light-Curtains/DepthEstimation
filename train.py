@@ -26,6 +26,7 @@ def main():
     parser.add_argument('-m', '--model', default=None)
     parser.add_argument('--viz', action='store_true', help='viz', default=False)
     parser.add_argument('--eval', action='store_true', help='viz', default=False)
+    parser.add_argument('--resume', action='store_true', help='viz', default=False)
 
     args = parser.parse_args()
 
@@ -46,6 +47,14 @@ def main():
     cfg.save_root = Path('./outputs/checkpoints/') + exp_name
     cfg.save_root.makedirs_p()
 
+    # Resume
+    if args.resume:
+        model_path = Path('./outputs/checkpoints/') + exp_name + "/" + exp_name + "_ckpt.pth.tar"
+        if not os.path.isfile(model_path):
+            print("Unable to find model at default location")
+        else:
+            cfg.train.pretrained_model = model_path
+
     # Eval Mode
     if args.eval:
         model_path = Path('./outputs/checkpoints/') + exp_name + "/" + exp_name + "_model_best.pth.tar"
@@ -63,7 +72,8 @@ def main():
         # Checks
         if cfg.train.n_gpu > 0:
             if cfg.train.n_gpu > torch.cuda.device_count():
-                raise RuntimeError("Total GPU size is incorrect")
+                cfg.train.n_gpu = torch.cuda.device_count()
+                print("Total GPU size is incorrect. Lowering to Base")
             cfg.mp.workers = cfg.train.n_gpu
         else:
             if cfg.mp.workers <= 0:

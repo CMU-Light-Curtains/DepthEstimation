@@ -120,6 +120,13 @@ class BaseTrainer:
                                          eps=1e-7)
         else:
             raise NotImplementedError(self.cfg.train.optim)
+
+        for item in self.cfg.train.halflr:
+            if self.i_epoch >= item:
+                self._log.info(self.id, 'Halfving LR')
+                for g in optimizer.param_groups:
+                    g['lr'] /= 2
+
         return optimizer
 
     def _prepare_device(self):

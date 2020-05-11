@@ -1,4 +1,4 @@
-sudo apt-get install libpng++-dev libpcl-dev
+sudo apt-get install libpng++-dev libpcl-dev libproj-dev
 sudo ln -sfn /usr/lib/x86_64-linux-gnu/libEGL.so.1.1.0  /usr/lib/x86_64-linux-gnu/libEGL.so
 sudo ln -sfn /usr/lib/x86_64-linux-gnu/libGL.so.1.7.0  /usr/lib/x86_64-linux-gnu/libGL.so
 sudo ln -s /usr/lib/x86_64-linux-gnu/libvtkCommonCore-6.2.so /usr/lib/libvtkproj4.so
