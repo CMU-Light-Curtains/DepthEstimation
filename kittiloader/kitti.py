@@ -315,7 +315,7 @@ class KITTI_dataset(data.Dataset):
 
     def __init__(self, training, p_data, dmap_seq_paths, poses, intrin_path,
                  img_size = [1248,380], digitize = False, d_candi = None, d_candi_up = None, resize_dmap = None, if_process = True,
-                 crop_w = 384, velodyne_depth = True, pytorch_scaling = False):
+                 crop_w = 384, velodyne_depth = True, pytorch_scaling = False, cfg = None):
 
         '''
         inputs:
@@ -353,6 +353,7 @@ class KITTI_dataset(data.Dataset):
         self.poses = poses
         self.training = training
         self.intrin_path = intrin_path # reserved
+        self.cfg = cfg
 
         self.to_gray = tfv_transform.Compose( [tfv_transform.Grayscale(), tfv_transform.ToTensor()])
         self.d_candi = d_candi
@@ -531,7 +532,10 @@ class KITTI_dataset(data.Dataset):
                 small_intr = util.intr_scale(intr_raw_append, raw_img_size, small_size)
 
                 # Generate Depth maps
-                large_params = {"filtering": 2, "upsample": 0}
+                if not self.cfg.lidar.enabled:
+                    large_params = {"filtering": 2, "upsample": 0}
+                else:
+                    large_params = self.cfg.lidar
                 dmap_large = kittiutils.generate_depth(velodata, large_intr, M_velo2cam, large_size[0], large_size[1], large_params)
                 #small_params = {"filtering": 0, "upsample": 0}
                 #dmap_small = kittiutils.generate_depth(velodata, small_intr, M_velo2cam, small_size[0], small_size[1], small_params)
