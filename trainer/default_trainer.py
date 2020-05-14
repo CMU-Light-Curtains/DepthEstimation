@@ -315,7 +315,7 @@ class DefaultTrainer(BaseTrainer):
             cloud_predicted = img_utils.tocloud(depth_predicted_eval, img_utils.demean(img), intr)
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
-            self.viz.addCloud(cloud_refined_truth, 1)
+            self.viz.addCloud(cloud_refined_predicted, 1)
 
             # Swap
             self.viz.swapBuffer()

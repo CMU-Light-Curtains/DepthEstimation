@@ -346,7 +346,8 @@ if __name__ == "__main__":
         "batch_size": 4,
         "n_epoch": 1,
         "qmax": 1,
-        "mode": "val"
+        "mode": "val",
+        "cfg": None
     }
 
     # Add feature to control lidar params
@@ -384,11 +385,11 @@ if __name__ == "__main__":
 
             time.sleep(1)
 
-            # Test Stop
-            counter += 1
-            if counter == 6:
-                bs.stop()
-                early_stop = True
+            # # Test Stop
+            # counter += 1
+            # if counter == 6:
+            #     bs.stop()
+            #     early_stop = True
 
             # # # Visualize
             # global_item = []
