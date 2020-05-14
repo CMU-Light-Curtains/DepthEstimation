@@ -115,9 +115,11 @@ class BaseTrainer:
             optimizer = AdamW(param_groups, self.cfg.train.lr,
                               betas=(self.cfg.train.momentum, self.cfg.train.beta))
         elif self.cfg.train.optim == 'adam':
-            optimizer = torch.optim.Adam(param_groups, self.cfg.train.lr,
-                                         betas=(self.cfg.train.momentum, self.cfg.train.beta),
-                                         eps=1e-7)
+            # optimizer = torch.optim.Adam(param_groups, self.cfg.train.lr,
+            #                              betas=(self.cfg.train.momentum, self.cfg.train.beta),
+            #                              eps=1e-7)
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.cfg.train.lr,
+                                         betas=(self.cfg.train.momentum, self.cfg.train.beta))
         else:
             raise NotImplementedError(self.cfg.train.optim)
 
