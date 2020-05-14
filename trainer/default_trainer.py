@@ -2,6 +2,7 @@ import time
 import torch
 import copy
 import json
+import os
 from .base_trainer import BaseTrainer
 from utils.flow_utils import evaluate_flow
 from utils.misc_utils import AverageMeter
@@ -73,6 +74,7 @@ class DefaultTrainer(BaseTrainer):
         self.train_loader = batch_scheduler.BatchSchedulerMP(train_loader_params, self.cfg.var.mload)
         self.val_loader = batch_scheduler.BatchSchedulerMP(val_loader_params, self.cfg.var.mload)
         self.prev_output = None
+        self.first_run = True
 
         # PIN MEMORY?
 
@@ -259,10 +261,28 @@ class DefaultTrainer(BaseTrainer):
 
         # Log
         if self.id == 0:
+            json_loc = str(self.save_root) + "/" + self.cfg.data.exp_name + '.json'
+
+            # First Run
+            if self.first_run:
+                # Remove Results JSON if first epoch
+                if self.i_epoch == 1:
+                    if os.path.exists(json_loc):
+                        os.remove(json_loc)
+                # If not first epoch, then load past results
+                else:
+                    if os.path.isfile(json_loc):
+                        with open(json_loc) as f:
+                            self.foutput = json.load(f)
+
+            # Save
             for value, name in zip(error_list, error_keys):
                 self.foutput[name].append(value.item())
-            with open(str(self.save_root) + "/" + self.cfg.data.exp_name + '.json', 'w') as f:
+            with open(json_loc, 'w') as f:
                 json.dump(self.foutput, f)
+
+        # Set fr
+        self.first_run = False
 
         return error_list, error_keys
 
