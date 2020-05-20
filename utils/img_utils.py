@@ -229,6 +229,23 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
 
     return dpv_plane, depthmap_predicted_zero
 
+def gen_dpv_withmask(dmaps, masks, d_candi, var=0.3):
+    # torch.Size([2, 64, 96])
+    # torch.Size([2, 1, 64, 96])
+    tofuse_dpv = []
+    truth_var = torch.tensor(var)
+    for b in range(0, dmaps.shape[0]):
+        dmap = dmaps[b, :, :]
+        mask = masks[b, 0, :, :].unsqueeze(0)
+        mask_inv = 1. - mask
+        truth_dpv = gen_soft_label_torch(d_candi, dmap, truth_var, zero_invalid=True)
+        uni_dpv = gen_uniform(d_candi, dmap)
+        modified_dpv = truth_dpv * mask + uni_dpv * mask_inv
+        tofuse_dpv.append(modified_dpv.unsqueeze(0))
+    tofuse_dpv = torch.cat(tofuse_dpv)
+    tofuse_dpv = torch.clamp(tofuse_dpv, epsilon, 1.)
+    return tofuse_dpv
+
 def unitQ_to_quat( unitQ, quat):
     '''
     Unit quaternion (xyz parameterization) to quaternion

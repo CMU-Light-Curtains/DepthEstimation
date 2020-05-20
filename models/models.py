@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import math
 import numpy as np
 import warping.homography as warp_homo
+import utils.img_utils as img_utils
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=0, padding=1, isReLU=True):
     if isReLU:
@@ -489,6 +490,53 @@ class BaseModel(nn.Module):
             # [B,128,256,384]
 
             return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp1":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:,-1,:,:,:])
+            # 64 in feature Dim depends on the command line arguments
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            # Create GT DPV from Depthmap / LIDAR
+            tofuse_dpv = img_utils.gen_dpv_withmask(model_input["dmaps"], model_input["masks"], model_input["d_candi"], 0.3)
+
+            # Fuse Data
+            fused_dpv = torch.exp(BV_cur + torch.log(tofuse_dpv))
+            fused_dpv = fused_dpv / torch.sum(fused_dpv, dim=1).unsqueeze(1)
+            fused_dpv = torch.clamp(fused_dpv, img_utils.epsilon, 1.)
+            BV_cur_fused = torch.log(fused_dpv)
+
+            # Make sure size is still correct here!
+            BV_cur_refined = self.base_decoder(fused_dpv, img_features=d_net_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur, BV_cur_fused], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp2":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:,-1,:,:,:])
+            # 64 in feature Dim depends on the command line arguments
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            # Create GT DPV from Depthmap / LIDAR
+            tofuse_dpv = img_utils.gen_dpv_withmask(model_input["dmaps"], model_input["masks"], model_input["d_candi"], 0.3)
+
+            # Fuse Data
+            fused_dpv = torch.exp(BV_cur + torch.log(tofuse_dpv))
+            fused_dpv = fused_dpv / torch.sum(fused_dpv, dim=1).unsqueeze(1)
+            fused_dpv = torch.clamp(fused_dpv, img_utils.epsilon, 1.)
+            BV_cur_fused = torch.log(fused_dpv)
+
+            # Make sure size is still correct here!
+            BV_cur_refined = self.base_decoder(fused_dpv, img_features=d_net_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur_fused, BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        else:
+            raise Exception("Nmode wrong")
 
         pass
 

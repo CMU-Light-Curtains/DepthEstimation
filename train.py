@@ -22,8 +22,8 @@ def worker(id, args): pass
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', default='configs/default.json')
-    parser.add_argument('-e', '--evaluate', action='store_true')
-    parser.add_argument('-m', '--model', default=None)
+    parser.add_argument('--exp_name', default='default')
+    parser.add_argument('--nmode', default='default')
     parser.add_argument('--viz', action='store_true', help='viz', default=False)
     parser.add_argument('--eval', action='store_true', help='viz', default=False)
     parser.add_argument('--resume', action='store_true', help='viz', default=False)
@@ -36,10 +36,11 @@ def main():
     if args.viz:
         cfg.var.viz = True
 
-    if args.model is not None:
-        cfg.train.pretrained_model = args.model
-
     init_seed(cfg.seed)
+
+    # Overwrite
+    cfg.data.exp_name = args.exp_name
+    cfg.var.nmode = args.nmode
 
     # store files day by day
     exp_name = cfg.data.exp_name
@@ -121,10 +122,14 @@ def worker(id, cfg, shared):
     trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg, shared)
 
     # Train or Test
-    if cfg.eval:
-        trainer.eval()
-    else:
-        trainer.train()
+    try:
+        if cfg.eval:
+            trainer.eval()
+        else:
+            trainer.train()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
 
     # Destroy
     if cfg.mp.enabled:
