@@ -14,8 +14,6 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
 
-from lc import light_curtain
-
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
         super(DefaultTrainer, self).__init__(id, model, loss_func, _log, save_root, config, shared)
@@ -81,6 +79,7 @@ class DefaultTrainer(BaseTrainer):
         # Light Curtain Module
         self.lc = None
         if self.cfg.lc.enabled:
+            from lc import light_curtain
             self.lc = light_curtain.LightCurtain()
 
         # PIN MEMORY?
