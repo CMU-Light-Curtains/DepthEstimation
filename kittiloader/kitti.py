@@ -532,13 +532,10 @@ class KITTI_dataset(data.Dataset):
                 small_intr = util.intr_scale(intr_raw_append, raw_img_size, small_size)
 
                 # Generate Depth maps
-                if self.cfg == None:
+                if not self.cfg.lidar.enabled:
                     large_params = {"filtering": 2, "upsample": 0}
                 else:
-                    if not self.cfg.lidar.enabled:
-                        large_params = {"filtering": 2, "upsample": 0}
-                    else:
-                        large_params = self.cfg.lidar
+                    large_params = self.cfg.lidar
                 dmap_large = kittiutils.generate_depth(velodata, large_intr, M_velo2cam, large_size[0], large_size[1], large_params)
                 #small_params = {"filtering": 0, "upsample": 0}
                 #dmap_small = kittiutils.generate_depth(velodata, small_intr, M_velo2cam, small_size[0], small_size[1], small_params)

@@ -250,49 +250,55 @@ class BatchSchedulerMP:
         qmax = inputs["qmax"]
         n_epoch = inputs["n_epoch"]
 
-        # Iterate batch
-        broken = False
-        for iepoch in range(n_epoch):
-            BatchScheduler = self.load(inputs)
-            for batch_idx in range(len(BatchScheduler)):
-                start = time.time()
-                for frame_count, ref_indx in enumerate(range(BatchScheduler.traj_len)):
-                    local_info = BatchScheduler.local_info_full()
+        try:
+            # Iterate batch
+            broken = False
+            for iepoch in range(n_epoch):
+                BatchScheduler = self.load(inputs)
+                for batch_idx in range(len(BatchScheduler)):
+                    start = time.time()
+                    for frame_count, ref_indx in enumerate(range(BatchScheduler.traj_len)):
+                        local_info = BatchScheduler.local_info_full()
 
-                    # Put in Q
-                    queue.put([local_info, len(BatchScheduler), batch_idx, frame_count, BatchScheduler.traj_len, iepoch])
+                        # Put in Q
+                        queue.put(
+                            [local_info, len(BatchScheduler), batch_idx, frame_count, BatchScheduler.traj_len, iepoch])
 
-                    # Break
-                    if control.value == 0:
-                        broken = True
-                        break
+                        # Break
+                        if control.value == 0:
+                            broken = True
+                            break
 
-                    # Update dat_array
-                    if frame_count < BatchScheduler.traj_len - 1:
-                        BatchScheduler.proceed_frame()
+                        # Update dat_array
+                        if frame_count < BatchScheduler.traj_len - 1:
+                            BatchScheduler.proceed_frame()
 
-                    # print(batch_idx, frame_count)
+                        # print(batch_idx, frame_count)
+                        if broken: break
+
                     if broken: break
+                    BatchScheduler.proceed_batch()
 
                 if broken: break
-                BatchScheduler.proceed_batch()
 
-            if broken: break
+            # If we prematurely stopped the process, then empty the queue
+            if control.value == 0:
+                time.sleep(1)
+                while not queue.empty():
+                    _ = queue.get()
+            # If it naturally ended, we need to wait for queue to clear
+            else:
+                while queue.qsize():
+                    time.sleep(0.1)
+                time.sleep(1)
+                queue.put(None)
 
-        # If we prematurely stopped the process, then empty the queue
-        if control.value == 0:
-            time.sleep(1)
-            while not queue.empty():
-                _ = queue.get()
-        # If it naturally ended, we need to wait for queue to clear
-        else:
-            while queue.qsize():
-                time.sleep(0.1)
-            time.sleep(1)
-            queue.put(None)
+            # print(queue.qsize())
+            print("DataLoader End")
 
-        #print(queue.qsize())
-        print("DataLoader End")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
     def single(self, inputs):
         qmax = inputs["qmax"]
