@@ -132,6 +132,20 @@ def depth_to_pts(depthf, intr):
 
     return ptcloud
 
+def hack(cloud):
+    fcloud = np.zeros(cloud.shape).astype(np.float32)
+    for i in range(0, cloud.shape[0]):
+        fcloud[i] = cloud[i]
+    return fcloud
+
+def lcoutput_to_cloud(output):
+    output[np.isnan(output[:, :, 0])] = 0
+    output = output.reshape((output.shape[0] * output.shape[1], 4))
+    lccloud = np.append(output, np.zeros((output.shape[0], 5)), axis=1)
+    lccloud[:, 4:6] = 50
+    lccloud = hack(lccloud)
+    return lccloud
+
 def tocloud(depth, rgb, intr, extr=None, rgbr=None):
     pts = depth_to_pts(depth, intr)
     pts = pts.reshape((3, pts.shape[1] * pts.shape[2]))
@@ -154,16 +168,66 @@ def tocloud(depth, rgb, intr, extr=None, rgbr=None):
         pts_color[1, :] = rgbr[1]
         pts_color[2, :] = rgbr[2]
 
-    def hack(cloud):
-        fcloud = np.zeros(cloud.shape).astype(np.float32)
-        for i in range(0, cloud.shape[0]):
-            fcloud[i] = cloud[i]
-        return fcloud
-
     # Visualize
     all_together = np.concatenate([pts_numpy, pts_color, pts_normal], 0).astype(np.float32).T
     all_together = hack(all_together)
     return all_together
+
+def convert_flowfield(flowfield):
+    yv, xv = torch.meshgrid([torch.arange(0, flowfield.shape[1]).float().cuda(), torch.arange(0, flowfield.shape[2]).float().cuda()])
+    ystep = 2. / float(flowfield.shape[1] - 1)
+    xstep = 2. / float(flowfield.shape[2] - 1)
+    flowfield[0, :, :, 0] = -1 + xv * xstep - flowfield[0, :, :, 0] * xstep
+    flowfield[0, :, :, 1] = -1 + yv * ystep - flowfield[0, :, :, 1] * ystep
+    return flowfield
+
+
+def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False):
+    # Generate Shiftmap
+    pshift = 5
+    flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
+    flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
+    flowfield[:, :, :, 1] = pshift
+    flowfield_inv[:, :, :, 1] = -pshift
+    convert_flowfield(flowfield)
+    convert_flowfield(flowfield_inv)
+
+    # Shift the DPV
+    dpv_shifted = F.grid_sample(dpv_predicted, flowfield, mode='nearest')
+    depthmap_shifted = dpv_to_depthmap(dpv_shifted, d_candi, BV_log=BV_log)
+    depthmap_predicted = dpv_to_depthmap(dpv_predicted, d_candi, BV_log=BV_log)
+
+    # Get Mask for Pts within Y range
+    maxd = 100. # This is bad as i dont want zero regions. so i max it out now
+    pts_shifted = depth_to_pts(depthmap_shifted, intr_up)
+    #zero_mask = (~((pts_shifted[1,:,:] > 1.4) | (pts_shifted[1,:,:] < -1.0))).float()
+    #zero_mask = (~((pts_shifted[1, :, :] > 1.3) | (pts_shifted[1, :, :] < 1.0))).float()
+    # (~((pts_shifted[1, :, :] > 1.0) | (pts_shifted[1, :, :] < 0.5)
+    zero_mask = (~((pts_shifted[1, :, :] > 0.9) | (pts_shifted[1, :, :] < 0.6) | (pts_shifted[2, :, :] > maxd-1))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
+    depthmap_shifted_zero = depthmap_shifted * zero_mask
+
+    # Shift Mask
+    zero_mask_predicted = F.grid_sample(zero_mask.unsqueeze(0).unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0).squeeze(0)
+    depthmap_predicted_zero = depthmap_predicted * zero_mask_predicted
+
+    # DPV Zero out and collapse
+    zero_mask_predicted = zero_mask_predicted.repeat([64, 1, 1], 0, 1).unsqueeze(0)
+    if BV_log:
+        dpv_plane = torch.sum(torch.exp(dpv_predicted) * zero_mask_predicted, axis = 2) # [1,64,384]
+    else:
+        dpv_plane = torch.sum(dpv_predicted * zero_mask_predicted, axis=2)  # [1,64,384]
+
+    # Normalize
+    ax = torch.sum(zero_mask, axis=0)
+    dpv_plane = dpv_plane / ax
+    #dpv_plane = F.softmax(dpv_plane, dim=1)
+
+    # Make 0 to 1 for visualization
+    minval, _ = dpv_plane.min(1) # [1,384]
+    maxval, _ = dpv_plane.max(1)  # [1,384]
+    if(normalize): dpv_plane = (dpv_plane - minval) / (maxval - minval)
+
+    return dpv_plane, depthmap_predicted_zero
 
 def unitQ_to_quat( unitQ, quat):
     '''

@@ -14,6 +14,8 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
 
+from lc import light_curtain
+
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
         super(DefaultTrainer, self).__init__(id, model, loss_func, _log, save_root, config, shared)
@@ -76,6 +78,11 @@ class DefaultTrainer(BaseTrainer):
         self.prev_output = None
         self.first_run = True
 
+        # Light Curtain Module
+        self.lc = None
+        if self.cfg.lc.enabled:
+            self.lc = light_curtain.LightCurtain()
+
         # PIN MEMORY?
 
     def __del__(self):
@@ -111,6 +118,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Create inputs
             local_info["d_candi"] = self.d_candi
+            local_info["d_candi_up"] = self.d_candi_up
             model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
             model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
             model_input_left["prev_output"] = self.prev_output["left"]
@@ -119,6 +127,10 @@ class DefaultTrainer(BaseTrainer):
             # Model
             output_left = self.model(model_input_left)
             output_right = self.model(model_input_right)
+
+            # Light Curtain
+            if self.lc is not None:
+                self.lc_process(model_input_left, gt_input_left, output_left)
 
             # Set Prev from last one
             self.prev_output = {"left": output_left["output"][-1].detach(), "right": output_right["output"][-1].detach()}
@@ -190,6 +202,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Create inputs
             local_info["d_candi"] = self.d_candi
+            local_info["d_candi_up"] = self.d_candi_up
             model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
             model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
             model_input_left["prev_output"] = self.prev_output["left"]
@@ -200,6 +213,10 @@ class DefaultTrainer(BaseTrainer):
             output_left = self.model(model_input_left)
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
+
+            # Light Curtain
+            if self.lc is not None:
+                self.lc_process(model_input_left, gt_input_left, output_left)
 
             # Set Prev
             self.prev_output = {"left": output_left["output"][-1].detach(), "right": None}
@@ -286,6 +303,67 @@ class DefaultTrainer(BaseTrainer):
 
         return error_list, error_keys
 
+    def lc_process(self, model_input, gt_input, output):
+        # Initialize
+        if not self.lc.initialized:
+            self.lc.init_from_model_input(model_input)
+
+        # Eval
+        for b in range(0, output["output"][-1].shape[0]):
+            dpv_predicted = output["output"][-1][b, :, :, :].unsqueeze(0)
+            dpv_refined_predicted = output["output_refined"][-1][b, :, :, :].unsqueeze(0)
+            depth_predicted = img_utils.dpv_to_depthmap(dpv_predicted, self.d_candi, BV_log=True)
+            depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, self.d_candi, BV_log=True)
+            mask = gt_input["masks"][b, :, :, :]
+            mask_refined = gt_input["masks_imgsizes"][b, :, :, :]
+            depth_truth = gt_input["dmaps"][b, :, :].unsqueeze(0)
+            depth_refined_truth = gt_input["dmap_imgsizes"][b, :, :].unsqueeze(0)
+            intr = model_input["intrinsics"][b, :, :]
+            intr_refined = model_input["intrinsics_up"][b, :, :]
+            img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
+            img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
+            d_candi = model_input["d_candi"]
+            dpv_refined_truth = gt_input["soft_labels_imgsize"][b].unsqueeze(0)
+
+            # Eval
+            tophalf_refined = torch.ones(depth_refined_predicted.shape).bool().to(depth_refined_predicted.device)
+            tophalf_refined[:, 0:int(tophalf_refined.shape[1] / 2), :] = False
+            depth_truth_eval = depth_truth.clone()
+            depth_truth_eval[depth_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+            depth_refined_truth_eval = depth_refined_truth.clone()
+            depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
+            depthmap_truth_refined_np = depth_refined_truth_eval.squeeze(0).cpu().numpy()
+
+            # UField
+            #uncfield_refined_predicted, _ = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
+
+            # Plan (This is one strategy)
+            # Alternative strategy based on sampling? and points?
+            #lc_paths_refined, field_visual_refined = self.lc.plan(uncfield_refined_predicted.squeeze(0))
+
+            # Low Res?
+            dpv_predicted_int = F.interpolate(dpv_refined_predicted, scale_factor=0.25, mode='nearest')
+            uncfield_predicted, _ = img_utils.gen_ufield(dpv_predicted_int, d_candi, intr.squeeze(0))
+            lc_paths, field_visual = self.lc.plan_low(uncfield_predicted.squeeze(0))
+
+            # # Sense
+            # lc_outputs = []
+            # lc_DPVs = []
+            # for lc_path in lc_paths:
+            #     lc_DPV, output = self.lc.sense_high(depthmap_truth_refined_np, lc_path, True)
+            #     print(output.shape)
+            #     lc_outputs.append(output)
+            #     lc_DPVs.append(lc_DPV)
+
+            # if self.viz is not None:
+            #     import cv2
+            #     #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[0]), 3)
+            #     #self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs[0]), 3)
+            #     #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[2]), 3)
+            #     cv2.imshow("field_visual", field_visual)
+            #     cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
+
+
     def visualize(self, model_input, gt_input, output):
         import cv2
 
@@ -303,6 +381,8 @@ class DefaultTrainer(BaseTrainer):
             intr_refined = model_input["intrinsics_up"][b, :, :]
             img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
             img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
+            d_candi = model_input["d_candi"]
+            dpv_refined_truth = gt_input["soft_labels_imgsize"][b].unsqueeze(0)
 
             # Eval
             tophalf_refined = torch.ones(depth_refined_predicted.shape).bool().to(depth_refined_predicted.device)
@@ -315,20 +395,35 @@ class DefaultTrainer(BaseTrainer):
             #depth_predicted_eval = depth_predicted_eval *
             depth_refined_predicted_eval = depth_refined_predicted.clone()
             depth_refined_predicted_eval = depth_refined_predicted_eval * tophalf_refined.float()
-
-            # Display Image/Depth
             img_color = img_utils.torchrgb_to_cv2(img_refined)
             img_color_low = img_utils.torchrgb_to_cv2(img)
+
+            # UField
+            unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
+            img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
+
+            # UField Display
+            unc_field_truth, _ = img_utils.gen_ufield(torch.log(dpv_refined_truth), d_candi, intr_refined.squeeze(0), None, None, True, True)
+            unc_field_truth = unc_field_truth.squeeze(0).cpu().numpy()
+            unc_field_truth[unc_field_truth > 0.01] = 1.
+            unc_field_truth = cv2.cvtColor(unc_field_truth, cv2.COLOR_GRAY2BGR)
+            unc_field_overlay = unc_field_predicted.squeeze(0).cpu().numpy()*1.5
+            unc_field_overlay = cv2.cvtColor(unc_field_overlay, cv2.COLOR_GRAY2BGR)
+            unc_field_truth[:,:,0] = 0
+            unc_field_overlay = unc_field_overlay + unc_field_truth
+
+            # Display Image/Depth
             img_depth = cv2.cvtColor(depth_refined_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             img_depth_low = cv2.cvtColor(depth_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             truth_depth = cv2.cvtColor(depth_refined_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             truth_depth_low = cv2.cvtColor(depth_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
-            #combined_low = np.hstack([img_color_low, img_depth_low])
-            #combined = np.hstack([img_color, img_depth])
-            combined = np.hstack([img_color, truth_depth])
-            combined_low = np.hstack([img_color_low, truth_depth_low])
+            combined_low = np.hstack([img_color_low, img_depth_low])
+            combined = np.hstack([img_color, img_depth])
+            #combined = np.hstack([img_color, truth_depth])
+            #combined_low = np.hstack([img_color_low, truth_depth_low])
             cv2.imshow("combined", combined)
-            cv2.imshow("combined_low", combined_low)
+            #cv2.imshow("combined_low", combined_low)
+            cv2.imshow("unc_field_overlay", unc_field_overlay)
 
             # Cloud
             cloud_truth = img_utils.tocloud(depth_truth_eval, img_utils.demean(img), intr)
@@ -336,17 +431,10 @@ class DefaultTrainer(BaseTrainer):
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
             self.viz.addCloud(cloud_refined_predicted, 1)
+            self.viz.addCloud(cloud_truth, 3)
 
             # Swap
             self.viz.swapBuffer()
             cv2.waitKey(15)
-
-            # print(depth_refined_truth.shape)
-            # cv2.imshow("win", depth_refined_truth[0,:,:].cpu().numpy()/50)
-            # cv2.imshow("win", depth_refined_predicted[0, :, :].cpu().numpy() / 50)
-            # cv2.waitKey(15)
-
-
-
 
         pass

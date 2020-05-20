@@ -102,6 +102,7 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
 
     # Create Soft Label
     d_candi = local_info_valid["d_candi"]
+    d_candi_up = local_info_valid["d_candi_up"]
     if cfg.var.softce:
         soft_labels_imgsize = []
         soft_labels = []
@@ -130,6 +131,7 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "dmaps": dmaps,
         "masks": masks,
         "d_candi": d_candi,
+        "d_candi_up": d_candi_up,
     }
 
     gt_input = {
