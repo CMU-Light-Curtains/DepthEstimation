@@ -24,6 +24,7 @@ def main():
     parser.add_argument('-c', '--config', default='configs/default.json')
     parser.add_argument('--exp_name', default='default')
     parser.add_argument('--nmode', default='default')
+    parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--viz', action='store_true', help='viz', default=False)
     parser.add_argument('--eval', action='store_true', help='viz', default=False)
     parser.add_argument('--resume', action='store_true', help='viz', default=False)
@@ -41,6 +42,7 @@ def main():
     # Overwrite
     cfg.data.exp_name = args.exp_name
     cfg.var.nmode = args.nmode
+    cfg.train.batch_size = args.batch_size
 
     # store files day by day
     exp_name = cfg.data.exp_name

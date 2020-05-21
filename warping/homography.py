@@ -134,6 +134,39 @@ def est_swp_volume_v4(feat_img_ref, feat_img_src,
 
     return costV
 
+def warp_feature(feat_img_src,
+                 d_candi, R,t, cam_intrinsic):
+    r'''
+    feat_img_src - NVCHW tensor.  V is for different views
+    R, t - R[idx_view, :, :] - 3x3 rotation matrix
+           t[idx_view, :] - 3x1 transition vector
+    '''
+    if feat_img_src.shape[0] != 1:
+        raise Exception("Warped Accum Error")
+    device = feat_img_src.device
+    H, W, D = feat_img_src.shape[3], feat_img_src.shape[4], len(d_candi)
+
+    IntM_tensor = cam_intrinsic['intrinsic_M_cuda'].to(device) # intrinsic matrix 3x3 on GPU
+    P_ref_cuda = cam_intrinsic['unit_ray_array_2D'].to(device) # unit ray array in matrix form on GPU
+    d_candi_cuda = torch.from_numpy(d_candi.astype(np.float32)).to(device)
+
+    warped_accum = torch.zeros(feat_img_src.shape).to(feat_img_src.device)
+    for idx_view in range(feat_img_src.shape[1]): # Iterate each image
+        # Get term1 #
+        term1 = IntM_tensor.matmul(t[idx_view, :]).reshape(3,1)
+        # Get term2 #
+        term2 = IntM_tensor.matmul(R[idx_view, :, :]).matmul(P_ref_cuda)
+        feat_img_src_view = feat_img_src[:, idx_view, :, :, :]
+        feat_img_src_view_repeat = feat_img_src_view.repeat(len(d_candi), 1, 1, 1)
+
+        feat_img_src_view_warp_par_d = \
+        _back_warp_homo_parallel(feat_img_src_view_repeat, d_candi_cuda, term1, term2, cam_intrinsic, H, W)
+
+        for i in range(0, len(d_candi)):
+            warped_accum[0, idx_view, i, :, :] = feat_img_src_view_warp_par_d[i,i,:,:]
+
+    return warped_accum
+
 def _back_warp_homo_parallel(img_src, D, term1, term2, cam_intrinsics, H, W, debug_inputs = None ):
     r'''
     Do the warpping for the src. view analytically using homography, given the
@@ -160,7 +193,7 @@ def _back_warp_homo_parallel(img_src, D, term1, term2, cam_intrinsics, H, W, deb
     src_coords[:,:,:,1] = P_src[:, 1, :].reshape(n_d, H, W)
     u_center, v_center = cam_intrinsics['intrinsic_M'][0,2], cam_intrinsics['intrinsic_M'][1,2]
     src_coords[:,:,:,0] = (src_coords[:,:,:,0] - u_center) / u_center
-    src_coords[:,:,:,1] = (src_coords[:,:,:,1] - v_center) / v_center 
+    src_coords[:,:,:,1] = (src_coords[:,:,:,1] - v_center) / v_center
     img_src_warpped = F.grid_sample(img_src, src_coords,mode='bilinear', padding_mode='zeros') 
     return img_src_warpped
 

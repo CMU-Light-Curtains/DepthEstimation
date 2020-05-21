@@ -26,8 +26,13 @@ def convbn(in_planes, out_planes, kernel_size, stride, pad, dilation, bn_running
                                    kernel_size=kernel_size, stride=stride,
                                    padding=dilation if dilation > 1 else pad,
                                    dilation=dilation, bias=False),
-                         nn.BatchNorm2d(out_planes,
-                                        track_running_stats=bn_running_avg))
+                         nn.BatchNorm2d(out_planes, track_running_stats=bn_running_avg))
+
+def convbn_3d(in_planes, out_planes, kernel_size, stride, pad):
+    return nn.Sequential(nn.Conv3d(in_planes, out_planes,
+                                   kernel_size=kernel_size, padding=pad,
+                                   stride=stride,bias=False),
+                         nn.BatchNorm3d(out_planes))
 
 def conv2d_leakyRelu(ch_in, ch_out, kernel_size, stride, pad, use_bias=True, dilation = 1):
     r'''
@@ -258,7 +263,7 @@ class BaseEncoder(nn.Module):
         output_feature = self.lastconv(output_feature)
 
         if self.multi_scale:
-            return output_layer1, output_feature
+            return output_layer1, output_raw, output_feature
         else:
             return output_feature
 
@@ -367,6 +372,65 @@ class BaseDecoder(nn.Module):
             weights_np = (1 - abs(og[0] - center) / factor) * (1 - abs(og[1] - center) / factor)
             m.weight.data.copy_(torch.from_numpy(weights_np))
 
+
+class Base3D(nn.Module):
+    def __init__(self, input_volume_channels, feature_dim=32, dres_count=4):
+        '''
+        inputs:
+        input_volume_channels - the # of channels for the input volume
+        '''
+        super(Base3D, self).__init__()
+        self.in_channels = input_volume_channels
+        self.dres_count = dres_count
+
+        # The basic 3D-CNN in PSM-net #
+        self.dres0 = nn.Sequential(convbn_3d(input_volume_channels, feature_dim, 3, 1, 1),
+                                   nn.ReLU(),
+                                   convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+                                   nn.ReLU())
+
+        self.dres_modules = []
+        for i in range(0, self.dres_count):
+            dres = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+                                 nn.ReLU(),
+                                 convbn_3d(feature_dim, feature_dim, 3, 1, 1))
+            self.dres_modules.append(dres.cuda())
+
+        self.classify = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+                                      nn.ReLU(),
+                                      nn.Conv3d(feature_dim, 1, kernel_size=3, padding=1, stride=1, bias=False))
+
+        self.apply(self.weight_init)
+
+    def weight_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+        elif isinstance(m, nn.Conv3d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.kernel_size[2] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+        elif isinstance(m, nn.BatchNorm2d):
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
+        elif isinstance(m, nn.BatchNorm3d):
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
+        elif isinstance(m, nn.Linear):
+            m.bias.data.zero_()
+
+    def forward(self, input_volume, prob=True):
+        input_volume = input_volume.contiguous()
+
+        # cost: the intermidiate results #
+        cost0 = self.dres0(input_volume)
+        curr_cost = cost0
+        for dres in self.dres_modules:
+            curr_cost = dres(curr_cost) + curr_cost
+        res_volume = self.classify(curr_cost)
+        res_prob = F.log_softmax(res_volume, dim=2).squeeze(1)
+
+        return res_prob
+
 class BaseModel(nn.Module):
     def __init__(self, cfg):
         super(BaseModel, self).__init__()
@@ -386,6 +450,10 @@ class BaseModel(nn.Module):
         self.conv0_1 = conv2d_leakyRelu(
             ch_in=D, ch_out=D, kernel_size=3, stride=1, pad=1, use_bias=True)
         self.conv0_2 = nn.Conv2d(D, D, kernel_size=3, stride=1, padding=1, bias=True)
+
+        # Other
+        if self.nmode == "exp3":
+            self.based_3d = Base3D(3, dres_count=2, feature_dim=32)
 
         # Apply Weights
         self.apply(self.weight_init)
@@ -425,7 +493,7 @@ class BaseModel(nn.Module):
         # Feature Extraction
         rgb = model_input["rgb"]
         rgb_reshaped = rgb.view(rgb.shape[0]*rgb.shape[1], rgb.shape[2], rgb.shape[3], rgb.shape[4])
-        feat_imgs_layer_1, feat_imgs = self.base_encoder(rgb_reshaped) # [8,32,128,192] [8,64,64,96]
+        feat_imgs_layer_1, feat_raw, feat_imgs = self.base_encoder(rgb_reshaped) # [8,32,128,192] [8,64,64,96]
 
         # Append image
         dw_rate = int(rgb_reshaped.shape[3] / feat_imgs.shape[3])
@@ -476,6 +544,83 @@ class BaseModel(nn.Module):
         last_features = [feat_imgs_all[:,-1,:-3, :,:], feat_imgs_layer_1[:,-1,:,:,:]]
         first_features = [feat_imgs_all[:,0,:-3, :,:], feat_imgs_layer_1[:,0,:,:,:]]
         return BV, cost_volumes, last_features, first_features
+
+    def forward_exp(self, model_input):
+        bsize = model_input["rgb"].shape[0]
+        d_candi = model_input["d_candi"]
+
+        # Feature Extraction
+        rgb = model_input["rgb"]
+        rgb_reshaped = rgb.view(rgb.shape[0]*rgb.shape[1], rgb.shape[2], rgb.shape[3], rgb.shape[4])
+        feat_imgs_layer_1, feat_raw, feat_imgs = self.base_encoder(rgb_reshaped) # [8,32,128,192] [8,64,64,96]
+
+        # Feat Imgs
+        dw_rate = int(rgb_reshaped.shape[3] / feat_imgs.shape[3])
+        img_features = F.avg_pool2d(rgb_reshaped, dw_rate) # [8,3,64,96]
+        feat_imgs_all = torch.cat( (feat_imgs, img_features), dim=1 ) # [8,67,64,96]
+        feat_imgs_layer_1 = feat_imgs_layer_1.view(rgb.shape[0], rgb.shape[1], feat_imgs_layer_1.shape[1], feat_imgs_layer_1.shape[2], feat_imgs_layer_1.shape[3])
+        feat_imgs_all = feat_imgs_all.view(rgb.shape[0], rgb.shape[1], feat_imgs_all.shape[1], feat_imgs_all.shape[2], feat_imgs_all.shape[3])
+        feat_raw_all = feat_raw.view(rgb.shape[0], rgb.shape[1], feat_raw.shape[1], feat_raw.shape[2], feat_raw.shape[3])
+
+        # Warp Cost Volume for each video batch
+        cost_volumes = []
+        for i in range(0, bsize):
+
+            Rs_src = model_input["src_cam_poses"][i,:-1, :3,:3]
+            ts_src = model_input["src_cam_poses"][i,:-1, :3,3]
+
+            # [1,67,64,96]
+            feat_img_ref = feat_imgs_all[i,-1,:,:,:].unsqueeze(0)
+            feat_imgs_src = feat_imgs_all[i,:-1,:,:,:].unsqueeze(0)
+
+            cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
+                              "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
+                              "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
+
+            costV = warp_homo.est_swp_volume_v4( \
+                    feat_img_ref,
+                    feat_imgs_src,
+                    d_candi, Rs_src, ts_src,
+                    cam_intrinsics,
+                    self.sigma_soft_max,
+                    feat_dist = 'L2')
+            # [1,128,64,96]
+
+            cost_volumes.append(costV)
+
+        cost_volumes = torch.cat(cost_volumes, dim=0)  # [4 128 64 96]
+
+        # Warp raw feature?
+        warped_features = []
+        for i in range(0, bsize):
+
+            Rs_src = model_input["src_cam_poses"][i,:, :3,:3]
+            ts_src = model_input["src_cam_poses"][i,:, :3,3]
+
+            orig_feature = feat_raw_all[i,:,:,:,:].unsqueeze(0)
+
+            cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
+                              "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
+                              "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
+
+            warped_feature = warp_homo.warp_feature(orig_feature, d_candi, Rs_src, ts_src, cam_intrinsics)
+
+            warped_features.append(warped_feature)
+
+        warped_features = torch.cat(warped_features, dim=0)
+
+        # Refinement (3D Conv here or not)
+        costv_out0 = self.conv0( cost_volumes )
+        costv_out1 = self.conv0_1( costv_out0)
+        costv_out2 = self.conv0_2( costv_out1)
+
+        # Ensure log like
+        BV = F.log_softmax(costv_out2, dim=1)
+
+        # Return BV and primary image features (in the future return others too for flow?)
+        last_features = [feat_imgs_all[:,-1,:-3, :,:], feat_imgs_layer_1[:,-1,:,:,:]]
+        first_features = [feat_imgs_all[:,0,:-3, :,:], feat_imgs_layer_1[:,0,:,:,:]]
+        return BV, cost_volumes, last_features, first_features, warped_features
 
     def forward(self, model_input):
 
@@ -534,6 +679,21 @@ class BaseModel(nn.Module):
             # [B,128,256,384]
 
             return {"output": [BV_cur_fused, BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp3":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:, -1, :, :, :])
+
+            # Volume
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), warped_features], dim=1)
+            BV_cur_upd = self.based_3d(comb_volume)
+
+            # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
         else:
             raise Exception("Nmode wrong")
