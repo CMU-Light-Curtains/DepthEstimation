@@ -32,7 +32,7 @@ def convbn_3d(in_planes, out_planes, kernel_size, stride, pad):
     return nn.Sequential(nn.Conv3d(in_planes, out_planes,
                                    kernel_size=kernel_size, padding=pad,
                                    stride=stride,bias=False),
-                         nn.BatchNorm3d(out_planes))
+                         nn.BatchNorm3d(out_planes, track_running_stats=False))
 
 def conv2d_leakyRelu(ch_in, ch_out, kernel_size, stride, pad, use_bias=True, dilation = 1):
     r'''
@@ -690,7 +690,7 @@ class BaseModel(nn.Module):
             BV_cur_upd = self.based_3d(comb_volume)
 
             # Decoder
-            BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
             # [B,128,256,384]
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
