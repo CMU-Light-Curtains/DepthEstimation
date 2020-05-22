@@ -1,6 +1,6 @@
 {
   "data": {
-    "exp_name": "default",
+    "exp_name": "default_exp2",
     "model_name": "base",
     "loss_name": "base",
     "trainer_name": "default",
@@ -21,7 +21,7 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "default"
+    "nmode": "exp2"
   },
   "lidar": {
     "enabled": false

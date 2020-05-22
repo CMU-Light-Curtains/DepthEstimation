@@ -370,6 +370,17 @@ class DefaultTrainer(BaseTrainer):
         for b in range(0, output["output"][-1].shape[0]):
             dpv_predicted = output["output"][-1][b, :, :, :].unsqueeze(0)
             dpv_refined_predicted = output["output_refined"][-1][b, :, :, :].unsqueeze(0)
+            d_candi = model_input["d_candi"]
+
+            # # Stuff?
+            # z = torch.exp(dpv_refined_predicted.squeeze(0))
+            # d_candi_expanded = torch.tensor(d_candi).unsqueeze(1).unsqueeze(1).cuda()
+            # mean = torch.sum(d_candi_expanded * z, dim=0)
+            # variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
+            # mask_var = (variance < 8.0).float()
+            # dpv_refined_predicted = dpv_refined_predicted * mask_var.unsqueeze(0)
+
+            # Convert
             depth_predicted = img_utils.dpv_to_depthmap(dpv_predicted, self.d_candi, BV_log=True)
             depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, self.d_candi, BV_log=True)
             mask = gt_input["masks"][b, :, :, :]
@@ -380,7 +391,6 @@ class DefaultTrainer(BaseTrainer):
             intr_refined = model_input["intrinsics_up"][b, :, :]
             img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
             img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
-            d_candi = model_input["d_candi"]
             dpv_refined_truth = gt_input["soft_labels_imgsize"][b].unsqueeze(0)
 
             # Eval
@@ -421,7 +431,7 @@ class DefaultTrainer(BaseTrainer):
             #combined = np.hstack([img_color, truth_depth])
             #combined_low = np.hstack([img_color_low, truth_depth_low])
             cv2.imshow("combined", combined)
-            #cv2.imshow("combined_low", combined_low)
+            cv2.imshow("combined_low", combined_low)
             cv2.imshow("unc_field_overlay", unc_field_overlay)
 
             # Cloud
@@ -430,7 +440,7 @@ class DefaultTrainer(BaseTrainer):
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
             self.viz.addCloud(cloud_refined_predicted, 1)
-            self.viz.addCloud(cloud_truth, 1)
+            self.viz.addCloud(cloud_truth, 2)
 
             # Swap
             self.viz.swapBuffer()

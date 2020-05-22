@@ -1,6 +1,6 @@
 {
   "data": {
-    "exp_name": "default",
+    "exp_name": "default_exp1_ds2",
     "model_name": "base",
     "loss_name": "base",
     "trainer_name": "default",
@@ -21,10 +21,13 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "default"
+    "nmode": "exp1"
   },
   "lidar": {
-    "enabled": false
+    "enabled": true,
+    "filtering": 2, "upsample": 1,
+    "total_vbeams": 32, "vbeam_fov": 0.8,
+    "total_hbeams": 750, "hbeam_fov": 0.8
   },
   "lc": {
     "enabled": false
