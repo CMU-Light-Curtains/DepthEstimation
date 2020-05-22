@@ -26,8 +26,8 @@
   "lidar": {
     "enabled": true,
     "filtering": 2, "upsample": 1,
-    "total_vbeams": 32, "vbeam_fov": 0.8,
-    "total_hbeams": 750, "hbeam_fov": 0.8
+    "total_vbeams": 16, "vbeam_fov": 1.6,
+    "total_hbeams": 750, "hbeam_fov": 0.4
   },
   "lc": {
     "enabled": false
