@@ -236,11 +236,11 @@ class BaseEncoder(nn.Module):
             m.bias.data.zero_()
 
     def forward(self, x):
-        output = self.firstconv(x)
-        output_layer1 = self.layer1(output)
-        output_raw = self.layer2(output_layer1)
-        output = self.layer3(output_raw)
-        output_skip = self.layer4(output)
+        output = self.firstconv(x) # [2, 32, 128, 192]
+        output_layer1 = self.layer1(output) # [2, 32, 128, 192]
+        output_raw = self.layer2(output_layer1) # [2, 64, 64, 96]
+        output = self.layer3(output_raw) # [2, 128, 64, 96]
+        output_skip = self.layer4(output) # [2, 128, 64, 96]
 
         output_branch1 = self.branch1(output_skip)
         output_branch1 = F.upsample(output_branch1,
