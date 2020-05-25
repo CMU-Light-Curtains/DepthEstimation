@@ -298,9 +298,6 @@ class BaseDecoder(nn.Module):
         concat1 = torch.cat([unpack2, skip1], dim=1)
         iconv1 = self.iconv1(concat1)
 
-        #try diff init
-
-
         dpv_refined = F.log_softmax(iconv1, dim=1)
 
         return dpv_refined
@@ -402,10 +399,7 @@ class PacknetModel(nn.Module):
 
         BV_cur, feature_set = self.forward_encoder(input)
 
-        #BV_cur_refined = self.base_decoder(torch.exp(BV_cur), feature_set[-1])
-
-        output_refined = F.interpolate(BV_cur, None, 4.)
-        BV_cur_refined = F.log_softmax(output_refined, dim=1)
+        BV_cur_refined = self.base_decoder(torch.exp(BV_cur), feature_set[-1])
 
         return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 

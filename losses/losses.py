@@ -198,7 +198,7 @@ class BaseLoss(nn.modules.Module):
         # Depth Losses
         bsize = torch.tensor(float(BV_cur_left.shape[0] * 2)).to(device)
         if bsize != 0:
-            ce_loss = (ce_loss / ce_count) * 1.
+            ce_loss = (ce_loss / ce_count) * self.cfg.loss.ce_mul
             dsc_loss = (dsc_loss / bsize) * self.cfg.loss.dsc_mul
             dc_loss = (dc_loss / bsize) * self.cfg.loss.dc_mul
             rsc_loss = (rsc_loss / bsize) * self.cfg.loss.rsc_mul
