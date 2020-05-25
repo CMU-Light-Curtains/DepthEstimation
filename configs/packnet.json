@@ -20,7 +20,7 @@
     "img_size": [768, 256],
     "crop_w": 384,
     "pnoise": 0.0,
-    "mload": false,
+    "mload": true,
     "nmode": "default"
   },
   "lidar": {
