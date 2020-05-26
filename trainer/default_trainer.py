@@ -105,6 +105,16 @@ class DefaultTrainer(BaseTrainer):
         for items in self.train_loader.enumerate():
             if early_stop: break
 
+            # ** Signal **
+            if self.cfg.mp.enabled:
+                signal = torch.tensor([1]).to(self.device)
+                dist.all_reduce(signal)
+                if signal.item() < self.cfg.mp.workers:
+                    #self._log.info(self.id, "EXIT: " + str(signal.item()))
+                    self.train_loader.stop()
+                    early_stop = True
+                    continue
+
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
             if local_info['is_valid'].sum() == 0:
@@ -136,18 +146,6 @@ class DefaultTrainer(BaseTrainer):
             # Loss Function
             loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
 
-            # ** Signal **
-            if self.cfg.mp.enabled:
-                signal = torch.tensor([1]).to(self.device)
-                work = dist.all_reduce(signal, async_op=True)
-                work.wait()
-                #self._log.info(self.id, "SIG: " + str(signal.item()))
-                if signal.item() < self.cfg.mp.workers:
-                    #self._log.info(self.id, "EXIT: " + str(signal.item()))
-                    self.train_loader.stop()
-                    early_stop = True
-                    continue
-
             # Opt
             self.optimizer.zero_grad()
             loss.backward()
@@ -164,6 +162,7 @@ class DefaultTrainer(BaseTrainer):
             #self._log.info(self.id, "AR: " + str(signal.item()))
             if signal.item() >= self.cfg.mp.workers:
                 dist.all_reduce(torch.tensor([0]).to(self.device))
+            #dist.barrier()
 
         self.i_epoch += 1
 
