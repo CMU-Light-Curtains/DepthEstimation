@@ -125,8 +125,6 @@ class DefaultTrainer(BaseTrainer):
 
             # Model
             output_left, output_right = self.model([model_input_left, model_input_right])
-            #output_left = self.model(model_input_left)
-            #output_right = self.model(model_input_right)
 
             # Light Curtain
             if self.lc is not None:
@@ -163,11 +161,9 @@ class DefaultTrainer(BaseTrainer):
 
         # ** Signal **
         if self.cfg.mp.enabled:
-            signal = torch.tensor([0]).to(self.device)
-            sflag = self.shared[0, -1]
-            if sflag == 0:
-                self.shared[0, -1] = 1
-                dist.all_reduce(signal)
+            #self._log.info(self.id, "AR: " + str(signal.item()))
+            if signal.item() >= self.cfg.mp.workers:
+                dist.all_reduce(torch.tensor([0]).to(self.device))
 
         self.i_epoch += 1
 
@@ -210,7 +206,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Model
             start = time.time()
-            output_left = self.model([model_input_left])
+            output_left = self.model([model_input_left])[0]
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
 
