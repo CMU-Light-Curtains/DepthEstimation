@@ -124,8 +124,9 @@ class DefaultTrainer(BaseTrainer):
             model_input_right["prev_output"] = self.prev_output["right"]
 
             # Model
-            output_left = self.model(model_input_left)
-            output_right = self.model(model_input_right)
+            output_left, output_right = self.model([model_input_left, model_input_right])
+            #output_left = self.model(model_input_left)
+            #output_right = self.model(model_input_right)
 
             # Light Curtain
             if self.lc is not None:
@@ -209,7 +210,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Model
             start = time.time()
-            output_left = self.model(model_input_left)
+            output_left = self.model([model_input_left])
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
 

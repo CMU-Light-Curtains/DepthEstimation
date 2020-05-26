@@ -185,7 +185,6 @@ class BaseEncoder(nn.Module):
         self.conv5 = resblock_basic(n4, n5, num_blocks[3], 1, dropout=dropout)
         toc = n2 + n3 + n4 + n5
         self.compress = nn.Sequential(nn.Conv2d(toc, int(toc/2), 3, stride=1, padding=1, bias=False),
-                                      #nn.BatchNorm2d(128, track_running_stats=False),
                                       nn.GroupNorm(16, int(toc/2)),
                                       nn.ReLU(inplace=True),
                                       nn.Conv2d(int(toc/2), D, kernel_size=1, padding=0, stride=1, bias=False))

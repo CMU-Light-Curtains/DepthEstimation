@@ -26,13 +26,13 @@ def convbn(in_planes, out_planes, kernel_size, stride, pad, dilation, bn_running
                                    kernel_size=kernel_size, stride=stride,
                                    padding=dilation if dilation > 1 else pad,
                                    dilation=dilation, bias=False),
-                         nn.BatchNorm2d(out_planes, track_running_stats=bn_running_avg))
+                         nn.BatchNorm2d(out_planes))
 
 def convbn_3d(in_planes, out_planes, kernel_size, stride, pad):
     return nn.Sequential(nn.Conv3d(in_planes, out_planes,
                                    kernel_size=kernel_size, padding=pad,
                                    stride=stride,bias=False),
-                         nn.BatchNorm3d(out_planes, track_running_stats=False))
+                         nn.BatchNorm3d(out_planes))
 
 def conv2d_leakyRelu(ch_in, ch_out, kernel_size, stride, pad, use_bias=True, dilation = 1):
     r'''
@@ -209,7 +209,7 @@ class BaseEncoder(nn.Module):
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion, track_running_stats=False), )
+                nn.BatchNorm2d(planes * block.expansion), )
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, pad, dilation))
@@ -622,7 +622,7 @@ class BaseModel(nn.Module):
         first_features = [feat_imgs_all[:,0,:-3, :,:], feat_imgs_layer_1[:,0,:,:,:]]
         return BV, cost_volumes, last_features, first_features, warped_features
 
-    def forward(self, model_input):
+    def forward_int(self, model_input):
 
         if self.nmode == "default":
             # Encoder
@@ -700,6 +700,12 @@ class BaseModel(nn.Module):
 
         pass
 
+    def forward(self, inputs):
+        outputs = []
+        for input in inputs:
+            outputs.append(self.forward_int(input))
+        return outputs
+
 class DefaultModel(nn.Module):
     def __init__(self, cfg):
         super(DefaultModel, self).__init__()
@@ -708,6 +714,7 @@ class DefaultModel(nn.Module):
                                       nn.MaxPool2d(2),
                                       conv(32, self.cfg.var.ndepth, kernel_size=3, stride=1, dilation=0, padding=1),
                                       nn.MaxPool2d(2),
+                                      #nn.BatchNorm2d(64)
                                       )
 
     def num_parameters(self):
@@ -726,10 +733,16 @@ class DefaultModel(nn.Module):
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
 
-    def forward(self, input):
+    def forward_int(self, input):
         images = input["rgb"][:, -1, :, :, :]
         output = self.conv_1x1(images)
         output_refined = F.interpolate(output, None, 4.)
         output_lsm = F.log_softmax(output, dim=1)
         output_refined_lsm = F.log_softmax(output_refined, dim=1)
         return {"output": [output_lsm], "output_refined": [output_refined_lsm], "flow": None, "flow_refined": None}
+
+    def forward(self, inputs):
+        outputs = []
+        for input in inputs:
+            outputs.append(self.forward_int(input))
+        return outputs
