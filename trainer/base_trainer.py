@@ -91,7 +91,8 @@ class BaseTrainer:
 
         # Model Type
         if self.cfg.mp.enabled:
-            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model, 0)
+            if self.cfg.var.bn_avg:
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model, 0)
             if n_gpu_use > 0:
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=self.device_ids, find_unused_parameters=True)
             else:

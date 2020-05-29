@@ -21,7 +21,8 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "default"
+    "nmode": "default",
+    "bn_avg": true
   },
   "lidar": {
     "enabled": false
@@ -34,7 +35,7 @@
     "dsc_mul": 1.0,
     "rsc_mul": 1.0,
     "smooth_mul": 0.5,
-    "dc_mul": 0.5,
+    "dc_mul": 0.25,
     "rsc_low_mul": 0.0
   },
   "train": {

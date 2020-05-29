@@ -18,6 +18,130 @@ from torch.multiprocessing import Process, Queue, Value, cpu_count
 import utils.img_utils as img_utils
 import utils.misc_utils as misc_utils
 
+def generate_stereo_input(id, local_info_valid, cfg, camside = "left"):
+    # Device
+    n_gpu_use = cfg.train.n_gpu
+    device = torch.device('cuda:' + str(id) if n_gpu_use > 0 else 'cpu')
+
+    # Keep to middle only
+    midval = int(len(local_info_valid["src_dats"][0]) / 2)
+
+    # Grab ground truth digitized map (Done only for left camera for last t)
+    dmap_imgsize_digit_arr = []
+    dmap_digit_arr = []
+    dmap_imgsize_arr = []
+    dmap_arr = []
+    for i in range(0, len(local_info_valid["src_dats"])):
+        dmap_imgsize_digit = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_imgsize_digit"]
+        dmap_digit = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap"]
+        dmap_imgsize = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_imgsize"]
+        dmap = local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_raw"]
+        dmap_imgsize_digit_arr.append(dmap_imgsize_digit)
+        dmap_digit_arr.append(dmap_digit)
+        dmap_imgsize_arr.append(dmap_imgsize)
+        dmap_arr.append(dmap)
+    dmap_imgsize_digits = torch.cat(dmap_imgsize_digit_arr).to(device)  # [B,256,384] uint64
+    dmap_digits = torch.cat(dmap_digit_arr).to(device)  # [B,64,96] uint64
+    dmap_imgsizes = torch.cat(dmap_imgsize_arr).to(device)
+    dmaps = torch.cat(dmap_arr).to(device)
+
+    # Grab intrinsics - Same for L/R
+    intrinsics_arr = []
+    intrinsics_up_arr = []
+    unit_ray_arr = []
+    for i in range(0, len(local_info_valid[camside + "_cam_intrins"])):
+        intr = local_info_valid[camside + "_cam_intrins"][i]["intrinsic_M_cuda"]
+        intr_up = intr * 4;
+        intr_up[2, 2] = 1;
+        intrinsics_arr.append(intr.unsqueeze(0))
+        intrinsics_up_arr.append(intr_up.unsqueeze(0))
+        unit_ray_arr.append(local_info_valid[camside + "_cam_intrins"][i]["unit_ray_array_2D"].unsqueeze(0))
+    intrinsics = torch.cat(intrinsics_arr).to(device)
+    intrinsics_up = torch.cat(intrinsics_up_arr).to(device)
+    unit_ray = torch.cat(unit_ray_arr).to(device)
+
+    # Images and Masks
+    rgb_arr = [] # right then left (main)
+    mask_imgsize_arr = []
+    mask_arr = []
+    for i in range(0, len(local_info_valid["src_dats"])):
+        rgb_set = []
+        if camside == "left":
+            rgb_set.append(local_info_valid["src_dats"][i][midval]["right" + "_camera"]["img"])
+            rgb_set.append(local_info_valid["src_dats"][i][midval]["left" + "_camera"]["img"])
+        elif camside == "right":
+            rgb_set.append(local_info_valid["src_dats"][i][midval]["left" + "_camera"]["img"])
+            rgb_set.append(local_info_valid["src_dats"][i][midval]["right" + "_camera"]["img"])
+        mask_imgsize_arr.append(local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_mask_imgsize"])
+        mask_arr.append(local_info_valid["src_dats"][i][midval][camside + "_camera"]["dmap_mask"])
+        rgb_arr.append(torch.cat(rgb_set).unsqueeze(0))
+    rgb = torch.cat(rgb_arr).to(device)
+    masks_imgsize = torch.cat(mask_imgsize_arr).float().to(device)
+    masks = torch.cat(mask_arr).float().to(device)
+
+    # Pose is now left/right (Not sure if the direction is correct here)
+    src_cam_poses_arr = []
+    for i in range(0, len(local_info_valid[camside + "_src_cam_poses"])):
+        if camside == "left":
+            p1 = local_info_valid["T_left2right"]
+            p2 = torch.eye(4)
+            pose = torch.cat([p1.unsqueeze(0), p2.unsqueeze(0)], dim=0)
+        elif camside == "right":
+            p1 = torch.inverse(local_info_valid["T_left2right"])
+            p2 = torch.eye(4)
+            pose = torch.cat([p1.unsqueeze(0), p2.unsqueeze(0)], dim=0)
+        src_cam_poses_arr.append(pose)  # currently [1x3x4x4]
+    src_cam_poses = torch.cat(src_cam_poses_arr).to(device)
+
+    # Create Soft Label
+    d_candi = local_info_valid["d_candi"]
+    d_candi_up = local_info_valid["d_candi_up"]
+    if cfg.var.softce:
+        soft_labels_imgsize = []
+        soft_labels = []
+        variance = torch.tensor(cfg.var.softce)
+        for i in range(0, dmap_imgsizes.shape[0]):
+            # Clamping
+            dmap_imgsize = dmap_imgsizes[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks_imgsize[i, 0, :, :]
+            dmap = dmaps[i, :, :].clamp(d_candi[0], d_candi[-1]) * masks[i, 0, :, :]
+            soft_labels_imgsize.append(
+                img_utils.gen_soft_label_torch(d_candi, dmap_imgsize, variance, zero_invalid=True))
+            soft_labels.append(img_utils.gen_soft_label_torch(d_candi, dmap, variance, zero_invalid=True))
+    else:
+        soft_labels_imgsize = []
+        soft_labels = []
+
+    model_input = {
+        "intrinsics": intrinsics,
+        "intrinsics_up": intrinsics_up,
+        "unit_ray": unit_ray,
+        "src_cam_poses": src_cam_poses,
+        "rgb": rgb,
+        "prev_output": None,  # Has to be [B, 64, H, W],
+        "dmaps": dmaps,
+        "masks": masks,
+        "d_candi": d_candi,
+        "d_candi_up": d_candi_up,
+    }
+
+    gt_input = {
+        "masks_imgsizes": masks_imgsize,
+        "masks": masks,
+        "dmap_imgsize_digits": dmap_imgsize_digits,
+        "dmap_digits": dmap_digits,
+        "dmap_imgsizes": dmap_imgsizes,
+        "dmaps": dmaps,
+        "soft_labels_imgsize": soft_labels_imgsize,
+        "soft_labels": soft_labels,
+        "d_candi": d_candi,
+        "T_left2right": local_info_valid["T_left2right"],
+        "rgb": rgb,
+        "intrinsics": intrinsics,
+        "intrinsics_up": intrinsics_up,
+    }
+
+    return model_input, gt_input
+
 def generate_model_input(id, local_info_valid, cfg, camside="left"):
     # Device
     n_gpu_use = cfg.train.n_gpu
@@ -335,27 +459,35 @@ class BatchSchedulerMP:
         yield None
 
 if __name__ == "__main__":
+    from easydict import EasyDict
+    import json
+    with open("configs/default.json") as f:
+        cfg = EasyDict(json.load(f))
+
+    d_candi = img_utils.powerf(5., 40., 64, 1.5)
+    d_candi_up = d_candi
+
     testing_inputs = {
         "pytorch_scaling": True,
         "velodyne_depth": True,
-        #"dataset_path": "/media/raaj/Storage/kitti/",
-        #"split_path": "./kittiloader/k1/",
-        "dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
-        "split_path": "./kittiloader/k2/",
+        "dataset_path": "/media/raaj/Storage/kitti/",
+        "split_path": "./kittiloader/k1/",
+        # "dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
+        # "split_path": "./kittiloader/k2/",
         "total_processes": 1,
         "process_num": 0,
         "t_win_r": 1,
         "img_size": [768, 256],
         "crop_w": 384,
-        "d_candi": img_utils.powerf(5., 40., 64, 1.5),
-        "d_candi_up": img_utils.powerf(5., 40., 64, 1.5),
+        "d_candi": d_candi,
+        "d_candi_up": d_candi_up,
         "dataset_name": "kitti",
         "hack_num": 0,
-        "batch_size": 4,
+        "batch_size": 2,
         "n_epoch": 1,
         "qmax": 1,
         "mode": "val",
-        "cfg": None
+        "cfg": cfg
     }
 
     # Add feature to control lidar params
@@ -374,7 +506,7 @@ if __name__ == "__main__":
     from models import models
     x = models.BaseDecoder(3,3,3)
 
-    bs = BatchSchedulerMP(testing_inputs, True) # Multiprocessing misses last image for some reason
+    bs = BatchSchedulerMP(testing_inputs, False) # Multiprocessing misses last image for some reason
 
     counter = 0
     early_stop = False
@@ -386,6 +518,20 @@ if __name__ == "__main__":
 
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
+            local_info["d_candi"] = d_candi
+            local_info["d_candi_up"] = d_candi_up
+
+            import time
+            start = time.time()
+
+            model_input, gt_input = generate_stereo_input(0, local_info, cfg)
+
+
+            #left_model_input, left_gt_input = generate_model_input(0, local_info, cfg, camside="left")
+            #right_model_input, right_gt_input = generate_model_input(0, local_info, cfg, camside="right")
+            end = time.time()
+            print(end-start)
+
 
             # Print
             print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
@@ -399,18 +545,18 @@ if __name__ == "__main__":
             #     bs.stop()
             #     early_stop = True
 
-            # # # Visualize
-            # global_item = []
-            # for b in range(0, len(local_info["src_dats"])):
-            #     batch_item = []
-            #     for i in range(0, len(local_info["src_dats"][b])):
-            #         if i > 1: continue
-            #         batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
-            #     batch_item = torch.cat(batch_item, dim = 3)
-            #     global_item.append(batch_item)
-            # global_item = torch.cat(global_item, dim=2)
-            # cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
-            # cv2.waitKey(15)
+            # # Visualize
+            global_item = []
+            for b in range(0, len(local_info["src_dats"])):
+                batch_item = []
+                for i in range(0, len(local_info["src_dats"][b])):
+                    if i > 1: continue
+                    batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
+                batch_item = torch.cat(batch_item, dim = 3)
+                global_item.append(batch_item)
+            global_item = torch.cat(global_item, dim=2)
+            cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
+            cv2.waitKey(15)
 
     print("Ended")
 

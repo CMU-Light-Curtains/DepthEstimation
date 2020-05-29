@@ -405,6 +405,7 @@ class DefaultTrainer(BaseTrainer):
 
             # UField
             unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
+            #unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), None, None, True, True)
             img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
 
             # UField Display
@@ -436,7 +437,7 @@ class DefaultTrainer(BaseTrainer):
             cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
             self.viz.addCloud(cloud_refined_predicted, 1)
-            self.viz.addCloud(cloud_truth, 2)
+            self.viz.addCloud(cloud_truth, 1)
 
             # Swap
             self.viz.swapBuffer()

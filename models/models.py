@@ -26,13 +26,13 @@ def convbn(in_planes, out_planes, kernel_size, stride, pad, dilation, bn_running
                                    kernel_size=kernel_size, stride=stride,
                                    padding=dilation if dilation > 1 else pad,
                                    dilation=dilation, bias=False),
-                         nn.BatchNorm2d(out_planes))
+                         nn.BatchNorm2d(out_planes, track_running_stats=bn_running_avg))
 
-def convbn_3d(in_planes, out_planes, kernel_size, stride, pad):
+def convbn_3d(in_planes, out_planes, kernel_size, stride, pad, bn_running_avg=False):
     return nn.Sequential(nn.Conv3d(in_planes, out_planes,
                                    kernel_size=kernel_size, padding=pad,
                                    stride=stride,bias=False),
-                         nn.BatchNorm3d(out_planes))
+                         nn.BatchNorm3d(out_planes, track_running_stats=bn_running_avg))
 
 def conv2d_leakyRelu(ch_in, ch_out, kernel_size, stride, pad, use_bias=True, dilation = 1):
     r'''
@@ -165,10 +165,10 @@ class BaseEncoder(nn.Module):
         self.inplanes = S1
         self.multi_scale = multi_scale
 
-        bn_ravg = bn_running_avg
-        self.firstconv = nn.Sequential(convbn(3, S1, 3, 2, 1, 1, bn_ravg), nn.ReLU(inplace=True),
-                                       convbn(S1, S1, 3, 1, 1, 1, bn_ravg), nn.ReLU(inplace=True),
-                                       convbn(S1, S1, 3, 1, 1, 1, bn_ravg), nn.ReLU(inplace=True))
+        self.bn_ravg = bn_running_avg
+        self.firstconv = nn.Sequential(convbn(3, S1, 3, 2, 1, 1, self.bn_ravg), nn.ReLU(inplace=True),
+                                       convbn(S1, S1, 3, 1, 1, 1, self.bn_ravg), nn.ReLU(inplace=True),
+                                       convbn(S1, S1, 3, 1, 1, 1, self.bn_ravg), nn.ReLU(inplace=True))
 
         self.layer1 = self._make_layer(BasicBlock, S1, 3, 1, 1, 1)
         self.layer2 = self._make_layer(BasicBlock, S2, S0, 2, 1, 1)
@@ -180,22 +180,22 @@ class BaseEncoder(nn.Module):
         self.layer4 = self._make_layer(BasicBlock, S3, 3, 1, 1, 2)
 
         self.branch1 = nn.Sequential(nn.AvgPool2d((64, 64), stride=(64, 64)),
-                                     convbn(S3, S1, 1, 1, 0, 1, bn_ravg),
+                                     convbn(S3, S1, 1, 1, 0, 1, self.bn_ravg),
                                      nn.ReLU(inplace=True))
 
         self.branch2 = nn.Sequential(nn.AvgPool2d((32, 32), stride=(32, 32)),
-                                     convbn(S3, S1, 1, 1, 0, 1, bn_ravg),
+                                     convbn(S3, S1, 1, 1, 0, 1, self.bn_ravg),
                                      nn.ReLU(inplace=True))
 
         self.branch3 = nn.Sequential(nn.AvgPool2d((16, 16), stride=(16, 16)),
-                                     convbn(S3, S1, 1, 1, 0, 1, bn_ravg),
+                                     convbn(S3, S1, 1, 1, 0, 1, self.bn_ravg),
                                      nn.ReLU(inplace=True))
 
         self.branch4 = nn.Sequential(nn.AvgPool2d((8, 8), stride=(8, 8)),
-                                     convbn(S3, S1, 1, 1, 0, 1, bn_ravg),
+                                     convbn(S3, S1, 1, 1, 0, 1, self.bn_ravg),
                                      nn.ReLU(inplace=True))
 
-        self.lastconv = nn.Sequential(convbn(S1 * 4 + S2 + S3, S3, 3, 1, 1, 1, bn_ravg),
+        self.lastconv = nn.Sequential(convbn(S1 * 4 + S2 + S3, S3, 3, 1, 1, 1, self.bn_ravg),
                                       nn.ReLU(inplace=True),
                                       nn.Conv2d(S3,
                                                 feature_dim, kernel_size=1, padding=0, stride=1, bias=False))
@@ -209,13 +209,13 @@ class BaseEncoder(nn.Module):
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion), )
+                nn.BatchNorm2d(planes * block.expansion, track_running_stats=self.bn_ravg), )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, pad, dilation))
+        layers.append(block(self.inplanes, planes, stride, downsample, pad, dilation, self.bn_ravg))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, 1, None, pad, dilation))
+            layers.append(block(self.inplanes, planes, 1, None, pad, dilation, self.bn_ravg))
 
         return nn.Sequential(*layers)
 
@@ -374,7 +374,7 @@ class BaseDecoder(nn.Module):
 
 
 class Base3D(nn.Module):
-    def __init__(self, input_volume_channels, feature_dim=32, dres_count=4):
+    def __init__(self, input_volume_channels, feature_dim=32, dres_count=4, bn_running_avg=False):
         '''
         inputs:
         input_volume_channels - the # of channels for the input volume
@@ -382,21 +382,22 @@ class Base3D(nn.Module):
         super(Base3D, self).__init__()
         self.in_channels = input_volume_channels
         self.dres_count = dres_count
+        self.bn_avg = bn_running_avg
 
         # The basic 3D-CNN in PSM-net #
-        self.dres0 = nn.Sequential(convbn_3d(input_volume_channels, feature_dim, 3, 1, 1),
+        self.dres0 = nn.Sequential(convbn_3d(input_volume_channels, feature_dim, 3, 1, 1, self.bn_avg),
                                    nn.ReLU(),
-                                   convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+                                   convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg),
                                    nn.ReLU())
 
         self.dres_modules = []
         for i in range(0, self.dres_count):
-            dres = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+            dres = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg),
                                  nn.ReLU(),
-                                 convbn_3d(feature_dim, feature_dim, 3, 1, 1))
+                                 convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg))
             self.dres_modules.append(dres.cuda())
 
-        self.classify = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1),
+        self.classify = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg),
                                       nn.ReLU(),
                                       nn.Conv3d(feature_dim, 1, kernel_size=3, padding=1, stride=1, bias=False))
 
@@ -439,9 +440,10 @@ class BaseModel(nn.Module):
         self.feature_dim = self.cfg.var.feature_dim
         self.nmode = self.cfg.var.nmode
         D = self.cfg.var.ndepth
+        self.bn_avg = self.cfg.var.bn_avg
 
         # Encoder
-        self.base_encoder = BaseEncoder(feature_dim = self.feature_dim, multi_scale = True)
+        self.base_encoder = BaseEncoder(feature_dim = self.feature_dim, multi_scale = True, bn_running_avg = self.bn_avg)
         self.base_decoder = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
 
         # Additional
@@ -453,7 +455,7 @@ class BaseModel(nn.Module):
 
         # Other
         if self.nmode == "exp3":
-            self.based_3d = Base3D(3, dres_count=2, feature_dim=32)
+            self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg)
 
         # Apply Weights
         self.apply(self.weight_init)

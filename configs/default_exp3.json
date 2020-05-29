@@ -1,7 +1,7 @@
 {
   "data": {
-    "exp_name": "packnet",
-    "model_name": "packnet",
+    "exp_name": "default",
+    "model_name": "base",
     "loss_name": "base",
     "trainer_name": "default",
     "dataset_path": "/media/raaj/Storage/kitti/",
@@ -21,7 +21,7 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "default",
+    "nmode": "exp3",
     "bn_avg": true
   },
   "lidar": {
@@ -31,7 +31,7 @@
     "enabled": false
   },
   "loss": {
-    "ce_mul": 2.0,
+    "ce_mul": 1.0,
     "dsc_mul": 1.0,
     "rsc_mul": 1.0,
     "smooth_mul": 0.5,
@@ -48,7 +48,7 @@
     "optim": "adam",
     "bias_decay": 0,
     "weight_decay": 1e-06,
-    "halflr": [40, 50],
+    "halflr": [30, 50],
     "pretrained_model": null,
     "print_freq": 10,
     "record_freq": 50,
