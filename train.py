@@ -113,8 +113,8 @@ def worker(id, cfg, shared):
                                     world_size=cfg.mp.workers, rank=id)
 
     # Get Model and Loss
-    model = get_model(cfg)
-    loss = get_loss(cfg)
+    model = get_model(cfg, id)
+    loss = get_loss(cfg, id)
 
     # Create Trainer
     trainer = get_trainer(cfg)(id, model, loss, _log, cfg.save_root, cfg, shared)

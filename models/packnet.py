@@ -302,9 +302,10 @@ class BaseDecoder(nn.Module):
         return dpv_refined
 
 class PacknetModel(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, id):
         super(PacknetModel, self).__init__()
         self.cfg = cfg
+        self.id = id
         self.sigma_soft_max = self.cfg.var.sigma_soft_max
         self.feature_dim = self.cfg.var.feature_dim
         self.nmode = self.cfg.var.nmode

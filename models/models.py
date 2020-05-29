@@ -374,7 +374,7 @@ class BaseDecoder(nn.Module):
 
 
 class Base3D(nn.Module):
-    def __init__(self, input_volume_channels, feature_dim=32, dres_count=4, bn_running_avg=False):
+    def __init__(self, input_volume_channels, feature_dim=32, dres_count=4, bn_running_avg=False, id=0):
         '''
         inputs:
         input_volume_channels - the # of channels for the input volume
@@ -383,6 +383,7 @@ class Base3D(nn.Module):
         self.in_channels = input_volume_channels
         self.dres_count = dres_count
         self.bn_avg = bn_running_avg
+        self.id = id
 
         # The basic 3D-CNN in PSM-net #
         self.dres0 = nn.Sequential(convbn_3d(input_volume_channels, feature_dim, 3, 1, 1, self.bn_avg),
@@ -395,7 +396,7 @@ class Base3D(nn.Module):
             dres = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg),
                                  nn.ReLU(),
                                  convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg))
-            self.dres_modules.append(dres.cuda())
+            self.dres_modules.append(dres.cuda(self.id))
 
         self.classify = nn.Sequential(convbn_3d(feature_dim, feature_dim, 3, 1, 1, self.bn_avg),
                                       nn.ReLU(),
@@ -433,7 +434,7 @@ class Base3D(nn.Module):
         return res_prob
 
 class BaseModel(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, id):
         super(BaseModel, self).__init__()
         self.cfg = cfg
         self.sigma_soft_max = self.cfg.var.sigma_soft_max
@@ -441,6 +442,7 @@ class BaseModel(nn.Module):
         self.nmode = self.cfg.var.nmode
         D = self.cfg.var.ndepth
         self.bn_avg = self.cfg.var.bn_avg
+        self.id = id
 
         # Encoder
         self.base_encoder = BaseEncoder(feature_dim = self.feature_dim, multi_scale = True, bn_running_avg = self.bn_avg)
@@ -455,7 +457,7 @@ class BaseModel(nn.Module):
 
         # Other
         if self.nmode == "exp3":
-            self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg)
+            self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
 
         # Apply Weights
         self.apply(self.weight_init)
@@ -709,9 +711,10 @@ class BaseModel(nn.Module):
         return outputs
 
 class DefaultModel(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, id):
         super(DefaultModel, self).__init__()
         self.cfg = cfg
+        self.id = id
         self.conv_1x1 = nn.Sequential(conv(3, 32, kernel_size=3, stride=1, dilation=0, padding=1),
                                       nn.MaxPool2d(2),
                                       conv(32, self.cfg.var.ndepth, kernel_size=3, stride=1, dilation=0, padding=1),

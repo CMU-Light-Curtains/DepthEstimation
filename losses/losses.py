@@ -6,9 +6,10 @@ from .loss_blocks import *
 
 
 class BaseLoss(nn.modules.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, id):
         super(BaseLoss, self).__init__()
         self.cfg = cfg
+        self.id = id
 
     def forward(self, output, target):
         output_left, output_right = output
@@ -209,9 +210,10 @@ class BaseLoss(nn.modules.Module):
         return loss
 
 class DefaultLoss(nn.modules.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, id):
         super(DefaultLoss, self).__init__()
         self.cfg = cfg
+        self.id = id
 
     def forward(self, output, target):
         """
