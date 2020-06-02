@@ -132,6 +132,7 @@ class DefaultTrainer(BaseTrainer):
             model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
             model_input_left["prev_output"] = self.prev_output["left"]
             model_input_right["prev_output"] = self.prev_output["right"]
+            model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
 
             # Model
             output_left, output_right = self.model([model_input_left, model_input_right])
@@ -141,7 +142,9 @@ class DefaultTrainer(BaseTrainer):
                 self.lc_process(model_input_left, gt_input_left, output_left)
 
             # Set Prev from last one
-            self.prev_output = {"left": output_left["output"][-1].detach(), "right": output_right["output"][-1].detach()}
+            output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+            output_right_intp = F.interpolate(output_right["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+            self.prev_output = {"left": output_left_intp, "right": output_right_intp}
 
             # Loss Function
             loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
@@ -199,9 +202,8 @@ class DefaultTrainer(BaseTrainer):
             local_info["d_candi"] = self.d_candi
             local_info["d_candi_up"] = self.d_candi_up
             model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
-            model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
             model_input_left["prev_output"] = self.prev_output["left"]
-            model_input_right["prev_output"] = self.prev_output["right"]
+            model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
             # Model
             start = time.time()
@@ -214,7 +216,8 @@ class DefaultTrainer(BaseTrainer):
                 self.lc_process(model_input_left, gt_input_left, output_left)
 
             # Set Prev
-            self.prev_output = {"left": output_left["output"][-1].detach(), "right": None}
+            output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+            self.prev_output = {"left": output_left_intp, "right": None}
 
             # Visualization
             if self.cfg.var.viz:
@@ -301,7 +304,8 @@ class DefaultTrainer(BaseTrainer):
     def lc_process(self, model_input, gt_input, output):
         # Initialize
         if not self.lc.initialized:
-            self.lc.init_from_model_input(model_input)
+            lc_params = self.lc.gen_params_from_model_input(model_input)
+            self.lc.init(lc_params)
 
         # Eval
         for b in range(0, output["output"][-1].shape[0]):
@@ -329,8 +333,16 @@ class DefaultTrainer(BaseTrainer):
             depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
             depthmap_truth_refined_np = depth_refined_truth_eval.squeeze(0).cpu().numpy()
 
+            # # Save to Disk
+            # todisk = copy.copy(lc_params)
+            # todisk["dpv_refined_predicted"] = dpv_refined_predicted
+            # todisk["d_candi"] = d_candi
+            # todisk["intr_refined"] = intr_refined
+            # np.save("test.npy", todisk)
+
             # UField
-            #uncfield_refined_predicted, _ = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
+            uncfield_refined_predicted, _ = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
+            lc_paths_refined, field_visual_refined = self.lc.plan_high(uncfield_refined_predicted.squeeze(0))
 
             # Plan (This is one strategy)
             # Alternative strategy based on sampling? and points?
@@ -350,13 +362,15 @@ class DefaultTrainer(BaseTrainer):
             #     lc_outputs.append(output)
             #     lc_DPVs.append(lc_DPV)
 
-            # if self.viz is not None:
-            #     import cv2
-            #     #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[0]), 3)
-            #     #self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs[0]), 3)
-            #     #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[2]), 3)
-            #     cv2.imshow("field_visual", field_visual)
-            #     cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
+            if self.viz is not None:
+                import cv2
+                #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[0]), 3)
+                #self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs[0]), 3)
+                #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[2]), 3)
+                cv2.imshow("field_visual", field_visual)
+                cv2.imshow("field_visual_refined", field_visual_refined)
+                cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
+                cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy())
 
 
     def visualize(self, model_input, gt_input, output):

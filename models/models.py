@@ -644,6 +644,60 @@ class BaseModel(nn.Module):
 
             return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
+        # Try use the previous, spread it and update?
+        elif self.nmode == "default_df1":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:, -1, :, :, :])
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            if model_input["prev_output"] is None or model_input["epoch"] < 20:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+            else:
+                # Spread the prev dpv
+                prev_dpv = torch.exp(model_input["prev_output"])
+                prev_dpv = img_utils.spread_dpv(prev_dpv, 5)
+
+                # Fuse Data
+                fused_dpv = torch.exp(BV_cur + torch.log(prev_dpv))
+                fused_dpv = fused_dpv / torch.sum(fused_dpv, dim=1).unsqueeze(1)
+                fused_dpv = torch.clamp(fused_dpv, img_utils.epsilon, 1.)
+                BV_cur_fused = torch.log(fused_dpv)
+
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur_fused), img_features=d_net_features)
+
+                return {"output": [BV_cur, BV_cur_fused], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        # Try use the same thing to reupdate recurrently
+        elif self.nmode == "default_df2":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:, -1, :, :, :])
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            if model_input["epoch"] < 20:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+            else:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
+
+                # Downsample
+                BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
+
+                # Decoder
+                BV_cur_refined_2 = self.base_decoder(torch.exp(BV_downsampled), img_features=d_net_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
+
         elif self.nmode == "exp1":
             # Encoder
             BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)

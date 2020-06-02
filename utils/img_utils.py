@@ -23,6 +23,9 @@ def depth_error(predicted, truth):
 def gaussian_torch(x, mu, sig, pow=2.):
     return torch.exp(-torch.pow(torch.abs(x - mu), pow) / (2 * torch.pow(sig, pow)))
 
+def gaussian(x, mu, sig, pow=2.):
+    return np.exp(-np.power(np.abs(x - mu), pow) / (2 * np.power(sig, pow)))
+
 d_candi_expanded_d = dict()
 def gen_soft_label_torch(d_candi, depthmap, variance, zero_invalid=False, pow=2.):
     global d_candi_expanded_d
@@ -181,6 +184,22 @@ def convert_flowfield(flowfield):
     flowfield[0, :, :, 1] = -1 + yv * ystep - flowfield[0, :, :, 1] * ystep
     return flowfield
 
+spread_kernel = None
+def spread_dpv(dpv, N=5):
+    global spread_kernel
+    dpv_permuted = dpv.permute(0, 3, 2, 1)
+    if spread_kernel is None:
+        kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
+        kernel[int(N / 2), :] = 1 / float(N)
+        # kernel[2,2] = 1.
+        kernel = kernel.unsqueeze(0).unsqueeze(0)
+        kernel = kernel.repeat((dpv_permuted.shape[1], dpv_permuted.shape[1], 1, 1))
+        kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
+        spread_kernel = kernel.copy()
+    dpv_permuted = F.conv2d(dpv_permuted, **spread_kernel)
+    dpv = dpv_permuted.permute(0, 3, 2, 1)
+    tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
+    return tofuse_dpv
 
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False):
     # Generate Shiftmap
