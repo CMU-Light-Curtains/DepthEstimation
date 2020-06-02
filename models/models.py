@@ -429,7 +429,11 @@ class Base3D(nn.Module):
         for dres in self.dres_modules:
             curr_cost = dres(curr_cost) + curr_cost
         res_volume = self.classify(curr_cost)
-        res_prob = F.log_softmax(res_volume, dim=2).squeeze(1)
+
+        if prob:
+            res_prob = F.log_softmax(res_volume, dim=2).squeeze(1)
+        else:
+            res_prob = res_volume.squeeze(1)
 
         return res_prob
 
@@ -456,7 +460,7 @@ class BaseModel(nn.Module):
         self.conv0_2 = nn.Conv2d(D, D, kernel_size=3, stride=1, padding=1, bias=True)
 
         # Other
-        if self.nmode == "exp3":
+        if self.nmode == "exp3" or self.nmode == "exp4":
             self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
 
         # Apply Weights
@@ -698,6 +702,23 @@ class BaseModel(nn.Module):
             # [B,128,256,384]
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp4":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:, -1, :, :, :])
+
+            # Volume
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), warped_features], dim=1)
+            BV_resi = self.based_3d(comb_volume, prob=False)
+            BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
+
+            # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
 
         else:
             raise Exception("Nmode wrong")

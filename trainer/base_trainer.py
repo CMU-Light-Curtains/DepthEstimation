@@ -56,6 +56,9 @@ class BaseTrainer:
                 for g in self.optimizer.param_groups:
                     g['lr'] /= 2
 
+            if self.i_epoch == self.cfg.train.epoch_num:
+                break
+
     def eval(self):
         errors, error_names = self._validate_with_gt()
 
