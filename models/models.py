@@ -651,7 +651,7 @@ class BaseModel(nn.Module):
             d_net_features.append(model_input["rgb"][:, -1, :, :, :])
             # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
 
-            if model_input["prev_output"] is None or model_input["epoch"] < 20:
+            if model_input["prev_output"] is None or model_input["epoch"] < 20  and self.cfg.eval is not True:
                 # Decoder
                 BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
 
@@ -661,6 +661,7 @@ class BaseModel(nn.Module):
                 # Spread the prev dpv
                 prev_dpv = torch.exp(model_input["prev_output"])
                 prev_dpv = img_utils.spread_dpv(prev_dpv, 5)
+                prev_dpv = torch.clamp(prev_dpv, img_utils.epsilon, 1.)
 
                 # Fuse Data
                 fused_dpv = torch.exp(BV_cur + torch.log(prev_dpv))
@@ -680,7 +681,7 @@ class BaseModel(nn.Module):
             d_net_features.append(model_input["rgb"][:, -1, :, :, :])
             # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
 
-            if model_input["epoch"] < 20:
+            if model_input["epoch"] < 20 and self.cfg.eval is not True:
                 # Decoder
                 BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
 
