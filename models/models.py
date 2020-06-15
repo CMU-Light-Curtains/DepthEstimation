@@ -708,7 +708,7 @@ class BaseModel(nn.Module):
             d_net_features.append(model_input["rgb"][:, -1, :, :, :])
             # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
 
-            if model_input["epoch"] < 20 and self.cfg.eval is not True:
+            if model_input["epoch"] < 0 and self.cfg.eval is not True:
                 # Decoder
                 BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
 
