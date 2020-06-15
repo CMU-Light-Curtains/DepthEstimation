@@ -462,6 +462,8 @@ class BaseModel(nn.Module):
         # Other
         if self.nmode == "exp3" or self.nmode == "exp4":
             self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
+        if self.nmode == "default_df3":
+            self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
 
         # Apply Weights
         self.apply(self.weight_init)
@@ -696,6 +698,31 @@ class BaseModel(nn.Module):
 
                 # Decoder
                 BV_cur_refined_2 = self.base_decoder(torch.exp(BV_downsampled), img_features=d_net_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
+
+        # Try use the same thing to reupdate recurrently
+        elif self.nmode == "default_df3":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:, -1, :, :, :])
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            if model_input["epoch"] < 20 and self.cfg.eval is not True:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+            else:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
+
+                # Downsample
+                BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
+
+                # Decoder
+                BV_cur_refined_2 = self.base_decoder2(torch.exp(BV_downsampled), img_features=d_net_features)
 
                 return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
 
