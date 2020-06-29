@@ -184,22 +184,54 @@ def convert_flowfield(flowfield):
     flowfield[0, :, :, 1] = -1 + yv * ystep - flowfield[0, :, :, 1] * ystep
     return flowfield
 
+# spread_kernel = None
+# def spread_dpv(dpv, N=5):
+#     global spread_kernel
+#     dpv_permuted = dpv.permute(0, 3, 2, 1)
+#     print(dpv_permuted.shape)
+#     if spread_kernel is None:
+#         kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
+#         kernel[int(N / 2), :] = 1 / float(N)
+#         print(kernel)
+#         # kernel[2,2] = 1.
+#         kernel = kernel.unsqueeze(0).unsqueeze(0)
+#         kernel = kernel.repeat((1, 384, 1, 1))
+#         print(kernel.shape)
+#         kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
+#         spread_kernel = kernel.copy()
+#     dpv_permuted = F.conv2d(dpv_permuted, **spread_kernel)
+#     dpv = dpv_permuted.permute(0, 3, 2, 1)
+#     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
+#     if tofuse_dpv.shape != dpv.shape:
+#         stop
+#     print(tofuse_dpv.shape)
+#     return tofuse_dpv
+
 spread_kernel = None
-def spread_dpv(dpv, N=5):
+def spread_dpv_hack(dpv, N=5):
+    # torch.Size([128, 384])
+    # torch.Size([1, 1, 5, 5])
     global spread_kernel
     dpv_permuted = dpv.permute(0, 3, 2, 1)
     if spread_kernel is None:
         kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
-        kernel[int(N / 2), :] = 1 / float(N)
+        kernel[int(N / 2), :] = 1.
+        print(kernel)
         # kernel[2,2] = 1.
         kernel = kernel.unsqueeze(0).unsqueeze(0)
-        kernel = kernel.repeat((dpv_permuted.shape[1], dpv_permuted.shape[1], 1, 1))
+        kernel = kernel.repeat((1, 1, 1, 1))
+        print(kernel.shape)
         kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
         spread_kernel = kernel.copy()
-    dpv_permuted = F.conv2d(dpv_permuted, **spread_kernel)
+
+    for b in range(0, dpv_permuted.shape[0]):
+        for c in range(0, dpv_permuted.shape[1]):
+            dpv_permuted[b,c,:,:] = F.conv2d(dpv_permuted[b,c].unsqueeze(0).unsqueeze(0), **spread_kernel).squeeze(0).squeeze(0)
+
     dpv = dpv_permuted.permute(0, 3, 2, 1)
     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
     return tofuse_dpv
+
 
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False):
     # Generate Shiftmap
@@ -230,7 +262,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     depthmap_predicted_zero = depthmap_predicted * zero_mask_predicted
 
     # DPV Zero out and collapse
-    zero_mask_predicted = zero_mask_predicted.repeat([64, 1, 1], 0, 1).unsqueeze(0)
+    zero_mask_predicted = zero_mask_predicted.repeat([len(d_candi), 1, 1], 0, 1).unsqueeze(0)
     if BV_log:
         dpv_plane = torch.sum(torch.exp(dpv_predicted) * zero_mask_predicted, axis = 2) # [1,64,384]
     else:

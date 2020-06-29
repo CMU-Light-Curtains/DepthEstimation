@@ -12,7 +12,7 @@ from planner import PlannerRT
 import pylc_lib as pylc
 
 import utils.img_utils as img_utils
-
+import cv2
 
 class FieldWarp:
     def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input):
@@ -60,7 +60,11 @@ class FieldWarp:
         # if position == len(array) - 1 or position == -1:
         #     return position
 
-        if position == len(array) - 1:
+        if abs(input - array[-1]) < 1e-7:
+            return len(array) - 1
+        elif abs(input - array[0]) < 1e-7:
+            return 0
+        elif position == len(array) - 1:
             return 100000000
         elif position == -1:
             return -100000000
@@ -177,8 +181,14 @@ class FieldWarp:
             print("stored " + name)
             return output
 
+    def save_flowfields(self):
+        np.save("lc_flowfields.npy", self.flowfields)
+        pass
 
-import cv2
+    def load_flowfield(self):
+        import os
+        if os.path.isfile("lc_flowfields.npy") and os.access("lc_flowfields.npy", os.R_OK):
+            self.flowfields = np.load("lc_flowfields.npy", allow_pickle=True).item()
 
 
 def normalize(field):
@@ -195,8 +205,10 @@ def create_mean_kernel(N):
     return params
 
 
-def invert(field):
-    efield = -((1 / np.sqrt(0.5) * (field - 0.5)) ** 2) + 0.5
+def invert(x, p=0.5):
+    #efield = -((1 / np.sqrt(0.5) * (x - 0.5)) ** 2) + 0.5
+    efield = ((x**p)*((1-x)**(1-p)))/((p**p)*((1-p)**(1-p)))
+    #efield = efield*0.5
     return efield
 
 
@@ -212,8 +224,8 @@ def mapping(x):
         y = c * x + (1 - c)
         return y
 
-    m = 5
-    f = 0.45
+    m = 20
+    f = 0.5
     mask = x > f
     y = ~mask * ma(x, m=m) + mask * mb(x, m=m, f=f)
     return y
@@ -292,7 +304,7 @@ class LightCurtain:
         self.PARAMS['cTr'] = np.linalg.inv(PARAMS["rTc"])
         self.initialized = True
 
-    def init_from_model_input(self, model_input):
+    def gen_params_from_model_input(self, model_input):
         PARAMS = {
             "intr_rgb": model_input["intrinsics_up"][0, :, :].cpu().numpy(),
             "dist_rgb": [0., 0., 0., 0., 0.],
@@ -318,18 +330,35 @@ class LightCurtain:
             "d_candi_up": model_input["d_candi_up"],
             "r_candi_up": model_input["d_candi_up"]
         }
-        self.init(PARAMS)
+        return PARAMS
 
-    def plan_high(self, field):
-        return self.plan(field, self.planner_large, self.fw_large)
+    def plan_default_high(self, field, cfg):
+        return self.plan_default(field, self.planner_large, self.fw_large, "high", cfg)
 
-    def plan_low(self, field):
-        return self.plan(field, self.planner_small, self.fw_small)
+    def plan_default_low(self, field, cfg):
+        return self.plan_default(field, self.planner_small, self.fw_small, "low", cfg)
 
-    def plan(self, field, planner, fw):
-        # cv2.imshow("field", field.cpu().numpy())
+    def plan_m1_high(self, field, cfg):
+        return self.plan_m1(field, self.planner_large, self.fw_large, "high", cfg)
 
+    def plan_m1_low(self, field, cfg):
+        return self.plan_m1(field, self.planner_small, self.fw_small, "low", cfg)
+
+    def plan_sweep_high(self, field, cfg):
+        return self.plan_sweep(field, self.planner_large, self.fw_large, "high", cfg)
+
+    def plan_empty_high(self, field, cfg):
+        return self.plan_empty(field, self.planner_large, self.fw_large, "high", cfg)
+
+    def plan_empty_low(self, field, cfg):
+        return self.plan_empty(field, self.planner_small, self.fw_small, "low", cfg)
+
+    def plan_empty(self, field, planner, fw, kw, cfg):
         start = time.time()
+        #fw = self.fw_large
+        #planner = self.planner_large
+
+        fw.load_flowfield()
 
         # Fix Weird Side bug
         field[:, 0] = field[:, 1]
@@ -345,14 +374,250 @@ class LightCurtain:
 
         # Transform RGB to LC
         if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
-            field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform")
+            field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
+
+        # Normalize 0 to 1
+        field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        #field_preprocessed = field_preprocessed*0
+        #field_preprocessed[50:55, :] = 1.
+
+        # Warp from Z to theta
+        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+                                                          "z2rwarp_" + kw)
+
+        fw.save_flowfields()
+
+        # Fix Weird Side bug
+        field_preprocessed_range[:, 0] = field_preprocessed_range[:, 1]
+        field_preprocessed_range[:, -1] = field_preprocessed_range[:, -2]
+
+        # Generate CV
+        field_visual = np.repeat(field_preprocessed_range.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
+
+        return [], field_visual
+
+    def plan_sweep(self, field, planner, fw, kw, cfg):
+        start = time.time()
+        #fw = self.fw_large
+        #planner = self.planner_large
+
+        fw.load_flowfield()
+
+        # Fix Weird Side bug
+        field[:, 0] = field[:, 1]
+        field[:, -1] = field[:, -2]
+
+        # Preprocess to the right size
+        field_preprocessed = fw.preprocess(field, self.d_candi, self.d_candi_up)
+
+        # Apply smoothing Kernel
+        mean_kernel = create_mean_kernel(5)
+        mean_kernel["weight"] = mean_kernel["weight"].to(field.device)
+        field_preprocessed = F.conv2d(field_preprocessed.unsqueeze(0).unsqueeze(0), **mean_kernel).squeeze(0).squeeze(0)
+
+        # Transform RGB to LC
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
+
+        # Normalize 0 to 1
+        field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        #field_preprocessed = field_preprocessed*0
+        #field_preprocessed[50:55, :] = 1.
+
+        # Warp from Z to theta
+        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+                                                          "z2rwarp_" + kw)
+
+        fw.save_flowfields()
+
+        # Fix Weird Side bug
+        field_preprocessed_range[:, 0] = field_preprocessed_range[:, 1]
+        field_preprocessed_range[:, -1] = field_preprocessed_range[:, -2]
+
+        # Generate CV
+        field_visual = np.repeat(field_preprocessed_range.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
+
+        pts_planned_all = []
+        # THIS Z VAL NEEDS TO BE BASED ON D_CANDI!!!
+        #stop
+        for z in np.arange(10, 35, cfg["step"]):
+            pts_planned = self.get_flat(z)
+            pts_planned_all.append(pts_planned)
+
+            # Draw
+            pixels = np.array([np.digitize(pts_planned[:, 1], self.d_candi_up) - 1, range(0, pts_planned.shape[0])]).T
+            indices = (pixels[:,0] < 256) & (pixels[:,0] >= 0) & (pixels[:,1] >= 0) & (pixels[:,1] < 384)
+
+            # print(field_visual.shape)
+            #
+            pixels = pixels[indices]
+            # print(pixels.shape)
+            # stop
+
+            field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 1]
+
+        return pts_planned_all, field_visual
+
+    def plan_m1(self, field, planner, fw, kw, cfg):
+        start = time.time()
+        #fw = self.fw_large
+        #planner = self.planner_large
+
+        fw.load_flowfield()
+
+        # Fix Weird Side bug
+        field[:, 0] = field[:, 1]
+        field[:, -1] = field[:, -2]
+
+        # Preprocess to the right size
+        field_preprocessed = fw.preprocess(field, self.d_candi, self.d_candi_up)
+
+        # Apply smoothing Kernel
+        mean_kernel = create_mean_kernel(5)
+        mean_kernel["weight"] = mean_kernel["weight"].to(field.device)
+        field_preprocessed = F.conv2d(field_preprocessed.unsqueeze(0).unsqueeze(0), **mean_kernel).squeeze(0).squeeze(0)
+
+        # Transform RGB to LC
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
+
+        # Normalize 0 to 1
+        field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        #field_preprocessed = field_preprocessed*0
+        #field_preprocessed[50:55, :] = 1.
+
+        # Warp from Z to theta
+        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+                                                          "z2rwarp_" + kw)
+
+        fw.save_flowfields()
+
+        # Fix Weird Side bug
+        field_preprocessed_range[:, 0] = field_preprocessed_range[:, 1]
+        field_preprocessed_range[:, -1] = field_preprocessed_range[:, -2]
+
+        # Generate CV
+        field_visual = np.repeat(field_preprocessed_range.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
+
+        #########3
+
+        # Plan
+        pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
+
+        pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
+        field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 0.5, 0]
+
+        # Try few times
+        pts_planned_all = [pts_main]
+        for i in range(0, cfg["step"]):
+            start = time.time()
+
+            # Copy
+            field_towork = field_preprocessed_range.cpu().numpy()
+
+            # Through each ray sample pt
+            field_preprocessed_range_temp = field_towork.copy()
+            field_preprocessed_range_temp[field_preprocessed_range_temp < 0.05] = 1e-5
+
+            # Sample Based Strategy
+            sampled_vals = []
+            sampled_pts = []
+            for c in range(0, field_preprocessed_range_temp.shape[1], 10):
+                ray_dist = field_preprocessed_range_temp[:,c]
+                ray_dist = ray_dist / np.sum(ray_dist)
+                sampled = np.random.choice(ray_dist.shape[0], 1, p=ray_dist)
+                sampled_vals.append(sampled[0])
+                sampled_pts.append([c, sampled[0], 5.])
+                #cv2.circle(field_visual, (c, sampled[0]), 3, (255, 0, 255), -1)
+
+            # Variance based? Compute var/mean for each ray then pick extent
+
+            # Generate Spline?
+            sampled_pts = np.array(sampled_pts).astype(np.float32)
+            splineParams = pylc.SplineParamsVec()
+            spline = pylc.fitBSpline(sampled_pts, splineParams, True).astype(np.long)
+            spline = spline[(spline[:,0] >= 0) & (spline[:,0] < field_visual.shape[1])
+                            & (spline[:,1] >= 0) & (spline[:,1] < field_visual.shape[0])]
+
+            # Draw Spline
+            for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
+                #cv2.circle(field_visual, (spixel[0], spixel[1]), 1, (255, 0, 255), -1)
+
+            # Create Empty Field
+            empty_field = field_preprocessed_range_temp*0
+            empty_field[spline[:, 1], spline[:, 0]] = 1.
+
+            # N = 5
+            # xdir_gauss = cv2.getGaussianKernel(N, 1.0).astype(np.float32)
+            # kernel = {'weight': torch.tensor(np.multiply(xdir_gauss.T, xdir_gauss)).unsqueeze(0).unsqueeze(0), 'padding': N // 2}
+            # for i in range(0, 4):
+            #     kernel = F.conv2d(kernel["weight"], **kernel)
+            #     kernel = {'weight': kernel, 'padding': N // 2}
+            # empty_field = F.conv2d(torch.tensor(empty_field).unsqueeze(0).unsqueeze(0), **kernel).squeeze(0).squeeze(0)
+            # empty_field = empty_field.numpy()
+            for i in range(0, 3):
+                empty_field = cv2.GaussianBlur(empty_field, (5, 5), 1)
+
+            # Fuse
+            empty_field = empty_field / np.sum(empty_field, axis=0)
+            multiply = field_towork * empty_field
+            field_towork = multiply / np.sum(multiply, axis=0)
+
+            #end = time.time()
+            #print(end-start)
+
+            # Plan
+            pts_planned = planner.get_design_points(field_towork)
+            pts_planned_all.append(pts_planned)
+
+            # Draw
+            pixels = np.array([np.digitize(pts_planned[:, 1], self.d_candi_up) - 1, range(0, pts_planned.shape[0])]).T
+            field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 1]
+
+            # Draw Pixels
+            #for spixel in pixels: cv2.circle(field_visual, (spixel[1], spixel[0]), 1, (0, 255, 255), -1)
+
+        # cv2.imshow("field_visual", field_visual)
+        # cv2.waitKey(0)
+
+        return pts_planned_all, field_visual
+
+    def plan_default(self, field, planner, fw, kw, cfg):
+        # cv2.imshow("field", field.cpu().numpy())
+
+        start = time.time()
+
+        fw.load_flowfield()
+
+        # Fix Weird Side bug
+        field[:, 0] = field[:, 1]
+        field[:, -1] = field[:, -2]
+
+        # Preprocess to the right size
+        field_preprocessed = fw.preprocess(field, self.d_candi, self.d_candi_up)
+
+        # Apply smoothing Kernel
+        mean_kernel = create_mean_kernel(5)
+        mean_kernel["weight"] = mean_kernel["weight"].to(field.device)
+        field_preprocessed = F.conv2d(field_preprocessed.unsqueeze(0).unsqueeze(0), **mean_kernel).squeeze(0).squeeze(0)
+
+        # Transform RGB to LC
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
 
         # Normalize 0 to 1
         field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
 
         # Warp from Z to theta
         field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
-                                                          "z2rwarp")
+                                                          "z2rwarp_" + kw)
+
+        # Main Field
+        pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
+        field_visual = np.repeat(field_preprocessed.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
+        pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
+        field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 0]
+        all_pts = [pts_main]
 
         # Generate Peak Fields
         left_field = field_preprocessed_range.clone()
@@ -364,27 +629,33 @@ class LightCurtain:
             left_field[0:maxind, i] = 1.
             right_field[maxind:len(self.r_candi_up), i] = 1.
 
-        # Invert the Fields
-        left_field = invert(left_field)
-        right_field = invert(right_field)
+        for pval in cfg["step"]:
+            # Invert the Fields
+            left_field_inv = invert(left_field, p=pval)
+            right_field_inv = invert(right_field, p=pval)
 
-        # Plan
-        pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
-        pts_up = planner.get_design_points(left_field.cpu().numpy())
-        pts_down = planner.get_design_points(right_field.cpu().numpy())
+            #combined_test = (left_field_inv + right_field_inv).cpu().numpy()
+            #cv2.imshow("win", combined_test); cv2.waitKey(0)
 
-        print("Plan: " + str(time.time() - start))
+            # Plan
+            pts_up = planner.get_design_points(left_field_inv.cpu().numpy())
+            pts_down = planner.get_design_points(right_field_inv.cpu().numpy())
 
-        # Visual
-        field_visual = np.repeat(field_preprocessed.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
-        pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
-        field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 0]
-        pixels = np.array([np.digitize(pts_up[:, 1], self.d_candi_up) - 1, range(0, pts_up.shape[0])]).T
-        field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 1, 0]
-        pixels = np.array([np.digitize(pts_down[:, 1], self.d_candi_up) - 1, range(0, pts_down.shape[0])]).T
-        field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 1, 0]
+            print("Plan: " + str(time.time() - start))
 
-        return [pts_main, pts_up, pts_down], field_visual
+            # Visual
+            pixels = np.array([np.digitize(pts_up[:, 1], self.d_candi_up) - 1, range(0, pts_up.shape[0])]).T
+            field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 1, 0]
+            pixels = np.array([np.digitize(pts_down[:, 1], self.d_candi_up) - 1, range(0, pts_down.shape[0])]).T
+            field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 1, 0]
+
+            # Append
+            all_pts.append(pts_up)
+            all_pts.append(pts_down)
+
+        fw.save_flowfields()
+
+        return all_pts, field_visual
 
     # def sense_low(self, np_depth_image, np_design_pts):
     #     output = self.lightcurtain_small.get_return(np_depth_image, np_design_pts)
@@ -393,6 +664,85 @@ class LightCurtain:
 
     #
     #     return output
+
+    def sense_low(self, depth_rgb, design_pts_lc, visualizer=None):
+        start = time.time()
+
+        # Warp depthmap to LC frame
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            pts_rgb = img_utils.depth_to_pts(torch.Tensor(depth_rgb).unsqueeze(0), self.PARAMS['intr_rgb'])
+            pts_rgb = pts_rgb.reshape((pts_rgb.shape[0], pts_rgb.shape[1] * pts_rgb.shape[2]))
+            pts_rgb = torch.cat([pts_rgb, torch.ones(1, pts_rgb.shape[1])])
+            pts_rgb = pts_rgb.numpy().T
+            thick_rgb = np.ones((pts_rgb.shape[0], 1)).astype(np.float32)
+            depth_lc, _, _ = pylc.transformPoints(pts_rgb, thick_rgb, self.PARAMS['intr_lc_small'], self.PARAMS['cTr'],
+                                                  self.PARAMS['size_lc_small'][0], self.PARAMS['size_lc_small'][1],
+                                                  {"filtering": 0})
+        else:
+            depth_lc = depth_rgb
+
+        # Sense
+        output_lc, thickness_lc = self.lightcurtain_small.get_return(depth_lc, design_pts_lc, True)
+        output_lc[np.isnan(output_lc[:, :, 0])] = 0
+        thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+
+        # Warp output to RGB frame
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            pts = output_lc.reshape((output_lc.shape[0] * output_lc.shape[1], 4))
+            thickness = thickness_lc.flatten()
+            depth_sensed, int_sensed, thickness_sensed = pylc.transformPoints(pts, thickness, self.PARAMS['intr_rgb_small'],
+                                                                              self.PARAMS['rTc'],
+                                                                              self.PARAMS['size_rgb_small'][0],
+                                                                              self.PARAMS['size_rgb_small'][1],
+                                                                              {"filtering": 0})
+        else:
+            int_sensed = output_lc[:, :, 3]
+            depth_sensed = output_lc[:, :, 2]
+            thickness_sensed = thickness_lc
+
+        # Transfer to CUDA (How to know device?)
+        mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
+        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
+        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+
+        # Compute DPV
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / 6.) ** 2
+        A = mapping(int_img)
+        # Try fucking with 1 in the 1-A value
+        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+
+        # Generate XYZ version for viz
+        output_rgb = None
+        if visualizer:
+            pts_sensed = img_utils.depth_to_pts(depth_sensed.unsqueeze(0), self.PARAMS['intr_rgb_small']).cpu()
+            output_rgb = np.zeros(output_lc.shape).astype(np.float32)
+            output_rgb[:, :, 0] = pts_sensed[0, :, :]
+            output_rgb[:, :, 1] = pts_sensed[1, :, :]
+            output_rgb[:, :, 2] = pts_sensed[2, :, :]
+            output_rgb[:, :, 3] = int_sensed.cpu()
+            output_rgb[np.isnan(output_rgb[:, :, 0])] = 0
+
+        return DPV, output_rgb
+
+        # Generate XYZ version for viz
+        # pts_sensed = util.depth_to_pts(torch.Tensor(depth_sensed).unsqueeze(0), self.PARAMS['intr_rgb'])
+        # output_rgb = np.zeros(output_lc.shape).astype(np.float32)
+        # output_rgb[:, :, 0] = pts_sensed[0, :, :]
+        # output_rgb[:, :, 1] = pts_sensed[1, :, :]
+        # output_rgb[:, :, 2] = pts_sensed[2, :, :]
+        # output_rgb[:, :, 3] = int_sensed
+
+        # cv2.imshow("depth_rgb", depth_rgb / 100.)
+        # cv2.imshow("depth_lc", depth_lc / 100.)
+        # cv2.imshow("depth_sensed_orig", output_lc[:,:,2] / 100.)
+        # cv2.imshow("int_sensed_orig", output_lc[:, :, 3] / 255.)
+        # cv2.imshow("depth_sensed", depth_sensed/100.)
+        # cv2.imshow("int_sensed", int_sensed/255.)
+        # cv2.waitKey(0)
+
 
     def sense_high(self, depth_rgb, design_pts_lc, visualizer=None):
         start = time.time()
@@ -438,10 +788,19 @@ class LightCurtain:
         # Compute DPV
         z_img = depth_sensed
         int_img = int_sensed / 255.
-        unc_img = (thickness_sensed / 6.) ** 2
+        unc_img = (thickness_sensed / 10.) ** 2
         A = mapping(int_img)
         # Try fucking with 1 in the 1-A value
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+
+        # Save information at pixel wanted
+        pixel_wanted = [150, 66]
+        debug_data = dict()
+        debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
+        debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
+        debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
+        debug_data["thickness_sensed"] = thickness_sensed[pixel_wanted[0], pixel_wanted[1]]
+        debug_data["dist"] = DPV[:, pixel_wanted[0], pixel_wanted[1]].cpu().numpy()
 
         # Generate XYZ version for viz
         output_rgb = None
@@ -454,7 +813,7 @@ class LightCurtain:
             output_rgb[:, :, 3] = int_sensed.cpu()
             output_rgb[np.isnan(output_rgb[:, :, 0])] = 0
 
-        return DPV, output_rgb
+        return DPV, output_rgb, debug_data
 
         # Generate XYZ version for viz
         # pts_sensed = util.depth_to_pts(torch.Tensor(depth_sensed).unsqueeze(0), self.PARAMS['intr_rgb'])

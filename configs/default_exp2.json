@@ -21,7 +21,8 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "exp2"
+    "nmode": "exp2",
+    "bn_avg": false
   },
   "lidar": {
     "enabled": false

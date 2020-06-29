@@ -270,6 +270,8 @@ class DefaultTrainer(BaseTrainer):
         if self.cfg.mp.enabled:
             dist.barrier()
         error_list = torch.mean(self.shared, dim=0)
+        if self.cfg.eval:
+            print(error_list)
 
         # Save Model (Only First ID)
         self.save_model(rmse_refined, self.cfg.data.exp_name)
@@ -332,13 +334,20 @@ class DefaultTrainer(BaseTrainer):
             depth_refined_truth_eval = depth_refined_truth.clone()
             depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
             depthmap_truth_refined_np = depth_refined_truth_eval.squeeze(0).cpu().numpy()
+            depthmap_truth_np = depth_truth_eval.squeeze(0).cpu().numpy()
 
             # # Save to Disk
             # todisk = copy.copy(lc_params)
             # todisk["dpv_refined_predicted"] = dpv_refined_predicted
+            # todisk["img_refined"] = img_refined
+            # todisk["depth_refined_truth_eval"] = depth_refined_truth_eval
+            # todisk["depth_refined_predicted"] = depth_refined_predicted
+            # todisk["depthmap_truth_np"] = depthmap_truth_np
+            # todisk["depthmap_truth_refined_np"] = depthmap_truth_refined_np
             # todisk["d_candi"] = d_candi
             # todisk["intr_refined"] = intr_refined
             # np.save("test.npy", todisk)
+            # stop
 
             # UField
             uncfield_refined_predicted, _ = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
@@ -353,19 +362,30 @@ class DefaultTrainer(BaseTrainer):
             uncfield_predicted, _ = img_utils.gen_ufield(dpv_predicted_int, d_candi, intr.squeeze(0))
             lc_paths, field_visual = self.lc.plan_low(uncfield_predicted.squeeze(0))
 
-            # # Sense
+            # Sense using our new strategy?
+            lc_paths_refined, field_visual_refined = self.lc.plan_high_test1(uncfield_refined_predicted.squeeze(0))
+
+            # Sense High
+            lc_outputs_refined = []
+            lc_DPVs_refined = []
+            for lc_path in lc_paths_refined:
+                lc_DPV, output = self.lc.sense_high(depthmap_truth_refined_np, lc_path, True)
+                lc_outputs_refined.append(output)
+                lc_DPVs_refined.append(lc_DPV)
+
+            # # Sense Low
             # lc_outputs = []
             # lc_DPVs = []
             # for lc_path in lc_paths:
-            #     lc_DPV, output = self.lc.sense_high(depthmap_truth_refined_np, lc_path, True)
-            #     print(output.shape)
+            #     print(lc_path.shape)
+            #     lc_DPV, output = self.lc.sense_low(depthmap_truth_np, lc_path, True)
             #     lc_outputs.append(output)
             #     lc_DPVs.append(lc_DPV)
 
             if self.viz is not None:
                 import cv2
                 #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[0]), 3)
-                #self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs[0]), 3)
+                self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs_refined[0]), 3)
                 #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[2]), 3)
                 cv2.imshow("field_visual", field_visual)
                 cv2.imshow("field_visual_refined", field_visual_refined)
