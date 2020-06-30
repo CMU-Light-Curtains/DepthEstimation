@@ -462,6 +462,8 @@ class BaseModel(nn.Module):
         # Other
         if self.nmode == "exp3" or self.nmode == "exp4":
             self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
+        if self.nmode == "exp6":
+            self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
             self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
 
@@ -796,6 +798,50 @@ class BaseModel(nn.Module):
             BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
 
             # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp5":
+            # Encoder
+            BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
+            d_net_features.append(model_input["rgb"][:,-1,:,:,:])
+            # 64 in feature Dim depends on the command line arguments
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            # Create GT DPV from Depthmap / LIDAR
+            tofuse_dpv = img_utils.gen_dpv_withmask(model_input["dmaps"], model_input["masks"], model_input["d_candi"], 0.3)
+
+            # Fuse Data
+            fused_dpv = torch.exp(BV_cur + torch.log(tofuse_dpv))
+            fused_dpv = fused_dpv / torch.sum(fused_dpv, dim=1).unsqueeze(1)
+            fused_dpv = torch.clamp(fused_dpv, img_utils.epsilon, 1.)
+            BV_cur_fused = torch.log(fused_dpv)
+
+            # Make sure size is still correct here!
+            BV_cur_refined = self.base_decoder(BV_cur_fused, img_features=d_net_features)
+            # [B,128,256,384]
+
+            return {"output": [BV_cur_fused, BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp6":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:,-1,:,:,:])
+            # 64 in feature Dim depends on the command line arguments
+            # [B, 128, 64, 96] - has log on it [[B,64,64,96] [B,32,128,192] [B,3,256,384]]
+
+            # Create GT DPV from Depthmap / LIDAR
+            tofuse_dpv = img_utils.gen_dpv_withmask(model_input["dmaps"], model_input["masks"], model_input["d_candi"], 0.3)
+            tofuse_dpv_log = torch.log(tofuse_dpv)
+
+            # Volume
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), tofuse_dpv_log.unsqueeze(1), warped_features], dim=1)
+            BV_resi = self.based_3d(comb_volume, prob=False)
+            BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
+
+            # Make sure size is still correct here!
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
             # [B,128,256,384]
 
