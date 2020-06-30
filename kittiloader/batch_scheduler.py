@@ -90,7 +90,7 @@ def generate_stereo_input(id, local_info_valid, cfg, camside = "left"):
             p1 = torch.inverse(local_info_valid["T_left2right"])
             p2 = torch.eye(4)
             pose = torch.cat([p1.unsqueeze(0), p2.unsqueeze(0)], dim=0)
-        src_cam_poses_arr.append(pose)  # currently [1x3x4x4]
+        src_cam_poses_arr.append(pose.unsqueeze(0))  # currently [1x3x4x4]
     src_cam_poses = torch.cat(src_cam_poses_arr).to(device)
 
     # Create Soft Label
@@ -486,7 +486,7 @@ if __name__ == "__main__":
         "batch_size": 2,
         "n_epoch": 1,
         "qmax": 1,
-        "mode": "val",
+        "mode": "train",
         "cfg": cfg
     }
 
@@ -527,11 +527,31 @@ if __name__ == "__main__":
             model_input, gt_input = generate_stereo_input(0, local_info, cfg)
 
 
-            #left_model_input, left_gt_input = generate_model_input(0, local_info, cfg, camside="left")
-            #right_model_input, right_gt_input = generate_model_input(0, local_info, cfg, camside="right")
+
             end = time.time()
             print(end-start)
 
+            """
+            I need to save
+            1. Left, Right, t-1 and t
+            
+            """
+
+            b=1
+            left_model_input, left_gt_input = generate_model_input(0, local_info, cfg, camside="left")
+            right_model_input, right_gt_input = generate_model_input(0, local_info, cfg, camside="right")
+            data = dict()
+            data["left_img_prev"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][0]["left_camera"]["img"].squeeze(0))
+            data["left_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["left_camera"]["img"].squeeze(0))
+            data["right_img_prev"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][0]["right_camera"]["img"].squeeze(0))
+            data["right_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["right_camera"]["img"].squeeze(0))
+            data["left2right"] = local_info["src_dats"][b][0]["T_left2right"]
+            data["left_pose"] = local_info["left_src_cam_poses"][b][0,0,:,:]
+            intrins = local_info["left_cam_intrins"][b]["intrinsic_M_cuda"]*4
+            intrins[2,2] = 1.
+            data["intrins"] = intrins
+            np.save("datapoint.npy", data)
+            stop
 
             # Print
             print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \

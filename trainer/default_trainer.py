@@ -128,8 +128,12 @@ class DefaultTrainer(BaseTrainer):
             # Create inputs
             local_info["d_candi"] = self.d_candi
             local_info["d_candi_up"] = self.d_candi_up
-            model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
-            model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
+            if "stereo" in self.cfg["var"]:
+                model_input_left, gt_input_left = batch_scheduler.generate_stereo_input(self.id, local_info, self.cfg, "left")
+                model_input_right, gt_input_right = batch_scheduler.generate_stereo_input(self.id, local_info, self.cfg, "right")
+            else:
+                model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
+                model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
             model_input_left["prev_output"] = self.prev_output["left"]
             model_input_right["prev_output"] = self.prev_output["right"]
             model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
@@ -201,7 +205,10 @@ class DefaultTrainer(BaseTrainer):
             # Create inputs
             local_info["d_candi"] = self.d_candi
             local_info["d_candi_up"] = self.d_candi_up
-            model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
+            if "stereo" in self.cfg["var"]:
+                model_input_left, gt_input_left = batch_scheduler.generate_stereo_input(self.id, local_info, self.cfg, "left")
+            else:
+                model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
             model_input_left["prev_output"] = self.prev_output["left"]
             model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
