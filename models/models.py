@@ -664,7 +664,7 @@ class BaseModel(nn.Module):
             else:
                 # Spread the prev dpv
                 prev_dpv = torch.exp(model_input["prev_output"])
-                prev_dpv = img_utils.spread_dpv(prev_dpv, 5)
+                prev_dpv = img_utils.spread_dpv_hack(prev_dpv, 5)
                 prev_dpv = torch.clamp(prev_dpv, img_utils.epsilon, 1.)
 
                 # Fuse Data

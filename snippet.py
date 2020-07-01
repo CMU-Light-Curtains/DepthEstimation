@@ -122,6 +122,21 @@ def overlay_truth(input_field, truth_field):
     truth_field = truth_field.squeeze(0).cpu().numpy()
     input_field[:,:,2] += truth_field*255
 
+
+# b = 2
+# c = 64
+# h, w = 15, 15
+#
+# x = torch.randn(b, c, h, w)
+# kernel = (1/9)*torch.tensor([[1, 1, 1],
+#                              [1, 1, 1],
+#                              [1, 1, 1]])
+# kernel = kernel.repeat((64, 64, 1, 1))
+# print(kernel.shape)  # torch.Size([64, 64, 3, 3])
+# res = F.conv2d(input=x, weight=kernel, padding=1)
+# print(res.shape)  # torch.Size([2, 64, 15, 15])
+# stop
+
 # # Testing spread
 # H, W = [41*4,48*4]
 # dpv = torch.exp(dpv_refined_predicted)
@@ -130,20 +145,20 @@ def overlay_truth(input_field, truth_field):
 #
 # plt.ion()
 # for i in range(0, 10):
-#     dpv = img_utils.spread_dpv_hack(dpv, 15)
+#     dpv = img_utils.spread_dpv(dpv, 3)
 #     ray_dist_new = dpv[0,:, H,W]
 #     plt.plot(ray_dist_new.cpu().numpy())
 #     plt.pause(0.5)
-#
-# # N = 21
-# # kernel = []
-# # for i in range(0, N):
-# #     kernel.append(1.*(1/float(N)))
-# # print(kernel)
-# # ray_test = np.convolve(ray_dist_old.cpu().numpy(), np.array(kernel), "same")
-# # print(ray_test.shape)
-# # ray_test = ray_test / np.sum(ray_test)
-# # plt.plot(ray_test)
+
+# N = 21
+# kernel = []
+# for i in range(0, N):
+#     kernel.append(1.*(1/float(N)))
+# print(kernel)
+# ray_test = np.convolve(ray_dist_old.cpu().numpy(), np.array(kernel), "same")
+# print(ray_test.shape)
+# ray_test = ray_test / np.sum(ray_test)
+# plt.plot(ray_test)
 # plt.show()
 
 # # Hack to spread?
@@ -158,10 +173,10 @@ for i in range(0,15):
     uncfield_refined_predicted, _ = img_utils.gen_ufield(final, d_candi, intr_refined.squeeze(0))
     #cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy()*10)
     #cv2.waitKey(0)
-    #lc_paths_refined, field_visual_refined = lc.plan_sweep_high(uncfield_refined_predicted.squeeze(0), {"step": 1.0})
-    lc_paths_refined, field_visual_refined = lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
+    #lc_paths_refined, field_visual_refined = lc.plan_sweep_high(uncfield_refined_predicted.squeeze(0), {"step": 0.5})
+    #lc_paths_refined, field_visual_refined = lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
     #lc_paths_refined, field_visual_refined = lc.plan_m1_high(uncfield_refined_predicted.squeeze(0), {"step": 5})
-    #lc_paths_refined, field_visual_refined = lc.plan_empty_high(uncfield_refined_predicted.squeeze(0), {})
+    lc_paths_refined, field_visual_refined = lc.plan_empty_high(uncfield_refined_predicted.squeeze(0), {})
     # cv2.imshow("field_visual_refined", field_visual_refined)
     # cv2.waitKey(0)
 

@@ -184,28 +184,20 @@ def convert_flowfield(flowfield):
     flowfield[0, :, :, 1] = -1 + yv * ystep - flowfield[0, :, :, 1] * ystep
     return flowfield
 
-# spread_kernel = None
-# def spread_dpv(dpv, N=5):
-#     global spread_kernel
-#     dpv_permuted = dpv.permute(0, 3, 2, 1)
-#     print(dpv_permuted.shape)
-#     if spread_kernel is None:
-#         kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
-#         kernel[int(N / 2), :] = 1 / float(N)
-#         print(kernel)
-#         # kernel[2,2] = 1.
-#         kernel = kernel.unsqueeze(0).unsqueeze(0)
-#         kernel = kernel.repeat((1, 384, 1, 1))
-#         print(kernel.shape)
-#         kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
-#         spread_kernel = kernel.copy()
-#     dpv_permuted = F.conv2d(dpv_permuted, **spread_kernel)
-#     dpv = dpv_permuted.permute(0, 3, 2, 1)
-#     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
-#     if tofuse_dpv.shape != dpv.shape:
-#         stop
-#     print(tofuse_dpv.shape)
-#     return tofuse_dpv
+spread_kernel = None
+def spread_dpv(dpv, N=5):
+    global spread_kernel
+    dpv_permuted = dpv.permute(0, 3, 2, 1)
+
+    kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
+    kernel[int(N / 2), :] = 1 / float(N)
+    kernel = kernel.repeat((dpv_permuted.shape[1], dpv_permuted.shape[1], 1, 1)).to(dpv_permuted.device)
+
+    dpv_permuted = F.conv2d(input=dpv_permuted, weight=kernel, padding=N // 2)
+
+    dpv = dpv_permuted.permute(0, 3, 2, 1)
+    tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
+    return tofuse_dpv
 
 spread_kernel = None
 def spread_dpv_hack(dpv, N=5):
