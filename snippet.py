@@ -175,10 +175,10 @@ for i in range(0,15):
     #cv2.waitKey(0)
     #lc_paths_refined, field_visual_refined = lc.plan_sweep_high(uncfield_refined_predicted.squeeze(0), {"step": 0.5})
     #lc_paths_refined, field_visual_refined = lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-    #lc_paths_refined, field_visual_refined = lc.plan_m1_high(uncfield_refined_predicted.squeeze(0), {"step": 5})
-    lc_paths_refined, field_visual_refined = lc.plan_empty_high(uncfield_refined_predicted.squeeze(0), {})
-    # cv2.imshow("field_visual_refined", field_visual_refined)
-    # cv2.waitKey(0)
+    lc_paths_refined, field_visual_refined = lc.plan_m1_high(uncfield_refined_predicted.squeeze(0), {"step": 5})
+    #lc_paths_refined, field_visual_refined = lc.plan_empty_high(uncfield_refined_predicted.squeeze(0), {})
+    cv2.imshow("field_visual_refined", field_visual_refined)
+    cv2.waitKey(0)
 
     # Sensing High
     lc_outputs = []
@@ -236,6 +236,14 @@ for i in range(0,15):
 
     # Keep Renormalize
     curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
+
+    # UField High
+    final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
+    _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
+    overlay_truth(field_visual_final, truth_uncfield)
+    cv2.imshow("field_visual_final", field_visual_final)
+    cv2.waitKey(0)
+
     i=0
     for lcdpv in lc_DPVs:
         #break
@@ -245,6 +253,13 @@ for i in range(0,15):
         curr_dist = torch.exp(torch.log(lcdpv) + torch.log(curr_dist))
         curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
         curr_viz = curr_dist[0, :,150,66].cpu().numpy()
+
+        # UField High
+        final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
+        _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
+        overlay_truth(field_visual_final, truth_uncfield)
+        cv2.imshow("field_visual_final", field_visual_final)
+        cv2.waitKey(0)
 
         # plt.plot(d_candi, prior_viz)
         # plt.plot(d_candi, measure_viz)
@@ -269,8 +284,6 @@ for i in range(0,15):
     # plt.pause(100)
     # plt.clf()
 
-    # Even with a higher res, overwrite issue exists!
-
     # # Add over
     # logsum = torch.log(torch.clamp(torch.exp(dpv_refined_predicted), img_utils.epsilon, 1.))
     # for lcdpv in lc_DPVs:
@@ -279,15 +292,9 @@ for i in range(0,15):
     # curr_dist = torch.exp(logsum)
     # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
-
-    # #print(final[0, :, 150, 66])
-    # final = torch.exp(logsum)
-    # final = final / torch.sum(final, dim=1).unsqueeze(1)
-    # final = torch.log(final)
-
-    # # Respread?
-    # for i in range(0, 3):
-    #     curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+    # Respread?
+    for i in range(0, 3):
+        curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
 
     # H, W = [41*4,48*4]
     # ray_dist_old = curr_dist[0,:, H,W]

@@ -260,7 +260,7 @@ class LightCurtain:
             'matrix': PARAMS["intr_lc"],
             'distortion': PARAMS["dist_lc"],
             'hit_mode': 1,
-            'hit_noise': 0.0
+            'hit_noise': 0.01
         }
         CAMERA_PARAMS_SMALL = {
             'width': int(PARAMS["size_lc"][0] / 4),
@@ -268,7 +268,7 @@ class LightCurtain:
             'matrix': img_utils.intr_scale_unit(PARAMS["intr_lc"], 1 / 4.),
             'distortion': PARAMS["dist_lc"],
             'hit_mode': 1,
-            'hit_noise': 0.0,
+            'hit_noise': 0.01,
         }
         LASER_PARAMS_LARGE = {
             'lTc': PARAMS["lTc"],

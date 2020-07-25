@@ -358,25 +358,25 @@ class DefaultTrainer(BaseTrainer):
 
             # UField
             uncfield_refined_predicted, _ = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
-            lc_paths_refined, field_visual_refined = self.lc.plan_high(uncfield_refined_predicted.squeeze(0))
+            lc_paths_refined, field_visual_refined = self.lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
 
             # Plan (This is one strategy)
             # Alternative strategy based on sampling? and points?
             #lc_paths_refined, field_visual_refined = self.lc.plan(uncfield_refined_predicted.squeeze(0))
 
-            # Low Res?
-            dpv_predicted_int = F.interpolate(dpv_refined_predicted, scale_factor=0.25, mode='nearest')
-            uncfield_predicted, _ = img_utils.gen_ufield(dpv_predicted_int, d_candi, intr.squeeze(0))
-            lc_paths, field_visual = self.lc.plan_low(uncfield_predicted.squeeze(0))
+            # # Low Res?
+            # dpv_predicted_int = F.interpolate(dpv_refined_predicted, scale_factor=0.25, mode='nearest')
+            # uncfield_predicted, _ = img_utils.gen_ufield(dpv_predicted_int, d_candi, intr.squeeze(0))
+            # lc_paths, field_visual = self.lc.plan_low(uncfield_predicted.squeeze(0))
 
-            # Sense using our new strategy?
-            lc_paths_refined, field_visual_refined = self.lc.plan_high_test1(uncfield_refined_predicted.squeeze(0))
+            # # Sense using our new strategy?
+            # lc_paths_refined, field_visual_refined = self.lc.plan_high_test1(uncfield_refined_predicted.squeeze(0))
 
             # Sense High
             lc_outputs_refined = []
             lc_DPVs_refined = []
             for lc_path in lc_paths_refined:
-                lc_DPV, output = self.lc.sense_high(depthmap_truth_refined_np, lc_path, True)
+                lc_DPV, output, _ = self.lc.sense_high(depthmap_truth_refined_np, lc_path, True)
                 lc_outputs_refined.append(output)
                 lc_DPVs_refined.append(lc_DPV)
 
@@ -391,13 +391,15 @@ class DefaultTrainer(BaseTrainer):
 
             if self.viz is not None:
                 import cv2
+                for lc_output in lc_outputs_refined:
+                    self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_output), 3)
                 #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[0]), 3)
-                self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs_refined[0]), 3)
+                #self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_outputs_refined[0]), 3)
                 #visualizer.addCloud(util.lcoutput_to_cloud(lc_outputs[2]), 3)
-                cv2.imshow("field_visual", field_visual)
-                cv2.imshow("field_visual_refined", field_visual_refined)
-                cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
-                cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy())
+                # cv2.imshow("field_visual", field_visual)
+                # cv2.imshow("field_visual_refined", field_visual_refined)
+                # cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
+                # cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy())
 
 
     def visualize(self, model_input, gt_input, output):
