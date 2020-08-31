@@ -354,6 +354,7 @@ class KITTI_dataset(data.Dataset):
         self.training = training
         self.intrin_path = intrin_path # reserved
         self.cfg = cfg
+        self.counter = 0
 
         self.to_gray = tfv_transform.Compose( [tfv_transform.Grayscale(), tfv_transform.ToTensor()])
         self.d_candi = d_candi
@@ -416,6 +417,7 @@ class KITTI_dataset(data.Dataset):
         return cam_intrinsics
 
     def generate_item(self, indx, mode="left"):
+        self.counter += 1
         pass
 
         if mode == "left":
@@ -687,11 +689,16 @@ class KITTI_dataset(data.Dataset):
         img, dmap, extM, scene_path , as entries in a dic.
         '''
 
-        left_item = self.generate_item(indx, "left")
-        right_item = self.generate_item(indx, "right")
-        T_left2right = np.dot(self.p_data.calib.T_cam3_imu, np.linalg.inv(self.p_data.calib.T_cam2_imu))
+        try:
+            left_item = self.generate_item(indx, "left")
+            right_item = self.generate_item(indx, "right")
+            T_left2right = np.dot(self.p_data.calib.T_cam3_imu, np.linalg.inv(self.p_data.calib.T_cam2_imu))
 
-        return {"left_camera": left_item, "right_camera": right_item, "T_left2right": T_left2right}
+            return {"left_camera": left_item, "right_camera": right_item, "T_left2right": T_left2right, "success": True}
+        except:
+            import traceback
+            traceback.print_exc()
+            return {"success": False}
 
         #return left_item
 

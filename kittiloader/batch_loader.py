@@ -92,6 +92,10 @@ def _check_datArray_pose(dat_array):
     '''
     if_valid = True
     for dat in dat_array:
+        if not dat["success"]:
+            if_valid = False
+            break
+
         if isinstance(dat["left_camera"]['dmap'], int):
             if_valid = False
             break
@@ -101,6 +105,10 @@ def _check_datArray_pose(dat_array):
             break
 
     for dat in dat_array:
+        if not dat["success"]:
+            if_valid = False
+            break
+
         if isinstance(dat["right_camera"]['dmap'], int):
             if_valid = False
             break

@@ -118,7 +118,10 @@ class DefaultTrainer(BaseTrainer):
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
             if local_info['is_valid'].sum() == 0:
-                raise Exception("Not supposed to happen")
+                loader_str = 'Corrupted Data! batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d' \
+                % (batch_idx + 1, batch_length, self.i_iter, frame_count + 1, frame_length, self.i_epoch + 1, self.cfg.train.epoch_num)
+                self._log.info(self.id, loader_str)
+                continue
 
             # Reset Stage
             if frame_count == 0:
@@ -195,7 +198,10 @@ class DefaultTrainer(BaseTrainer):
             # Get data
             local_info, batch_length, batch_idx, frame_count, frame_length, iepoch = items
             if local_info['is_valid'].sum() == 0:
-                raise Exception("Not supposed to happen")
+                loader_str = 'Corrupted Data! Val batch %d / %d, frame_count: %d / %d' \
+                % (batch_idx + 1, batch_length, frame_count + 1, frame_length)
+                self._log.info(self.id, loader_str)
+                continue
 
             # Reset Stage
             if frame_count == 0:
