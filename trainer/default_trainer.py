@@ -311,6 +311,12 @@ class DefaultTrainer(BaseTrainer):
             with open(json_loc, 'w') as f:
                 json.dump(self.foutput, f)
 
+            # Tensorboard
+            if self.summary_writer is not None:
+                for value, name in zip(error_list, error_keys):
+                    self.summary_writer.add_scalar(name, value, self.i_epoch)
+                self.summary_writer.flush()
+
         # Set fr
         self.first_run = False
 
