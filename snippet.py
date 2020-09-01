@@ -8,6 +8,7 @@ import torch.distributed as dist
 import utils.img_utils as img_utils
 import cv2
 import matplotlib.pyplot as plt
+import time
 
 # import matplotlib.pyplot as plt
 # dict = np.load("prev_dpv.npy", allow_pickle=True).item()
@@ -48,7 +49,7 @@ viz = viewer.Visualizer("V")
 viz.start()
 
 # Hack the d_candi and upsample?
-N = 128
+N = 96
 dict["d_candi"] = img_utils.powerf(5., 40., N, 1.)
 dict["d_candi_up"] = dict["d_candi"]
 dict["r_candi"] = dict["d_candi"]
@@ -68,23 +69,11 @@ lc = light_curtain.LightCurtain()
 if not lc.initialized:
     lc.init(dict)
 
-# cloud_refined_truth = img_utils.tocloud(img_utils.dpv_to_depthmap(dpv_refined_predicted, d_candi, BV_log=True), img_utils.demean(img_refined), intr_refined)
-# viz.addCloud(cloud_refined_truth)
-# viz.swapBuffer()
-# print(dict.keys())
-# stop
-
-# Hack
-depth_larger = np.load("a1.npy", allow_pickle=True).item()["depth_refined_predicted"].squeeze(0).cpu().numpy()
-#d_candi_ultra = img_utils.powerf(5., 40., 256, 1.)
-
 # # Upsample?
-# scaler=4
-# depth_smaller = img_utils.minpool(depth_refined_truth_eval, scaler, 1000)
-# depth_larger = F.interpolate(depth_smaller.unsqueeze(0), scale_factor=scaler, mode='nearest').squeeze(0).squeeze(0).cpu().numpy()
-
-
-
+scaler=4
+depth_smaller = img_utils.minpool(depth_refined_truth_eval, scaler, 1000)
+depth_larger = F.interpolate(depth_smaller.unsqueeze(0), scale_factor=scaler, mode='nearest').squeeze(0).squeeze(0).cpu().numpy()
+#depth_larger = depth_refined_truth_eval.squeeze(0).cpu().numpy()
 
 # Convert the DPV into a depthmap and cloud
 depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, d_candi, BV_log=True)
@@ -244,35 +233,46 @@ for i in range(0,15):
     cv2.imshow("field_visual_final", field_visual_final)
     cv2.waitKey(0)
 
-    i=0
+    # Test
+    start = time.time()
+    curr_dist_log = torch.log(curr_dist)
     for lcdpv in lc_DPVs:
-        #break
-        prior_viz = curr_dist[0, :,150,66].cpu().numpy()
-        lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
-        measure_viz = lcdpv[:, 150, 66].cpu().numpy()
-        curr_dist = torch.exp(torch.log(lcdpv) + torch.log(curr_dist))
-        curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
-        curr_viz = curr_dist[0, :,150,66].cpu().numpy()
+        curr_dist_log += torch.log(lcdpv)
+    curr_dist = torch.exp(curr_dist_log)
+    curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+    print("X: " + str(time.time()-start))
 
-        # UField High
-        final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
-        _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
-        overlay_truth(field_visual_final, truth_uncfield)
-        cv2.imshow("field_visual_final", field_visual_final)
-        cv2.waitKey(0)
+    # i=0
+    # start = time.time()
+    # for lcdpv in lc_DPVs:
+    #     #break
+    #     prior_viz = curr_dist[0, :,150,66].cpu().numpy()
+    #     lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
+    #     measure_viz = lcdpv[:, 150, 66].cpu().numpy()
+    #     curr_dist = torch.exp(torch.log(lcdpv) + torch.log(curr_dist))
+    #     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+    #     curr_viz = curr_dist[0, :,150,66].cpu().numpy()
 
-        # plt.plot(d_candi, prior_viz)
-        # plt.plot(d_candi, measure_viz)
-        # plt.plot(d_candi, curr_viz)
-        # plt.pause(1)
-        # # if i == 15:
-        # #     plt.pause(100)
-        # # if i == 16:
-        # #     plt.pause(100)
-        # plt.clf()
-        # #plt.xlim([8, 15])
-        # plt.ylim([0, 0.05])
-        # i+=1
+    #     # # UField High
+    #     # final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
+    #     # _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
+    #     # overlay_truth(field_visual_final, truth_uncfield)
+    #     # cv2.imshow("field_visual_final", field_visual_final)
+    #     # cv2.waitKey(0)
+
+    #     # plt.plot(d_candi, prior_viz)
+    #     # plt.plot(d_candi, measure_viz)
+    #     # plt.plot(d_candi, curr_viz)
+    #     # plt.pause(1)
+    #     # # if i == 15:
+    #     # #     plt.pause(100)
+    #     # # if i == 16:
+    #     # #     plt.pause(100)
+    #     # plt.clf()
+    #     # #plt.xlim([8, 15])
+    #     # plt.ylim([0, 0.05])
+    #     # i+=1
+    # print("X: " + str(time.time()-start))
 
     # # Testing
     # measures = [lc_DPVs[10], lc_DPVs[11], lc_DPVs[12], lc_DPVs[13], lc_DPVs[14], lc_DPVs[15], lc_DPVs[16]]

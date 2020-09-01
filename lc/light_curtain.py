@@ -510,7 +510,6 @@ class LightCurtain:
         # Try few times
         pts_planned_all = [pts_main]
         for i in range(0, cfg["step"]):
-            start = time.time()
 
             # Copy
             field_towork = field_preprocessed_range.cpu().numpy()
@@ -524,6 +523,7 @@ class LightCurtain:
             sampled_pts = []
             for c in range(0, field_preprocessed_range_temp.shape[1], 10):
                 ray_dist = field_preprocessed_range_temp[:,c]
+                ray_dist[np.isnan(ray_dist)] = 1e-5
                 ray_dist = ray_dist / np.sum(ray_dist)
                 sampled = np.random.choice(ray_dist.shape[0], 1, p=ray_dist)
                 sampled_vals.append(sampled[0])
@@ -540,7 +540,7 @@ class LightCurtain:
                             & (spline[:,1] >= 0) & (spline[:,1] < field_visual.shape[0])]
 
             # Draw Spline
-            for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
+            #for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
                 #cv2.circle(field_visual, (spixel[0], spixel[1]), 1, (255, 0, 255), -1)
 
             # Create Empty Field
@@ -579,6 +579,8 @@ class LightCurtain:
 
         # cv2.imshow("field_visual", field_visual)
         # cv2.waitKey(0)
+
+        print(time.time()-start)
 
         return pts_planned_all, field_visual
 
@@ -641,8 +643,6 @@ class LightCurtain:
             pts_up = planner.get_design_points(left_field_inv.cpu().numpy())
             pts_down = planner.get_design_points(right_field_inv.cpu().numpy())
 
-            print("Plan: " + str(time.time() - start))
-
             # Visual
             pixels = np.array([np.digitize(pts_up[:, 1], self.d_candi_up) - 1, range(0, pts_up.shape[0])]).T
             field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 1, 0]
@@ -655,6 +655,7 @@ class LightCurtain:
 
         fw.save_flowfields()
 
+        print("Plan: " + str(time.time() - start))
         return all_pts, field_visual
 
     # def sense_low(self, np_depth_image, np_design_pts):
@@ -709,7 +710,7 @@ class LightCurtain:
         # Compute DPV
         z_img = depth_sensed
         int_img = int_sensed / 255.
-        unc_img = (thickness_sensed / 6.) ** 2
+        unc_img = (thickness_sensed / 10.) ** 2
         A = mapping(int_img)
         # Try fucking with 1 in the 1-A value
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
