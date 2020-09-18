@@ -462,7 +462,7 @@ class BaseModel(nn.Module):
         # Other
         if self.nmode == "exp3" or self.nmode == "exp4":
             self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
-        if self.nmode == "exp6":
+        if self.nmode == "exp6" or self.nmode == "exp7":
             self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
             self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
@@ -846,6 +846,28 @@ class BaseModel(nn.Module):
             # [B,128,256,384]
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp7":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:, -1, :, :, :])
+
+            if model_input["prev_output"] is None:
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
+
+                return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+            else:
+                # Volume
+                comb_volume = torch.cat([BV_cur.unsqueeze(1), model_input["prev_output"].unsqueeze(0), warped_features], dim=1)
+                BV_resi = self.based_3d(comb_volume, prob=False)
+                BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
+
+                # Decoder
+                BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
+                # [B,128,256,384]
+
+                return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
 
         else:
