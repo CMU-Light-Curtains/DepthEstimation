@@ -24,7 +24,7 @@ class DefaultTrainer(BaseTrainer):
         if self.id == 0:
             self.foutput = {
                 "name": self.cfg.data.exp_name,
-                "rmse": [], "rmse_refined": [], "sil": [], "sil_refined": []
+                "rmse": [], "rmse_refined": [], "sil": [], "sil_refined": [], "rmse_unc": []
             }
 
         # Visualizer
