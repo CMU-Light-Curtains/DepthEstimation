@@ -226,7 +226,7 @@ def spread_dpv_hack(dpv, N=5):
     return tofuse_dpv
 
 
-def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False):
+def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None):
     # Generate Shiftmap
     pshift = 5
     flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
@@ -248,7 +248,9 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     #zero_mask = (~((pts_shifted[1, :, :] > 1.3) | (pts_shifted[1, :, :] < 1.0))).float()
     # (~((pts_shifted[1, :, :] > 1.0) | (pts_shifted[1, :, :] < 0.5)
     zero_mask = (~((pts_shifted[1, :, :] > 0.9) | (pts_shifted[1, :, :] < 0.6) | (pts_shifted[2, :, :] > maxd-1))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
-    depthmap_shifted_zero = depthmap_shifted * zero_mask
+    if mask is not None:
+        mask_shifted = F.grid_sample(mask.unsqueeze(1), flowfield, mode='nearest').squeeze(1)
+        zero_mask = zero_mask * mask_shifted.squeeze(0)
 
     # Shift Mask
     zero_mask_predicted = F.grid_sample(zero_mask.unsqueeze(0).unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0).squeeze(0)

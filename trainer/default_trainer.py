@@ -191,6 +191,7 @@ class DefaultTrainer(BaseTrainer):
         # Variables
         errors = []
         errors_refined = []
+        errors_uncfield_rmse = []
 
         # Iterate Train Loader
         for items in self.val_loader.enumerate():
@@ -246,6 +247,12 @@ class DefaultTrainer(BaseTrainer):
                 mask_refined = gt_input_left["masks_imgsizes"][b, :, :, :]
                 depth_truth = gt_input_left["dmaps"][b, :, :].unsqueeze(0)
                 depth_refined_truth = gt_input_left["dmap_imgsizes"][b, :, :].unsqueeze(0)
+                dpv_refined_truth = gt_input_left["soft_labels_imgsize"][b].unsqueeze(0)
+                d_candi = model_input_left["d_candi"]
+                intr_refined = model_input_left["intrinsics_up"][b, :, :]
+
+                # Unc Field
+                unc_field_truth, unc_field_predicted, debugmap, unc_field_rmse = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined)
 
                 # Eval
                 depth_truth_eval = depth_truth.clone()
@@ -258,6 +265,7 @@ class DefaultTrainer(BaseTrainer):
                 depth_refined_predicted_eval = depth_refined_predicted_eval * mask_refined
                 errors.append(img_utils.depth_error(depth_predicted_eval.squeeze(0).cpu().numpy(), depth_truth_eval.squeeze(0).cpu().numpy()))
                 errors_refined.append(img_utils.depth_error(depth_refined_predicted_eval.squeeze(0).cpu().numpy(), depth_refined_truth_eval.squeeze(0).cpu().numpy()))
+                errors_uncfield_rmse.append(unc_field_rmse.item())
 
             # String
             loader_str = 'Val batch %d / %d, frame_count: %d / %d' \
@@ -272,8 +280,9 @@ class DefaultTrainer(BaseTrainer):
         sil_refined = results_refined["scale invariant log"][0]
         rmse = results["rmse"][0]
         rmse_refined = results_refined["rmse"][0]
-        error_keys = ["rmse", "rmse_refined", "sil", "sil_refined"]
-        error_list = [rmse, rmse_refined, sil, sil_refined]
+        rmse_unc = np.mean(np.array(errors_uncfield_rmse))
+        error_keys = ["rmse", "rmse_refined", "sil", "sil_refined", "rmse_unc"]
+        error_list = [rmse, rmse_refined, sil, sil_refined, rmse_unc]
 
         # Copy to Shared
         for i, e in enumerate(error_list):
@@ -355,6 +364,9 @@ class DefaultTrainer(BaseTrainer):
             depthmap_truth_refined_np = depth_refined_truth_eval.squeeze(0).cpu().numpy()
             depthmap_truth_np = depth_truth_eval.squeeze(0).cpu().numpy()
 
+            # # Unc Field
+            # unc_field_truth, unc_field_predicted, debugmap, unc_field_rmse = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined)
+            
             # # Save to Disk
             # todisk = copy.copy(lc_params)
             # todisk["dpv_refined_predicted"] = dpv_refined_predicted
@@ -413,6 +425,23 @@ class DefaultTrainer(BaseTrainer):
                 # cv2.imshow("uncfield_predicted", uncfield_predicted.squeeze(0).cpu().numpy())
                 # cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy())
 
+    def compute_unc_field(self, dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined):
+        # UField Display
+        unc_field_truth, _ = img_utils.gen_ufield(dpv_refined_truth, d_candi, intr_refined.squeeze(0), BV_log=False, mask=mask_refined)
+
+        # UField
+        unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), BV_log=True)
+        
+        # Get Depth comparison
+        unc_field_truth_depth = img_utils.dpv_to_depthmap(unc_field_truth.unsqueeze(2), self.d_candi, BV_log=False).squeeze(0).squeeze(0)
+        unc_field_predicted_depth = img_utils.dpv_to_depthmap(unc_field_predicted.unsqueeze(2), self.d_candi, BV_log=False).squeeze(0).squeeze(0)
+        unc_field_predicted_depth[0] = 0
+        unc_field_predicted_depth[-1] = 0
+        unc_field_mask = ~torch.isnan(unc_field_truth_depth)
+        unc_field_truth_depth[~unc_field_mask] = 0.
+        unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
+
+        return unc_field_truth, unc_field_predicted, debugmap, unc_field_rmse
 
     def visualize(self, model_input, gt_input, output):
         import cv2
@@ -452,26 +481,19 @@ class DefaultTrainer(BaseTrainer):
             depth_refined_truth_eval = depth_refined_truth.clone()
             depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
             depth_predicted_eval = depth_predicted.clone()
-            #depth_predicted_eval = depth_predicted_eval *
             depth_refined_predicted_eval = depth_refined_predicted.clone()
             depth_refined_predicted_eval = depth_refined_predicted_eval * tophalf_refined.float()
             img_color = img_utils.torchrgb_to_cv2(img_refined)
             img_color_low = img_utils.torchrgb_to_cv2(img)
 
-            # UField
-            unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0))
-            #unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), None, None, True, True)
-            img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
-
             # UField Display
-            unc_field_truth, _ = img_utils.gen_ufield(torch.log(dpv_refined_truth), d_candi, intr_refined.squeeze(0), None, None, True, True)
-            unc_field_truth = unc_field_truth.squeeze(0).cpu().numpy()
-            unc_field_truth[unc_field_truth > 0.01] = 1.
-            unc_field_truth = cv2.cvtColor(unc_field_truth, cv2.COLOR_GRAY2BGR)
-            unc_field_overlay = unc_field_predicted.squeeze(0).cpu().numpy()*1.5
-            unc_field_overlay = cv2.cvtColor(unc_field_overlay, cv2.COLOR_GRAY2BGR)
-            unc_field_truth[:,:,0] = 0
-            unc_field_overlay = unc_field_overlay + unc_field_truth
+            unc_field_truth, unc_field_predicted, debugmap, unc_field_rmse = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined)
+
+            # Display
+            img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
+            unc_field_overlay = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
+            unc_field_overlay[:,:,1] = unc_field_predicted[0,:,:].cpu().numpy()*3
+            unc_field_overlay[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
 
             # Display Image/Depth
             img_depth = cv2.cvtColor(depth_refined_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
