@@ -859,7 +859,7 @@ class BaseModel(nn.Module):
                 return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
             else:
                 # Volume
-                comb_volume = torch.cat([BV_cur.unsqueeze(1), model_input["prev_output"].unsqueeze(0), warped_features], dim=1)
+                comb_volume = torch.cat([BV_cur.unsqueeze(1), model_input["prev_output"].unsqueeze(1), warped_features], dim=1)
                 BV_resi = self.based_3d(comb_volume, prob=False)
                 BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
 
