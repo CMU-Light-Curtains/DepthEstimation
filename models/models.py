@@ -444,20 +444,20 @@ class BaseModel(nn.Module):
         self.sigma_soft_max = self.cfg.var.sigma_soft_max
         self.feature_dim = self.cfg.var.feature_dim
         self.nmode = self.cfg.var.nmode
-        D = self.cfg.var.ndepth
+        self.D = self.cfg.var.ndepth
         self.bn_avg = self.cfg.var.bn_avg
         self.id = id
 
         # Encoder
         self.base_encoder = BaseEncoder(feature_dim = self.feature_dim, multi_scale = True, bn_running_avg = self.bn_avg)
-        self.base_decoder = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
+        self.base_decoder = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
 
         # Additional
         self.conv0 = conv2d_leakyRelu(
-            ch_in=D, ch_out=D, kernel_size=3, stride=1, pad=1, use_bias=True)
+            ch_in=self.D, ch_out=self.D, kernel_size=3, stride=1, pad=1, use_bias=True)
         self.conv0_1 = conv2d_leakyRelu(
-            ch_in=D, ch_out=D, kernel_size=3, stride=1, pad=1, use_bias=True)
-        self.conv0_2 = nn.Conv2d(D, D, kernel_size=3, stride=1, padding=1, bias=True)
+            ch_in=self.D, ch_out=self.D, kernel_size=3, stride=1, pad=1, use_bias=True)
+        self.conv0_2 = nn.Conv2d(self.D, self.D, kernel_size=3, stride=1, padding=1, bias=True)
 
         # Other
         if self.nmode == "exp3" or self.nmode == "exp4":
@@ -465,7 +465,7 @@ class BaseModel(nn.Module):
         if self.nmode == "exp6" or self.nmode == "exp7":
             self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
-            self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = D)
+            self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
 
         # Apply Weights
         self.apply(self.weight_init)
@@ -852,23 +852,21 @@ class BaseModel(nn.Module):
             BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
             last_features.append(model_input["rgb"][:, -1, :, :, :])
 
+            # Prev Output
             if model_input["prev_output"] is None:
-                # Decoder
-                BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
-
-                return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+                prev_output = torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D)
             else:
-                # Volume
-                comb_volume = torch.cat([BV_cur.unsqueeze(1), model_input["prev_output"].unsqueeze(1), warped_features], dim=1)
-                BV_resi = self.based_3d(comb_volume, prob=False)
-                BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
+                prev_output = model_input["prev_output"].unsqueeze(1)
 
-                # Decoder
-                BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
-                # [B,128,256,384]
+            # Volume
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), prev_output, warped_features], dim=1)
+            BV_resi = self.based_3d(comb_volume, prob=False)
+            BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
 
-                return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+            # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
+            return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
         else:
             raise Exception("Nmode wrong")
