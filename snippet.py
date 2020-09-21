@@ -49,7 +49,7 @@ viz = viewer.Visualizer("V")
 viz.start()
 
 # Hack the d_candi and upsample?
-N = 96
+N = 64
 dict["d_candi"] = img_utils.powerf(5., 40., N, 1.)
 dict["d_candi_up"] = dict["d_candi"]
 dict["r_candi"] = dict["d_candi"]
@@ -156,18 +156,22 @@ def overlay_truth(input_field, truth_field):
 #     dpv_temp = img_utils.spread_dpv_hack(dpv_temp, 15)
 # dpv_refined_predicted = torch.log(dpv_temp)
 
+# Something to force a constant depth for example? with large dist
+
 final = dpv_refined_predicted # Cant start with all uniform cos gen_ufield will be 0 - Can we fix this, or can we spread it somehow?
 for i in range(0,15):
     # UField High
+    start = time.time()
     uncfield_refined_predicted, _ = img_utils.gen_ufield(final, d_candi, intr_refined.squeeze(0))
     #cv2.imshow("uncfield_refined_predicted", uncfield_refined_predicted.squeeze(0).cpu().numpy()*10)
     #cv2.waitKey(0)
     #lc_paths_refined, field_visual_refined = lc.plan_sweep_high(uncfield_refined_predicted.squeeze(0), {"step": 0.5})
-    #lc_paths_refined, field_visual_refined = lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-    lc_paths_refined, field_visual_refined = lc.plan_m1_high(uncfield_refined_predicted.squeeze(0), {"step": 5})
+    lc_paths_refined, field_visual_refined = lc.plan_default_high(uncfield_refined_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
+    #lc_paths_refined, field_visual_refined = lc.plan_m1_high(uncfield_refined_predicted.squeeze(0), {"step": 5})
     #lc_paths_refined, field_visual_refined = lc.plan_empty_high(uncfield_refined_predicted.squeeze(0), {})
+    print("Plan: " + str(time.time()-start))
     cv2.imshow("field_visual_refined", field_visual_refined)
-    cv2.waitKey(0)
+    cv2.waitKey(15)
 
     # Sensing High
     lc_outputs = []
@@ -226,21 +230,30 @@ for i in range(0,15):
     # Keep Renormalize
     curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
 
-    # UField High
-    final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
-    _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
-    overlay_truth(field_visual_final, truth_uncfield)
-    cv2.imshow("field_visual_final", field_visual_final)
-    cv2.waitKey(0)
+    # # UField High
+    # final_ufield, _ = img_utils.gen_ufield(torch.log(curr_dist), d_candi, intr_refined.squeeze(0))
+    # _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
+    # overlay_truth(field_visual_final, truth_uncfield)
+    # cv2.imshow("field_visual_final", field_visual_final)
+    # cv2.waitKey(0)
 
     # Test
     start = time.time()
     curr_dist_log = torch.log(curr_dist)
     for lcdpv in lc_DPVs:
+        lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
         curr_dist_log += torch.log(lcdpv)
     curr_dist = torch.exp(curr_dist_log)
     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
     print("X: " + str(time.time()-start))
+
+    # # Test
+    # start = time.time()
+    # for lcdpv in lc_DPVs:
+    #     curr_dist *= lcdpv
+    #     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+    # print("X: " + str(time.time()-start))
+
 
     # i=0
     # start = time.time()
@@ -263,7 +276,7 @@ for i in range(0,15):
     #     # plt.plot(d_candi, prior_viz)
     #     # plt.plot(d_candi, measure_viz)
     #     # plt.plot(d_candi, curr_viz)
-    #     # plt.pause(1)
+    #     # plt.pause(0.1)
     #     # # if i == 15:
     #     # #     plt.pause(100)
     #     # # if i == 16:
@@ -318,6 +331,17 @@ for i in range(0,15):
     _, field_visual_final = lc.plan_empty_high(final_ufield.squeeze(0), {})
     overlay_truth(field_visual_final, truth_uncfield)
     cv2.imshow("field_visual_final", field_visual_final)
+
+    # UField Small
+    print(final.shape)
+    final_small = F.interpolate(final, scale_factor=0.25, mode='nearest')
+
+    final_ufield_small, _ = img_utils.gen_ufield(final_small, d_candi, intr.squeeze(0))
+    _, field_visual_final_small = lc.plan_empty_low(final_ufield_small.squeeze(0), {})
+    #overlay_truth(field_visual_final, truth_uncfield)
+    cv2.imshow("field_visual_final_small", field_visual_final_small)
+
+
 
     #cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
     #viz.addCloud(cloud_refined_truth)

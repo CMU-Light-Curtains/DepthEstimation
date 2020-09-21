@@ -225,6 +225,16 @@ def spread_dpv_hack(dpv, N=5):
     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
     return tofuse_dpv
 
+def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
+    if BV_log:
+        dpv_refined_predicted = torch.exp(dpv_refined_predicted)
+    dpv_refined_predicted = dpv_refined_predicted.permute(0,2,1,3)
+    dpv_refined_predicted = F.upsample(dpv_refined_predicted, size=[N,dpv_refined_predicted.shape[3]], mode='bilinear')
+    dpv_refined_predicted = dpv_refined_predicted.permute(0,2,1,3)
+    dpv_refined_predicted = dpv_refined_predicted / torch.sum(dpv_refined_predicted, dim=1).unsqueeze(1)
+    if BV_log:
+        dpv_refined_predicted = torch.log(dpv_refined_predicted)
+    return dpv_refined_predicted
 
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None):
     # Generate Shiftmap

@@ -580,7 +580,7 @@ class LightCurtain:
         # cv2.imshow("field_visual", field_visual)
         # cv2.waitKey(0)
 
-        print(time.time()-start)
+        #print(time.time()-start)
 
         return pts_planned_all, field_visual
 
@@ -655,7 +655,7 @@ class LightCurtain:
 
         fw.save_flowfields()
 
-        print("Plan: " + str(time.time() - start))
+        #print("Plan: " + str(time.time() - start))
         return all_pts, field_visual
 
     # def sense_low(self, np_depth_image, np_design_pts):

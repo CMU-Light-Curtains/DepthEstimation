@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--viz', action='store_true', help='viz', default=False)
     parser.add_argument('--eval', action='store_true', help='viz', default=False)
     parser.add_argument('--resume', action='store_true', help='viz', default=False)
+    parser.add_argument('--lc', action='store_true', help='lc', default=False)
 
     args = parser.parse_args()
 
@@ -39,6 +40,7 @@ def main():
 
     # Overwrite
     cfg.train.batch_size = args.batch_size
+    cfg.lc.enabled = args.lc
 
     # store files day by day
     exp_name = cfg.data.exp_name
