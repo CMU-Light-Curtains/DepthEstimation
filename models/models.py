@@ -466,6 +466,8 @@ class BaseModel(nn.Module):
             self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
             self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
+        if self.nmode == "exp8":
+            self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
 
         # Apply Weights
         self.apply(self.weight_init)
@@ -867,6 +869,22 @@ class BaseModel(nn.Module):
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp8":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:, -1, :, :, :])
+
+            # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
+
+            # Downsample
+            BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
+
+            # Decoder
+            BV_cur_refined_2 = self.base_decoder2(torch.exp(BV_downsampled), img_features=last_features)
+
+            return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
 
         else:
             raise Exception("Nmode wrong")
