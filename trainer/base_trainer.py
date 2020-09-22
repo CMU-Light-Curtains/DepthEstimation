@@ -92,6 +92,21 @@ class BaseTrainer:
             self._log.info(self.id, "=> Train from scratch.")
             model.init_weights()
 
+        # Load Custom
+        if hasattr(self.cfg.train, 'init_model'):
+            if self.cfg.train.init_model:
+                self._log.info(self.id, "=> using init weights {}.".format(
+                    self.cfg.train.init_model))
+                epoch, weights = load_checkpoint(self.cfg.train.init_model)
+                from collections import OrderedDict
+                new_weights = OrderedDict()
+                model_keys = list(model.state_dict().keys())
+                weight_keys = list(weights.keys())
+                for a, b in zip(model_keys, weight_keys):
+                    new_weights[a] = weights[b]
+                weights = new_weights
+                model.load_state_dict(weights, strict=False)
+
         # Model Type
         if self.cfg.mp.enabled:
             if self.cfg.var.bn_avg:

@@ -302,7 +302,20 @@ class LightCurtain:
         self.d_candi_up = PARAMS["d_candi_up"]
         self.r_candi_up = PARAMS["r_candi_up"]
         self.PARAMS['cTr'] = np.linalg.inv(PARAMS["rTc"])
+        self.expand_A = PARAMS["expand_A"]
+        self.expand_B = PARAMS["expand_B"]
         self.initialized = True
+
+    def expand_params(self, PARAMS, cfg, expand_A, expand_B):
+        d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
+        d_candi_expand_upsample = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_B, cfg.var.qpower)
+        PARAMS["d_candi"] = d_candi_expand
+        PARAMS["r_candi"] = PARAMS["d_candi"]
+        PARAMS["d_candi_up"] = d_candi_expand_upsample
+        PARAMS["r_candi_up"] = PARAMS["d_candi_up"]
+        PARAMS["expand_A"] = expand_A
+        PARAMS["expand_B"] = expand_B
+        return PARAMS
 
     def gen_params_from_model_input(self, model_input):
         PARAMS = {

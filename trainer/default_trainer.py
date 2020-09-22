@@ -141,12 +141,14 @@ class DefaultTrainer(BaseTrainer):
             model_input_right["prev_output"] = self.prev_output["right"]
             model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
 
-            # Model
-            output_left, output_right = self.model([model_input_left, model_input_right])
-
-            # Light Curtain
+            # Setup LC
             if self.lc is not None:
-                self.lc_process(model_input_left, gt_input_left, output_left)
+                lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                self.lc.init(lc_params)
+
+            # Model
+            output_left, output_right = self.model([model_input_left, model_input_right], self.lc)
 
             # Set Prev from last one
             output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
@@ -219,9 +221,15 @@ class DefaultTrainer(BaseTrainer):
             model_input_left["prev_output"] = self.prev_output["left"]
             model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
+            # Setup LC
+            if self.lc is not None:
+                lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                self.lc.init(lc_params)
+
             # Model
             start = time.time()
-            output_left = self.model([model_input_left])[0]
+            output_left = self.model([model_input_left], self.lc)[0]
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
 
@@ -333,20 +341,6 @@ class DefaultTrainer(BaseTrainer):
         return error_list, error_keys
 
     def lc_process(self, model_input, gt_input, output):
-        # Upsample
-        expand_N = 96
-        d_candi_expand = img_utils.powerf(self.cfg.var.d_min, self.cfg.var.d_max, expand_N, self.cfg.var.qpower)
-        d_candi_expand_upsample = img_utils.powerf(self.cfg.var.d_min, self.cfg.var.d_max, expand_N, self.cfg.var.qpower)
-
-        # Initialize
-        if not self.lc.initialized:
-            lc_params = self.lc.gen_params_from_model_input(model_input)
-            lc_params["d_candi"] = d_candi_expand
-            lc_params["r_candi"] = d_candi_expand
-            lc_params["d_candi_up"] = d_candi_expand_upsample
-            lc_params["r_candi_up"] = d_candi_expand_upsample
-            self.lc.init(lc_params)
-
         # Eval
         for b in range(0, output["output"][-1].shape[0]):
             dpv_predicted = output["output"][-1][b, :, :, :].unsqueeze(0)
@@ -375,11 +369,11 @@ class DefaultTrainer(BaseTrainer):
             depthmap_truth_np = depth_truth_eval.squeeze(0).cpu().numpy()
 
             # Upsample DPV
-            dpv_refined_predicted = img_utils.upsample_dpv(dpv_refined_predicted, N=expand_N, BV_log=True)
-            dpv_refined_truth = img_utils.upsample_dpv(dpv_refined_truth, N=expand_N, BV_log=False)
+            dpv_refined_predicted = img_utils.upsample_dpv(dpv_refined_predicted, N=self.lc.expand_A, BV_log=True)
+            dpv_refined_truth = img_utils.upsample_dpv(dpv_refined_truth, N=self.lc.expand_A, BV_log=False)
 
             # Unc Field
-            unc_field_truth, unc_field_predicted, debugmap = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi_expand, intr_refined, mask_refined)
+            unc_field_truth, unc_field_predicted, debugmap = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, self.lc.d_candi, intr_refined, mask_refined)
             # if self.viz is not None:
             #     import cv2
             #     cv2.imshow("field_visual_refined", field_visual_refined)
@@ -393,10 +387,10 @@ class DefaultTrainer(BaseTrainer):
             # Loop
             import cv2
             final = dpv_refined_predicted.clone()
-            final_depth = img_utils.dpv_to_depthmap(final, d_candi_expand, BV_log=True)
+            final_depth = img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True)
             for i in range(0, 15):
                 start = time.time()
-                unc_field_predicted, debugmap = img_utils.gen_ufield(final, d_candi_expand, intr_refined.squeeze(0), BV_log=True)
+                unc_field_predicted, debugmap = img_utils.gen_ufield(final, self.lc.d_candi, intr_refined.squeeze(0), BV_log=True)
                 print("gen_ufield: " + str(time.time()-start))
 
                 # Error
@@ -438,8 +432,7 @@ class DefaultTrainer(BaseTrainer):
 
                 # Log it
                 final = torch.log(curr_dist)
-                final_depth = img_utils.dpv_to_depthmap(final, d_candi_expand, BV_log=True)
-
+                final_depth = img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True)
 
                 # # UField High
                 # final_ufield, _ = img_utils.gen_ufield(final, d_candi, intr_refined.squeeze(0))
@@ -448,7 +441,7 @@ class DefaultTrainer(BaseTrainer):
                 # cv2.waitKey(0)
 
                 # 3D
-                #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, d_candi_expand, BV_log=True), img_utils.demean(img_refined), intr_refined), 1)
+                #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True), img_utils.demean(img_refined), intr_refined), 1)
                 #self.viz.swapBuffer()
 
 

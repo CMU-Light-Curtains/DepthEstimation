@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--eval', action='store_true', help='viz', default=False)
     parser.add_argument('--resume', action='store_true', help='viz', default=False)
     parser.add_argument('--lc', action='store_true', help='lc', default=False)
+    parser.add_argument('--init_model', default='')
 
     args = parser.parse_args()
 
@@ -35,6 +36,8 @@ def main():
 
     if args.viz:
         cfg.var.viz = True
+
+    setattr(cfg.train, 'init_model', args.init_model)
 
     init_seed(cfg.seed)
 
