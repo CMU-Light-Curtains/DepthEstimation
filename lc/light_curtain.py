@@ -171,7 +171,6 @@ class FieldWarp:
 
     def transformZTheta(self, field, d_candi_input, d_candi_output, name):
         if name in self.flowfields.keys():
-            print("load " + name)
             output = self.warp(field, self.flowfields[name])
             return output
         else:
@@ -482,6 +481,14 @@ class LightCurtain:
         field[:, 0] = field[:, 1]
         field[:, -1] = field[:, -2]
 
+        # Force fields to back
+        for i in range(0, field.shape[1]):
+            ray_dist = field[:, i]
+            if(torch.isnan(ray_dist).any()):
+                field[:, i] = img_utils.epsilon
+                field[-1, i] = 1.
+        #field[torch.isnan(field)] = img_utils.epsilon
+
         # Preprocess to the right size
         field_preprocessed = fw.preprocess(field, self.d_candi, self.d_candi_up)
 
@@ -495,7 +502,8 @@ class LightCurtain:
             field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
 
         # Normalize 0 to 1
-        field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        #field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        #field_preprocessed[torch.isnan(field_preprocessed)] = img_utils.epsilon
         #field_preprocessed = field_preprocessed*0
         #field_preprocessed[50:55, :] = 1.
 
@@ -510,15 +518,15 @@ class LightCurtain:
         field_preprocessed_range[:, -1] = field_preprocessed_range[:, -2]
 
         # Generate CV
-        field_visual = np.repeat(field_preprocessed_range.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
+        field_visual = np.repeat(normalize(field_preprocessed.unsqueeze(0)).squeeze(0).cpu().numpy()[:, :, np.newaxis], 3, axis=2)
 
-        #########3
+        #########
 
         # Plan
         pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
 
         pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
-        field_visual[pixels[:, 0], pixels[:, 1], :] = [0, 0.5, 0]
+        field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 1, 0]
 
         # Try few times
         pts_planned_all = [pts_main]
@@ -529,7 +537,11 @@ class LightCurtain:
 
             # Through each ray sample pt
             field_preprocessed_range_temp = field_towork.copy()
-            field_preprocessed_range_temp[field_preprocessed_range_temp < 0.05] = 1e-5
+            #field_preprocessed_range_temp[field_preprocessed_range_temp < 0.05] = 1e-5
+
+            # # Nan Test
+            # if np.isnan(field_preprocessed_range_temp).any():
+            #     raise Exception("NAN Found")
 
             # Sample Based Strategy
             sampled_vals = []
@@ -608,6 +620,14 @@ class LightCurtain:
         field[:, 0] = field[:, 1]
         field[:, -1] = field[:, -2]
 
+        # Force field to back
+        for i in range(0, field.shape[1]):
+            ray_dist = field[:, i]
+            if(torch.isnan(ray_dist).any()):
+                field[:, i] = img_utils.epsilon
+                field[-1, i] = 1.
+        #field[torch.isnan(field)] = img_utils.epsilon
+
         # Preprocess to the right size
         field_preprocessed = fw.preprocess(field, self.d_candi, self.d_candi_up)
 
@@ -622,6 +642,7 @@ class LightCurtain:
 
         # Normalize 0 to 1
         field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
+        field_preprocessed[torch.isnan(field_preprocessed)] = img_utils.epsilon
 
         # Warp from Z to theta
         field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
@@ -810,11 +831,11 @@ class LightCurtain:
         # Save information at pixel wanted
         pixel_wanted = [150, 66]
         debug_data = dict()
-        debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
-        debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
-        debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
-        debug_data["thickness_sensed"] = thickness_sensed[pixel_wanted[0], pixel_wanted[1]]
-        debug_data["dist"] = DPV[:, pixel_wanted[0], pixel_wanted[1]].cpu().numpy()
+        # debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["thickness_sensed"] = thickness_sensed[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["dist"] = DPV[:, pixel_wanted[0], pixel_wanted[1]].cpu().numpy()
 
         # Generate XYZ version for viz
         output_rgb = None

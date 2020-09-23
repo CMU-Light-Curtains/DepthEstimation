@@ -49,11 +49,13 @@ viz = viewer.Visualizer("V")
 viz.start()
 
 # Hack the d_candi and upsample?
-N = 64
+N = 128
 dict["d_candi"] = img_utils.powerf(5., 40., N, 1.)
 dict["d_candi_up"] = dict["d_candi"]
 dict["r_candi"] = dict["d_candi"]
 dict["r_candi_up"] = dict["d_candi"]
+dict["expand_A"] = N
+dict["expand_B"] = 128
 d_candi = dict["d_candi"]
 dpv_refined_predicted = torch.exp(dpv_refined_predicted)
 dpv_refined_predicted = dpv_refined_predicted.permute(0,2,1,3)

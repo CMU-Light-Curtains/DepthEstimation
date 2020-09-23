@@ -472,6 +472,17 @@ class BaseModel(nn.Module):
         # Apply Weights
         self.apply(self.weight_init)
 
+        # Viz
+        self.viz = None
+
+    def set_viz(self, viz):
+        self.viz = viz
+
+    def freeze_weights(self, name):
+        print("Freezing: " + name)
+        for param in getattr(self, name).parameters():
+            param.requires_grad = False
+
     def weight_init(self, m):
         if isinstance(m, nn.Conv2d):
             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -875,6 +886,12 @@ class BaseModel(nn.Module):
             # Decoder
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
+            # LC
+            if lc is not None:
+                self.lc_process(BV_cur, model_input, lc, mode="low", viz=True)
+                #self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=True, iterations=5)
+                pass
+
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
         elif self.nmode == "exp8":
@@ -904,24 +921,28 @@ class BaseModel(nn.Module):
 
         pass
 
-    def lc_process(self, BV_cur, model_input, lc, mode="low", iterations=5):
+    def lc_process(self, BV_cur, model_input, lc, mode="low", iterations=5, viz=False):
         # Iterate each batch
         for b in range(0, model_input["dmaps"].shape[0]):
             if mode == "high":
                 intr = model_input["intrinsics_up"][b, :, :]
                 dmap = F.interpolate(model_input["dmaps"][b,:,:].unsqueeze(0).unsqueeze(0), scale_factor=4, mode='nearest').squeeze(0)
                 mask = F.interpolate(model_input["masks"][b,:,:,:].unsqueeze(0), scale_factor=4, mode='nearest')
+                img = model_input["rgb"][b, -1, :, :, :]
             elif mode == "low":
                 intr = model_input["intrinsics"][b, :, :]
                 dmap = model_input["dmaps"][b,:,:].unsqueeze(0)
                 mask = model_input["masks"][b,:,:,:].unsqueeze(0)
+                img_refined = model_input["rgb"][b, -1, :, :, :]
+                img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
 
             # True Depth
             true_depth = dmap.squeeze(0).cpu().numpy()
 
             # DPV Truth
-            true_dpv = img_utils.gen_dpv_withmask(dmap, mask*0+1, lc.d_candi, 0.3)
-            unc_field_truth, _ = img_utils.gen_ufield(true_dpv, lc.d_candi, intr.squeeze(0), BV_log=False)
+            if viz:
+                true_dpv = img_utils.gen_dpv_withmask(dmap, mask*0+1, lc.d_candi, 0.3)
+                unc_field_truth, _ = img_utils.gen_ufield(true_dpv, lc.d_candi, intr.squeeze(0), BV_log=False)
 
             # Upsample
             final = BV_cur.detach().clone()
@@ -933,23 +954,25 @@ class BaseModel(nn.Module):
 
             # Bayesian Iterations
             for i in range(0, iterations):
+
                 # Generate UField
                 unc_field_predicted, _ = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True)
 
                 # Plan
                 if mode == "high":
-                    lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                    #lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
+                    #lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
+                    lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
                 elif mode == "low":
-                    lc_paths, field_visual = lc.plan_default_low(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                    #lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), {"step": 5})
+                    #lc_paths, field_visual = lc.plan_default_low(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
+                    lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), {"step": 5})
 
-                # Viz
-                import cv2
-                field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
-                cv2.imshow("field_visual", field_visual)
-                #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                cv2.waitKey(0)
+                # # Viz
+                if viz:
+                    import cv2
+                    field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
+                    cv2.imshow("field_visual", field_visual)
+                    #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
+                    cv2.waitKey(0)
 
                 # Sensing
                 lc_DPVs = []
@@ -971,9 +994,23 @@ class BaseModel(nn.Module):
                 curr_dist = torch.exp(curr_dist_log)
                 curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
+                # Spread
+                for i in range(0, 1):
+                    curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+
+                # Keep Renormalize
+                curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)
+
                 # Back to Log space
                 final = torch.log(curr_dist)
 
+                # 3D
+                if self.viz is not None:
+                    self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 3)
+                    self.viz.swapBuffer()
+
+            if final.shape[1] != BV_cur.shape[1]:
+                final = img_utils.upsample_dpv(final, N=BV_cur.shape[1], BV_log=True)
             return final
 
     def forward(self, inputs, lc=None):

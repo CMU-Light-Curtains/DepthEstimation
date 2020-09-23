@@ -82,7 +82,8 @@ class DefaultTrainer(BaseTrainer):
             from lc import light_curtain
             self.lc = light_curtain.LightCurtain()
 
-        # PIN MEMORY?
+        # Viz
+        self.model.module.set_viz(self.viz)
 
     def __del__(self):
         if self.viz is not None:
