@@ -36,6 +36,21 @@ import random
 __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
         'std': [0.229, 0.224, 0.225]}
 
+class ilim:
+    """Load and parse raw data into a usable format."""
+
+    def __init__(self, base_path, date, drive, **kwargs):
+        """Set the path and pre-load calibration data and timestamps."""
+        self.dataset = kwargs.get('dataset', 'sync')
+        self.drive = date + '_drive_' + drive + '_' + self.dataset
+        self.calib_path = os.path.join(base_path, date)
+        self.data_path = os.path.join(base_path, date, self.drive)
+        self.N = len(os.listdir(self.data_path + "/left_img/data"))
+
+    def __len__(self):
+        """Return the number of frames loaded."""
+        return self.N
+
 def normalize_intensity( normalize_paras_):
     '''
     ToTensor(), Normalize()
@@ -130,10 +145,10 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
 
     if mode == "left":
         raw_img_size = p_data.get_cam2(0).size
-        IntM = p_data.calib.K_cam2
+        IntM = p_data.calib.K_cam2.copy()
     elif mode == "right":
         raw_img_size = p_data.get_cam3(0).size
-        IntM = p_data.calib.K_cam3
+        IntM = p_data.calib.K_cam3.copy()
 
     width = int( raw_img_size[0] )
     height = int( raw_img_size[1])
@@ -160,7 +175,6 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
         IntM = camera_intrinsics
         focal_length = pixel_width / width * focal_length
         width, height = pixel_width, pixel_height
-
 
     # In scanenet dataset, the depth is perperdicular z, not ray distance #
     pixel_to_ray_array = View.normalised_pixel_to_ray_array(\
@@ -217,31 +231,49 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
     name_contents = sceneName.split('_')
     date = name_contents[0] + '_' + name_contents[1] + '_' + name_contents[2]
     drive = name_contents[4]
-    p_data_full = pykitti.raw(basedir, date, drive)
-    nimg = len(p_data_full)
     #print("Loaded Scene: " + str(sceneName))
 
-    #
-    # assume: the depth frames for one traj. is always nimg - 10 (ignoring the first and last 5 frames)
-    fsize = t_win*2 + 1
-    p_data = pykitti.raw(basedir, date, drive, frames= range(0, nimg-0))
+    # Load Type (Need a better check for this)
+    try:
+        p_data_full = pykitti.raw(basedir, date, drive)
+        mode = "kitti"
+    except:
+        p_data_full = ilim(basedir, date, drive)
+        mode = "ilim"
 
-    nimg = len(p_data)
-    dmap_paths = [[],[]]
+    # Kitti
+    if mode == "kitti":
 
-    poses = []
-    for i_img in range(nimg):
-        left_imgname = p_data.cam2_files[i_img].split('/')[-1]
-        right_imgname = p_data.cam3_files[i_img].split('/')[-1]
-        poses.append( p_data.oxts[i_img].T_w_imu)
-        left_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_02/%s'%( database_path_base, mode, sceneName, left_imgname)
-        right_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_03/%s' % (database_path_base, mode, sceneName, right_imgname)
-        dmap_paths[0].append(left_dmap_file)
-        dmap_paths[1].append(right_dmap_file)
+        # assume: the depth frames for one traj. is always nimg - 10 (ignoring the first and last 5 frames)
+        nimg = len(p_data_full)
+        fsize = t_win*2 + 1
+        p_data = pykitti.raw(basedir, date, drive, frames= range(0, nimg-0))
 
-    intrin_path = 'NOT NEEDED'
-    return n_traj, p_data, dmap_paths, poses, intrin_path
+        nimg = len(p_data)
+        dmap_paths = [[],[]]
 
+        poses = []
+        for i_img in range(nimg):
+            left_imgname = p_data.cam2_files[i_img].split('/')[-1]
+            right_imgname = p_data.cam3_files[i_img].split('/')[-1]
+            poses.append( p_data.oxts[i_img].T_w_imu)
+            left_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_02/%s'%( database_path_base, mode, sceneName, left_imgname)
+            right_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_03/%s' % (database_path_base, mode, sceneName, right_imgname)
+            dmap_paths[0].append(left_dmap_file)
+            dmap_paths[1].append(right_dmap_file)
+
+        intrin_path = 'NOT NEEDED'
+        setattr(p_data, 'mode', 'kitti')
+        setattr(p_data, 'scene_name', sceneName)
+        return n_traj, p_data, dmap_paths, poses, intrin_path
+
+    # ILIM
+    elif mode == "ilim":
+        p_data = p_data_full
+        setattr(p_data, 'mode', 'ilim')
+        setattr(p_data, 'scene_name', sceneName)
+        return n_traj, p_data, [], [], ''
+        
 def _read_left_img(p_data, indx, img_size = None, no_process= False, only_resize = False):
     '''
     Read image and process
@@ -339,9 +371,6 @@ class KITTI_dataset(data.Dataset):
 
         '''
 
-        assert len(p_data) == len(dmap_seq_paths[0]) == len(poses)
-        assert len(p_data) == len(dmap_seq_paths[1]) == len(poses)
-
         if crop_w is not None:
             assert (img_size[0] - crop_w )%2 ==0 and crop_w%4 ==0
             assert resize_dmap is not None
@@ -366,11 +395,9 @@ class KITTI_dataset(data.Dataset):
             self.label_min = 0
             self.label_max = len(d_candi) - 1
 
-        # usample in the d dimension #
         self.dup4_candi = d_candi_up
         self.dup4_label_min = 0
         self.dup4_label_max = len(self.dup4_candi) -1
-        ##
 
         self.resize_dmap = resize_dmap
 
@@ -382,12 +409,14 @@ class KITTI_dataset(data.Dataset):
             self.crop_amt = [self.img_size[0]/self.crop_w, 1.]
             if self.crop_amt[0] != 2: raise Exception('Check this')
 
-        # initialization about the camera intrsinsics, which is the same for all data #
-        if crop_w is None:
+        self.setup_instrinsics()
+
+    def setup_instrinsics(self):
+        if self.crop_w is None:
             left_cam_intrinsics = self.get_cam_intrinsics(None, "left")
             right_cam_intrinsics = self.get_cam_intrinsics(None, "right")
         else:
-            width_ = int(crop_w * self.resize_dmap)
+            width_ = int(self.crop_w * self.resize_dmap)
             height_ = int(float( self.img_size[1] * self.resize_dmap))
             img_size_ = np.array([width_, height_], dtype=int)
             left_cam_intrinsics = self.get_cam_intrinsics(img_size = img_size_ , mode = "left", crop_amt = self.crop_amt)
@@ -412,7 +441,6 @@ class KITTI_dataset(data.Dataset):
                 height = int(float( self.img_size[1] * self.resize_dmap))
 
         cam_intrinsics = _read_IntM_from_pdata( self.p_data, out_size = [width, height], mode = mode, crop_amt = crop_amt)
-        #self.cam_intrinsics = cam_intrinsics
 
         return cam_intrinsics
 
@@ -575,32 +603,6 @@ class KITTI_dataset(data.Dataset):
             dmap_raw_bilinear_dw = dmap_raw_bilinear_dw * dmap_mask.squeeze().type_as(dmap_raw)
             dmap_imgsize = dmap_imgsize * dmap_mask_imgsize.squeeze().type_as(dmap_imgsize)
 
-            # # Test
-            # # Do a test
-            # for r in range(0, dmap_imgsize.shape[0], 4):
-            #     for c in range(0, dmap_imgsize.shape[1], 4):
-            #         if self.pytorch_scaling:
-            #             larged = dmap_imgsize[r, c]
-            #         else:
-            #             larged = dmap_imgsize[r+4-2, c+4-2]
-            #         smalld = dmap_rawsize[r / 4, c / 4]
-            #         if self.pytorch_scaling:
-            #             largemask = dmap_mask_imgsize[0, r, c]
-            #         else:
-            #             largemask = dmap_mask_imgsize[0, r+4-2, c+4-2]
-            #         smallmask = dmap_mask[0, r / 4, c / 4]
-            #
-            #         err = larged - smalld
-            #         if (err > 0.001):
-            #             print(r, c)
-            #         if(largemask != smallmask):
-            #             print(r,c)
-            #         if smalld == 0 and smallmask == True:
-            #             print("errorsmall")
-            #         if larged == 0 and largemask == True:
-            #             print("errorlarge")
-            # stop
-
             # Digitize
             if self.digitize:
                 # digitize the depth map #
@@ -703,8 +705,6 @@ class KITTI_dataset(data.Dataset):
             traceback.print_exc()
             return {"success": False}
 
-        #return left_item
-
     def __len__(self):
         return len(self.p_data)
 
@@ -715,7 +715,8 @@ class KITTI_dataset(data.Dataset):
         dmap_seq_paths - list of dmaps, returned by get_paths()
         poses - list of posesc
         '''
+        print("Loaded: " + str(p_data.scene_name))
         self.p_data = p_data
         self.dmap_seq_paths = dmap_seq_paths
         self.poses = poses
-
+        self.setup_instrinsics()
