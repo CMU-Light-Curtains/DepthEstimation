@@ -36,7 +36,7 @@ import random
 __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
         'std': [0.229, 0.224, 0.225]}
 
-class ilim:
+class ilim_module:
     """Load and parse raw data into a usable format."""
 
     def __init__(self, base_path, date, drive, **kwargs):
@@ -50,6 +50,57 @@ class ilim:
     def __len__(self):
         """Return the number of frames loaded."""
         return self.N
+
+class kitti_module(pykitti.raw):
+    """Load and parse raw data into a usable format."""
+
+    def __init__(self, base_path, date, drive, **kwargs):
+        super(kitti_module, self).__init__(base_path, date, drive, **kwargs)
+
+    def get_lidar_files(self):
+        return self.velo_files
+
+    def get_leftcam_files(self):
+        return self.cam2_files
+
+    def get_rightcam_files(self):
+        return self.cam3_files
+
+    def get_lidar_2_leftcam(self):
+        return self.calib.T_cam2_velo
+
+    def get_lidar_2_rightcam(self):
+        return self.calib.T_cam3_velo
+
+    def get_imu_2_leftcam(self):
+        return self.calib.T_cam2_imu
+
+    def get_imu_2_rightcam(self):
+        return self.calib.T_cam3_imu
+
+    def get_left_img(self, indx):
+        return self.get_cam2(indx)
+
+    def get_right_img(self, indx):
+        return self.get_cam3(indx)
+
+    def get_lidar(self, indx):
+        return self.get_velo(indx)
+
+    def get_left_K(self):
+        return self.calib.K_cam2
+
+    def get_right_K(self):
+        return self.calib.K_cam3
+
+    def get_left_size(self):
+        return self.get_cam2(0).size
+
+    def get_right_size(self):
+        return self.get_cam3(0).size
+
+    def get_pose(self, indx):
+        return self.oxts[indx].T_w_imu
 
 def normalize_intensity( normalize_paras_):
     '''
@@ -144,11 +195,11 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
     IntM = np.zeros((4,4))
 
     if mode == "left":
-        raw_img_size = p_data.get_cam2(0).size
-        IntM = p_data.calib.K_cam2.copy()
+        raw_img_size = p_data.get_left_size()
+        IntM = p_data.get_left_K().copy()
     elif mode == "right":
-        raw_img_size = p_data.get_cam3(0).size
-        IntM = p_data.calib.K_cam3.copy()
+        raw_img_size = p_data.get_right_size()
+        IntM = p_data.get_right_K().copy()
 
     width = int( raw_img_size[0] )
     height = int( raw_img_size[1])
@@ -235,10 +286,10 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
 
     # Load Type (Need a better check for this)
     try:
-        p_data_full = pykitti.raw(basedir, date, drive)
+        p_data_full = kitti_module(basedir, date, drive)
         mode = "kitti"
     except:
-        p_data_full = ilim(basedir, date, drive)
+        p_data_full = ilim_module(basedir, date, drive)
         mode = "ilim"
 
     # Kitti
@@ -247,22 +298,16 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
         # assume: the depth frames for one traj. is always nimg - 10 (ignoring the first and last 5 frames)
         nimg = len(p_data_full)
         fsize = t_win*2 + 1
-        p_data = pykitti.raw(basedir, date, drive, frames= range(0, nimg-0))
+        p_data = kitti_module(basedir, date, drive, frames= range(0, nimg-0))
 
         nimg = len(p_data)
         dmap_paths = [[],[]]
 
         poses = []
         for i_img in range(nimg):
-            left_imgname = p_data.cam2_files[i_img].split('/')[-1]
-            right_imgname = p_data.cam3_files[i_img].split('/')[-1]
-            poses.append( p_data.oxts[i_img].T_w_imu)
-            left_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_02/%s'%( database_path_base, mode, sceneName, left_imgname)
-            right_dmap_file = '%s/%s/%s/proj_depth/groundtruth/image_03/%s' % (database_path_base, mode, sceneName, right_imgname)
-            dmap_paths[0].append(left_dmap_file)
-            dmap_paths[1].append(right_dmap_file)
+            poses.append(p_data.get_pose(i_img))
 
-        intrin_path = 'NOT NEEDED'
+        intrin_path = ''
         setattr(p_data, 'mode', 'kitti')
         setattr(p_data, 'scene_name', sceneName)
         return n_traj, p_data, dmap_paths, poses, intrin_path
@@ -280,14 +325,14 @@ def _read_left_img(p_data, indx, img_size = None, no_process= False, only_resize
     '''
     proc_img = get_transform()
     if no_process:
-        img = p_data.get_cam2(indx)
+        img = p_data.get_left_img(indx)
         width, height = img.size
     else:
         if img_size is not None:
-            img = p_data.get_cam2(indx)
+            img = p_data.get_left_img(indx)
             img = img.resize( img_size, PIL.Image.BICUBIC )
         else:
-            img = p_data.get_cam2(indx)
+            img = p_data.get_left_img(indx)
 
         width, height = img.size
         if not only_resize:
@@ -302,14 +347,14 @@ def _read_right_img(p_data, indx, img_size = None, no_process= False, only_resiz
     '''
     proc_img = get_transform()
     if no_process:
-        img = p_data.get_cam3(indx)
+        img = p_data.get_right_img(indx)
         width, height = img.size
     else:
         if img_size is not None:
-            img = p_data.get_cam3(indx)
+            img = p_data.get_right_img(indx)
             img = img.resize( img_size, PIL.Image.BICUBIC )
         else:
-            img = p_data.get_cam3(indx)
+            img = p_data.get_right_img(indx)
 
         width, height = img.size
         if not only_resize:
@@ -448,10 +493,11 @@ class KITTI_dataset(data.Dataset):
         self.counter += 1
         pass
 
-        if mode == "left":
-            dmap_path = self.dmap_seq_paths[0][indx]
-        elif mode == "right":
-            dmap_path = self.dmap_seq_paths[1][indx]
+        if not self.velodyne_depth:
+            if mode == "left":
+                dmap_path = self.dmap_seq_paths[0][indx]
+            elif mode == "right":
+                dmap_path = self.dmap_seq_paths[1][indx]
 
         proc_normalize = get_transform()
         proc_totensor = to_tensor()
@@ -460,22 +506,22 @@ class KITTI_dataset(data.Dataset):
         intr_raw = None
         raw_img_size = None #[1226, 370]
         if mode == "left":
-            M_imu2cam = self.p_data.calib.T_cam2_imu
-            M_velo2cam = self.p_data.calib.T_cam2_velo
-            intr_raw = self.p_data.calib.K_cam2
-            raw_img_size = self.p_data.get_cam2(0).size
+            M_imu2cam = self.p_data.get_imu_2_leftcam()
+            M_velo2cam = self.p_data.get_lidar_2_leftcam()
+            intr_raw = self.p_data.get_left_K()
+            raw_img_size = self.p_data.get_left_size()
         elif mode == "right":
-            M_imu2cam = self.p_data.calib.T_cam3_imu
-            M_velo2cam = self.p_data.calib.T_cam3_velo
-            intr_raw = self.p_data.calib.K_cam3
-            raw_img_size = self.p_data.get_cam3(0).size
+            M_imu2cam = self.p_data.get_imu_2_rightcam()
+            M_velo2cam = self.p_data.get_lidar_2_rightcam()
+            intr_raw = self.p_data.get_right_K()
+            raw_img_size = self.p_data.get_right_size()
 
         # Velodyne or Depth Load
         if self.velodyne_depth:
-            if indx >= len(self.p_data.velo_files):
-                str = "Index accessed wrongly: " + str(indx) + " " + str(len(self.p_data.velo_files))
+            if indx >= len(self.p_data.get_lidar_files()):
+                str = "Index accessed wrongly: " + str(indx) + " " + str(len(self.p_data.get_lidar_files()))
                 raise Exception(str)
-            velodata = self.p_data.get_velo(indx) # [N x 4] [We could clean up the low intensity ones here!]
+            velodata = self.p_data.get_lidar(indx) # [N x 4] [We could clean up the low intensity ones here!]
             intr_raw_append = np.append(intr_raw, np.array([[0, 0, 0]]).T, axis=1)
             velodata[:,3] = 1.
             dmap_raw = None
@@ -668,9 +714,9 @@ class KITTI_dataset(data.Dataset):
         # image path #
         scene_path = self.p_data.calib_path
         if mode == "left":
-            img_path = self.p_data.cam2_files[indx]
+            img_path = self.p_data.get_leftcam_files()[indx]
         elif mode == "right":
-            img_path = self.p_data.cam3_files[indx]
+            img_path = self.p_data.get_rightcam_files()[indx]
 
         return {'img': img.unsqueeze_(0),
                 'img_dw': img_dw.unsqueeze_(0),
@@ -697,7 +743,7 @@ class KITTI_dataset(data.Dataset):
         try:
             left_item = self.generate_item(indx, "left")
             right_item = self.generate_item(indx, "right")
-            T_left2right = np.dot(self.p_data.calib.T_cam3_imu, np.linalg.inv(self.p_data.calib.T_cam2_imu))
+            T_left2right = np.dot(self.p_data.get_imu_2_rightcam(), np.linalg.inv(self.p_data.get_imu_2_leftcam()))
 
             return {"left_camera": left_item, "right_camera": right_item, "T_left2right": T_left2right, "success": True}
         except:
