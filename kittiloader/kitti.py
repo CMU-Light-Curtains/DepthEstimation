@@ -27,6 +27,7 @@ import torch.utils.data as data
 import torchvision.transforms as tfv_transform
 import external.utils_lib.utils_lib as kittiutils
 import utils.img_utils as util
+import json
 
 import warping.view as View
 
@@ -41,15 +42,77 @@ class ilim_module:
 
     def __init__(self, base_path, date, drive, **kwargs):
         """Set the path and pre-load calibration data and timestamps."""
-        self.dataset = kwargs.get('dataset', 'sync')
+        self.dataset = kwargs.get('dataset', 'ilim')
         self.drive = date + '_drive_' + drive + '_' + self.dataset
         self.calib_path = os.path.join(base_path, date)
         self.data_path = os.path.join(base_path, date, self.drive)
-        self.N = len(os.listdir(self.data_path + "/left_img/data"))
+        self.leftcam_files = os.listdir(self.data_path + "/left_img")
+        self.rightcam_files = os.listdir(self.data_path + "/right_img")
+        self.lidar_files = os.listdir(self.data_path + "/lidar")
+        self.N = len(self.leftcam_files)
+        self.calib = json.load(open(self.data_path + "/calib.json"))
+
+        self.lidar_2_left = np.linalg.inv(np.array(self.calib["left_2_lidar"]))
+        self.left_2_right = np.array(self.calib["left_2_right"])
+        self.lidar_2_right = np.dot(self.left_2_right, self.lidar_2_left)
+        self.left_K = np.array(self.calib["left_P"])[0:3, 0:3]
+        self.right_K = np.array(self.calib["right_P"])[0:3, 0:3]
 
     def __len__(self):
         """Return the number of frames loaded."""
         return self.N
+
+    def get_lidar_files(self):
+        return self.lidar_files
+
+    def get_leftcam_files(self):
+        return self.leftcam_files
+
+    def get_rightcam_files(self):
+        return self.rightcam_files
+
+    def get_lidar_2_leftcam(self):
+        return self.lidar_2_left
+
+    def get_lidar_2_rightcam(self):
+        return self.lidar_2_right
+
+    def get_leftcam_2_rightcam(self):
+        return self.left_2_right
+
+    def get_imu_2_leftcam(self):
+        return np.eye(4)
+
+    def get_imu_2_rightcam(self):
+        return np.eye(4)
+
+    def get_left_img(self, indx):
+        index_str = "%06d" % (indx,)
+        return PIL.Image.open(self.data_path + "/left_img/" + index_str + ".png")
+
+    def get_right_img(self, indx):
+        index_str = "%06d" % (indx,)
+        return PIL.Image.open(self.data_path + "/right_img/" + index_str + ".png")
+
+    def get_lidar(self, indx):
+        index_str = "%06d" % (indx,)
+        lidarpoints = np.fromfile(self.data_path + "/lidar/" + index_str + ".bin", dtype=np.float32).reshape((-1, 4))
+        return lidarpoints
+
+    def get_left_K(self):
+        return self.left_K
+
+    def get_right_K(self):
+        return self.right_K
+
+    def get_left_size(self):
+        return self.get_left_img(0).size
+
+    def get_right_size(self):
+        return self.get_right_img(0).size
+
+    def get_pose(self, indx):
+        return np.eye(4)
 
 class kitti_module(pykitti.raw):
     """Load and parse raw data into a usable format."""
@@ -77,6 +140,9 @@ class kitti_module(pykitti.raw):
 
     def get_imu_2_rightcam(self):
         return self.calib.T_cam3_imu
+
+    def get_leftcam_2_rightcam(self):
+        return np.dot(self.get_imu_2_rightcam(), np.linalg.inv(self.get_imu_2_leftcam()))
 
     def get_left_img(self, indx):
         return self.get_cam2(indx)
@@ -282,13 +348,14 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
     name_contents = sceneName.split('_')
     date = name_contents[0] + '_' + name_contents[1] + '_' + name_contents[2]
     drive = name_contents[4]
+    dataset = name_contents[5]
     #print("Loaded Scene: " + str(sceneName))
 
     # Load Type (Need a better check for this)
-    try:
+    if dataset == "sync":
         p_data_full = kitti_module(basedir, date, drive)
         mode = "kitti"
-    except:
+    elif dataset == "ilim":
         p_data_full = ilim_module(basedir, date, drive)
         mode = "ilim"
 
@@ -453,6 +520,8 @@ class KITTI_dataset(data.Dataset):
         if crop_w is not None:
             self.crop_amt = [self.img_size[0]/self.crop_w, 1.]
             if self.crop_amt[0] != 2: raise Exception('Check this')
+        else:
+            self.crop_amt = [1., 1.]
 
         self.setup_instrinsics()
 
@@ -710,7 +779,10 @@ class KITTI_dataset(data.Dataset):
                                     :, :, side_crop: (dmap_mask_imgsize.shape[-1] - side_crop)]
 
         # Read Params
-        extM = np.matmul(M_imu2cam, np.linalg.inv(self.poses[indx]))
+        if len(self.poses):
+            extM = np.matmul(M_imu2cam, np.linalg.inv(self.poses[indx]))
+        else:
+            extM = np.eye(4)
         # image path #
         scene_path = self.p_data.calib_path
         if mode == "left":
@@ -743,7 +815,7 @@ class KITTI_dataset(data.Dataset):
         try:
             left_item = self.generate_item(indx, "left")
             right_item = self.generate_item(indx, "right")
-            T_left2right = np.dot(self.p_data.get_imu_2_rightcam(), np.linalg.inv(self.p_data.get_imu_2_leftcam()))
+            T_left2right = self.p_data.get_leftcam_2_rightcam()
 
             return {"left_camera": left_item, "right_camera": right_item, "T_left2right": T_left2right, "success": True}
         except:
@@ -765,4 +837,19 @@ class KITTI_dataset(data.Dataset):
         self.p_data = p_data
         self.dmap_seq_paths = dmap_seq_paths
         self.poses = poses
-        self.setup_instrinsics()
+
+        # # Hardcode test (If doing both at once?)
+        # if p_data.mode == "kitti":
+        #     self.img_size = [768, 256]
+        #     self.crop_w = 384
+        # elif p_data.mode == "ilim":
+        #     self.img_size = [384, 256]
+        #     self.crop_w = None
+
+        # if self.crop_w is not None:
+        #     self.crop_amt = [self.img_size[0]/self.crop_w, 1.]
+        #     if self.crop_amt[0] != 2: raise Exception('Check this')
+        # else:
+        #     self.crop_amt = [1., 1.]
+
+        # self.setup_instrinsics()

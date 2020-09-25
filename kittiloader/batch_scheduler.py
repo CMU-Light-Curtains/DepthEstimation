@@ -357,9 +357,6 @@ class BatchSchedulerMP:
         traj_Indx = np.arange(0, n_scenes)
         fldr_path, img_paths, dmap_paths, poses, intrin_path = fun_get_paths(0)
 
-        #print(len(dmap_paths))
-        #stop
-
         dataset = dataset_init(True, img_paths, dmap_paths, poses,
                                intrin_path=intrin_path, img_size=img_size, digitize=True,
                                d_candi=d_candi, d_candi_up=d_candi_up, resize_dmap=.25,
@@ -470,25 +467,33 @@ if __name__ == "__main__":
     testing_inputs = {
         "pytorch_scaling": True,
         "velodyne_depth": True,
-        "dataset_path": "/media/raaj/Storage/kitti/",
-        "split_path": "./kittiloader/k1/",
-        # "dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
-        # "split_path": "./kittiloader/k2/",
+        #"dataset_path": "/media/raaj/Storage/kitti/",
+        #"split_path": "./kittiloader/k1/",
+        #"dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
+        #"split_path": "./kittiloader/k2/",
+        "dataset_path": "/media/raaj/Storage/ilim/",
+        "split_path": "./kittiloader/ilim/",
         "total_processes": 1,
         "process_num": 0,
         "t_win_r": 1,
-        "img_size": [768, 256],
-        "crop_w": 384,
+        "img_size": [384, 256],
+        "crop_w": None,
         "d_candi": d_candi,
         "d_candi_up": d_candi_up,
         "dataset_name": "kitti",
         "hack_num": 0,
-        "batch_size": 2,
+        "batch_size": 1,
         "n_epoch": 1,
         "qmax": 1,
         "mode": "train",
         "cfg": cfg
     }
+
+    # Viz
+    from external.perception_lib import viewer
+    viz = None
+    viz = viewer.Visualizer("V")
+    viz.start()
 
     # Add feature to control lidar params
 
@@ -526,8 +531,6 @@ if __name__ == "__main__":
 
             model_input, gt_input = generate_stereo_input(0, local_info, cfg)
 
-
-
             end = time.time()
             print(end-start)
 
@@ -537,7 +540,7 @@ if __name__ == "__main__":
             
             """
 
-            b=1
+            b=0
             left_model_input, left_gt_input = generate_model_input(0, local_info, cfg, camside="left")
             right_model_input, right_gt_input = generate_model_input(0, local_info, cfg, camside="right")
             data = dict()
@@ -550,14 +553,12 @@ if __name__ == "__main__":
             intrins = local_info["left_cam_intrins"][b]["intrinsic_M_cuda"]*4
             intrins[2,2] = 1.
             data["intrins"] = intrins
-            np.save("datapoint.npy", data)
-            stop
+            #np.save("datapoint.npy", data)
+            #stop
 
             # Print
             print('video batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
                   % (batch_idx + 1, batch_length, 0, frame_count + 1, frame_length, iepoch + 1, 0, 0))
-
-            time.sleep(1)
 
             # # Test Stop
             # counter += 1
@@ -565,6 +566,27 @@ if __name__ == "__main__":
             #     bs.stop()
             #     early_stop = True
 
+            model_input = left_model_input
+            gt_input = left_gt_input
+            for b in range(0, gt_input["masks"].shape[0]):
+                mask = gt_input["masks"][b, :, :, :]
+                mask_refined = gt_input["masks_imgsizes"][b, :, :, :]
+                depth_truth = gt_input["dmaps"][b, :, :].unsqueeze(0)
+                depth_refined_truth = gt_input["dmap_imgsizes"][b, :, :].unsqueeze(0)
+                intr = model_input["intrinsics"][b, :, :]
+                intr_refined = model_input["intrinsics_up"][b, :, :]
+                img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
+                img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
+                dpv_refined_truth = gt_input["soft_labels_imgsize"][b].unsqueeze(0)
+                if b==0:
+                    rgb_img = img_utils.torchrgb_to_cv2(img_utils.demean(img_refined))
+                    depth_img = depth_refined_truth.squeeze(0).cpu().numpy()/100
+                    rgb_img[:, :, 2] += (depth_img > 0)
+                    cv2.imshow("depth", rgb_img)
+                    cv2.waitKey(1)
+                    cloud_refined_truth = img_utils.tocloud(depth_refined_truth, img_utils.demean(img_refined), intr_refined)
+                    viz.addCloud(cloud_refined_truth, 1)
+                    
             # # Visualize
             global_item = []
             for b in range(0, len(local_info["src_dats"])):
@@ -572,11 +594,18 @@ if __name__ == "__main__":
                 for i in range(0, len(local_info["src_dats"][b])):
                     if i > 1: continue
                     batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
+                    break
+                for i in range(0, len(local_info["src_dats"][b])):
+                    if i > 1: continue
+                    batch_item.append(local_info["src_dats"][b][i]["right_camera"]["img"])
+                    break
                 batch_item = torch.cat(batch_item, dim = 3)
                 global_item.append(batch_item)
             global_item = torch.cat(global_item, dim=2)
             cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
-            cv2.waitKey(15)
+            cv2.waitKey(1)
+            
+            viz.swapBuffer()
 
     print("Ended")
 
