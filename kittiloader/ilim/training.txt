@@ -49,7 +49,6 @@
 2020_09_17_drive_0023_ilim
 2020_09_17_drive_0014_ilim
 2020_09_17_drive_0013_ilim
-2020_09_08_drive_0005_ilim
 2020_09_17_drive_0008_ilim
 2020_09_08_drive_0003_ilim
 2020_09_17_drive_0000_ilim
