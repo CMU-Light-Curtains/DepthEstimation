@@ -10,8 +10,8 @@
   "var": {
     "sigma_soft_max": 10.0,
     "t_win": 1,
-    "d_min": 2.0,
-    "d_max": 37.0,
+    "d_min": 3.0,
+    "d_max": 38.0,
     "feature_dim": 64,
     "ndepth": 64,
     "softce": 0.3,
@@ -21,7 +21,7 @@
     "crop_w": null,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "default",
+    "nmode": "exp7",
     "bn_avg": true
   },
   "lidar": {
