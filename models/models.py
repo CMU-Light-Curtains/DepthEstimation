@@ -659,12 +659,12 @@ class BaseModel(nn.Module):
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
             # [B,128,256,384]
 
-            # LC
-            if lc is not None:
-                BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
-                #self.lc_process(BV_downsampled, model_input, lc, "low", 5)
-                self.lc_process(BV_cur_refined, model_input, lc, "high", 5)
-                pass
+            # # LC
+            # if lc is not None:
+            #     BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
+            #     #self.lc_process(BV_downsampled, model_input, lc, "low", 5)
+            #     self.lc_process(BV_cur_refined, model_input, lc, "high", 10, viz=True, score=True)
+            #     pass
 
             return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
@@ -921,8 +921,9 @@ class BaseModel(nn.Module):
 
         pass
 
-    def lc_process(self, BV_cur, model_input, lc, mode="low", iterations=5, viz=False):
+    def lc_process(self, BV_cur_all, model_input, lc, mode="low", iterations=5, viz=False, score=False):
         # Iterate each batch
+        final_fused = []
         for b in range(0, model_input["dmaps"].shape[0]):
             if mode == "high":
                 intr = model_input["intrinsics_up"][b, :, :]
@@ -940,11 +941,12 @@ class BaseModel(nn.Module):
             true_depth = dmap.squeeze(0).cpu().numpy()
 
             # DPV Truth
-            if viz:
-                true_dpv = img_utils.gen_dpv_withmask(dmap, mask*0+1, lc.d_candi, 0.3)
-                unc_field_truth, _ = img_utils.gen_ufield(true_dpv, lc.d_candi, intr.squeeze(0), BV_log=False)
+            if viz or score:
+                true_dpv = img_utils.gen_dpv_withmask(dmap, mask, lc.d_candi, 0.3)
+                unc_field_truth, _ = img_utils.gen_ufield(true_dpv, lc.d_candi, intr.squeeze(0), BV_log=False, cfg=self.cfg)
 
             # Upsample
+            BV_cur = BV_cur_all[b, :, :, :].unsqueeze(0)
             final = BV_cur.detach().clone()
             if final.shape[1] != lc.expand_A:
                 final = img_utils.upsample_dpv(final, N=lc.expand_A, BV_log=True)
@@ -952,16 +954,23 @@ class BaseModel(nn.Module):
             # Simulate a mid point spread start
             #final = torch.log(img_utils.gen_dpv_withmask(model_input["dmaps"]*0+20, model_input["masks"]*0+1, lc.d_candi, 6.0))
 
+            # Fake the mean dist with some initial dist to see performance
+
             # Bayesian Iterations
             for i in range(0, iterations):
 
                 # Generate UField
-                unc_field_predicted, _ = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True)
+                unc_field_predicted, _ = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True, cfg=self.cfg)
+
+                # Score
+                if score:
+                    unc_score = img_utils.compute_unc_rmse(unc_field_truth, unc_field_predicted, lc.d_candi)
+                    print(unc_score)
 
                 # Plan
                 if mode == "high":
-                    #lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                    lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
+                    lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
+                    #lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
                 elif mode == "low":
                     #lc_paths, field_visual = lc.plan_default_low(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
                     lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), {"step": 5})
@@ -995,7 +1004,7 @@ class BaseModel(nn.Module):
                 curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
                 # Spread
-                for i in range(0, 1):
+                for i in range(0, 2):
                     curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
 
                 # Keep Renormalize
@@ -1011,8 +1020,10 @@ class BaseModel(nn.Module):
 
             if final.shape[1] != BV_cur.shape[1]:
                 final = img_utils.upsample_dpv(final, N=BV_cur.shape[1], BV_log=True)
-            return final
+            final_fused.append(final)
 
+        return torch.cat(final_fused, dim=0)
+        
     def forward(self, inputs, lc=None):
         outputs = []
         for input in inputs:

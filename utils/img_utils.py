@@ -199,6 +199,22 @@ def convert_flowfield(flowfield):
 #     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
 #     return tofuse_dpv
 
+def compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined, cfg):
+    unc_field_truth, _ = gen_ufield(dpv_refined_truth, d_candi, intr_refined.squeeze(0), BV_log=False, mask=mask_refined, cfg=cfg)
+    unc_field_predicted, debugmap = gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), BV_log=True, cfg=cfg)
+    return unc_field_truth, unc_field_predicted, debugmap
+
+def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi):
+    # Get Depth comparison
+    unc_field_truth_depth = dpv_to_depthmap(unc_field_truth.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
+    unc_field_predicted_depth = dpv_to_depthmap(unc_field_predicted.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
+    unc_field_predicted_depth[0] = 0
+    unc_field_predicted_depth[-1] = 0
+    unc_field_mask = ~torch.isnan(unc_field_truth_depth) & ~torch.isnan(unc_field_predicted_depth)
+    unc_field_truth_depth[~unc_field_mask] = 0.
+    unc_field_predicted_depth[~unc_field_mask] = 0.
+    unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
+    return unc_field_rmse
 
 spread_kernel = None
 def spread_dpv_hack(dpv, N=5):
@@ -209,11 +225,9 @@ def spread_dpv_hack(dpv, N=5):
     if spread_kernel is None:
         kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
         kernel[int(N / 2), :] = 1.
-        print(kernel)
         # kernel[2,2] = 1.
         kernel = kernel.unsqueeze(0).unsqueeze(0)
         kernel = kernel.repeat((1, 1, 1, 1))
-        print(kernel.shape)
         kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
         spread_kernel = kernel.copy()
 
@@ -236,9 +250,21 @@ def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
         dpv_refined_predicted = torch.log(dpv_refined_predicted)
     return dpv_refined_predicted
 
-def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None):
+def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None):
+    if "kitti" in cfg.data.dataset_path:
+        pshift = 5
+        zstart = 0.6
+        zend = zstart + 0.3
+        maxd = 100.
+        mind = 0.
+    elif "ilim" in cfg.data.dataset_path:
+        pshift = 0
+        zstart = 1.3
+        zend = zstart + 0.3
+        maxd = 100.
+        mind = 3.
+
     # Generate Shiftmap
-    pshift = 5
     flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
     flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
     flowfield[:, :, :, 1] = pshift
@@ -252,12 +278,12 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     depthmap_predicted = dpv_to_depthmap(dpv_predicted, d_candi, BV_log=BV_log)
 
     # Get Mask for Pts within Y range
-    maxd = 100. # This is bad as i dont want zero regions. so i max it out now
+     # This is bad as i dont want zero regions. so i max it out now
     pts_shifted = depth_to_pts(depthmap_shifted, intr_up)
     #zero_mask = (~((pts_shifted[1,:,:] > 1.4) | (pts_shifted[1,:,:] < -1.0))).float()
     #zero_mask = (~((pts_shifted[1, :, :] > 1.3) | (pts_shifted[1, :, :] < 1.0))).float()
     # (~((pts_shifted[1, :, :] > 1.0) | (pts_shifted[1, :, :] < 0.5)
-    zero_mask = (~((pts_shifted[1, :, :] > 0.9) | (pts_shifted[1, :, :] < 0.6) | (pts_shifted[2, :, :] > maxd-1))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
+    zero_mask = (~((pts_shifted[1, :, :] > zend) | (pts_shifted[1, :, :] < zstart) | (pts_shifted[2, :, :] > maxd-1) | (pts_shifted[2, :, :] < mind))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
     if mask is not None:
         mask_shifted = F.grid_sample(mask.unsqueeze(1), flowfield, mode='nearest').squeeze(1)
         zero_mask = zero_mask * mask_shifted.squeeze(0)

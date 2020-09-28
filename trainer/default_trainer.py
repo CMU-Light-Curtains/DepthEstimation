@@ -261,8 +261,8 @@ class DefaultTrainer(BaseTrainer):
                 intr_refined = model_input_left["intrinsics_up"][b, :, :]
 
                 # Unc Field
-                unc_field_truth, unc_field_predicted, debugmap = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined)
-                unc_field_rmse = self.compute_unc_rmse(unc_field_truth, unc_field_predicted)
+                unc_field_truth, unc_field_predicted, debugmap = img_utils.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined, self.cfg)
+                unc_field_rmse = img_utils.compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi)
                 
                 # Eval
                 depth_truth_eval = depth_truth.clone()
@@ -342,144 +342,25 @@ class DefaultTrainer(BaseTrainer):
         return error_list, error_keys
 
     def lc_process(self, model_input, gt_input, output):
+
         # Eval
-        for b in range(0, output["output"][-1].shape[0]):
-            dpv_predicted = output["output"][-1][b, :, :, :].unsqueeze(0)
-            dpv_refined_predicted = output["output_refined"][-1][b, :, :, :].unsqueeze(0)
-            depth_predicted = img_utils.dpv_to_depthmap(dpv_predicted, self.d_candi, BV_log=True)
-            depth_refined_predicted = img_utils.dpv_to_depthmap(dpv_refined_predicted, self.d_candi, BV_log=True)
-            mask = gt_input["masks"][b, :, :, :]
-            mask_refined = gt_input["masks_imgsizes"][b, :, :, :]
-            depth_truth = gt_input["dmaps"][b, :, :].unsqueeze(0)
-            depth_refined_truth = gt_input["dmap_imgsizes"][b, :, :].unsqueeze(0)
-            intr = model_input["intrinsics"][b, :, :]
-            intr_refined = model_input["intrinsics_up"][b, :, :]
-            img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
-            img = F.interpolate(img_refined.unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)
-            d_candi = model_input["d_candi"]
-            dpv_refined_truth = gt_input["soft_labels_imgsize"][b].unsqueeze(0)
+        BV_cur = output["output"][-1]
+        BV_cur_refined = output["output_refined"][-1]
+        final = self.model.module.lc_process(BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=True, score=True)
+        print(final.shape)
 
-            # Eval
-            tophalf_refined = torch.ones(depth_refined_predicted.shape).bool().to(depth_refined_predicted.device)
-            tophalf_refined[:, 0:int(tophalf_refined.shape[1] / 2), :] = False
-            depth_truth_eval = depth_truth.clone()
-            depth_truth_eval[depth_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
-            depth_refined_truth_eval = depth_refined_truth.clone()
-            depth_refined_truth_eval[depth_refined_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
-            depthmap_truth_refined_np = depth_refined_truth_eval.squeeze(0).cpu().numpy()
-            depthmap_truth_np = depth_truth_eval.squeeze(0).cpu().numpy()
-
-            # Upsample DPV
-            dpv_refined_predicted = img_utils.upsample_dpv(dpv_refined_predicted, N=self.lc.expand_A, BV_log=True)
-            dpv_refined_truth = img_utils.upsample_dpv(dpv_refined_truth, N=self.lc.expand_A, BV_log=False)
-
-            # Unc Field
-            unc_field_truth, unc_field_predicted, debugmap = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, self.lc.d_candi, intr_refined, mask_refined)
-            # if self.viz is not None:
-            #     import cv2
-            #     cv2.imshow("field_visual_refined", field_visual_refined)
-            #     cv2.waitKey(0)            
-
-            # Fake Depth
-            scaler=4
-            depth_smaller = img_utils.minpool(depth_refined_truth_eval, scaler, 1000)
-            depth_larger = F.interpolate(depth_smaller.unsqueeze(0), scale_factor=scaler, mode='nearest').squeeze(0).squeeze(0).cpu().numpy()
-
-            # Loop
-            import cv2
-            final = dpv_refined_predicted.clone()
-            final_depth = img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True)
-            for i in range(0, 15):
-                start = time.time()
-                unc_field_predicted, debugmap = img_utils.gen_ufield(final, self.lc.d_candi, intr_refined.squeeze(0), BV_log=True)
-                print("gen_ufield: " + str(time.time()-start))
-
-                # Error
-                unce_rmse = self.compute_unc_rmse(unc_field_truth, unc_field_predicted)
-                print(unce_rmse)
-
-                # Plan
-                start = time.time()
-                lc_paths_refined, field_visual_refined = self.lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                #lc_paths_refined, field_visual_refined = self.lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
-                field_visual_refined[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
-                print("plan: " + str(time.time()-start))
-                cv2.imshow("field_visual_fusion", field_visual_refined)
-                #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                cv2.waitKey(1)
-
-                # Sensing High
-                lc_DPVs = []
-                for lc_path in lc_paths_refined:
-                    lc_DPV, _, _ = self.lc.sense_high(depth_larger, lc_path, True)
-                    lc_DPVs.append(lc_DPV)
-
-                # Keep Renormalize
-                curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
-
-                # Test
-                curr_dist_log = torch.log(curr_dist)
-                for lcdpv in lc_DPVs:
-                    lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
-                    curr_dist_log += torch.log(lcdpv)
-                curr_dist = torch.exp(curr_dist_log)
-                curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
-
-                # Respread?
-                start = time.time()
-                for i in range(0, 1):
-                    curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
-                #print("spread: " + str(time.time()-start))
-
-                # Log it
-                final = torch.log(curr_dist)
-                final_depth = img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True)
-
-                # # UField High
-                # final_ufield, _ = img_utils.gen_ufield(final, d_candi, intr_refined.squeeze(0))
-                # _, field_visual_final = self.lc.plan_empty_high(final_ufield.squeeze(0), {})
-                # cv2.imshow("field_visual_final", field_visual_final)
-                # cv2.waitKey(0)
-
-                # 3D
-                #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, self.lc.d_candi, BV_log=True), img_utils.demean(img_refined), intr_refined), 1)
-                #self.viz.swapBuffer()
-
-
-            # # # Save to Disk
-            # # todisk = copy.copy(lc_params)
-            # # todisk["dpv_refined_predicted"] = dpv_refined_predicted
-            # # todisk["img_refined"] = img_refined
-            # # todisk["depth_refined_truth_eval"] = depth_refined_truth_eval
-            # # todisk["depth_refined_predicted"] = depth_refined_predicted
-            # # todisk["depthmap_truth_np"] = depthmap_truth_np
-            # # todisk["depthmap_truth_refined_np"] = depthmap_truth_refined_np
-            # # todisk["d_candi"] = d_candi
-            # # todisk["intr_refined"] = intr_refined
-            # # np.save("test.npy", todisk)
-            # # stop
-
-
-    def compute_unc_field(self, dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined):
-        # UField Display
-        unc_field_truth, _ = img_utils.gen_ufield(dpv_refined_truth, d_candi, intr_refined.squeeze(0), BV_log=False, mask=mask_refined)
-
-        # UField
-        unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), BV_log=True)
-        
-        return unc_field_truth, unc_field_predicted, debugmap
-
-    def compute_unc_rmse(self, unc_field_truth, unc_field_predicted):
-        # Get Depth comparison
-        unc_field_truth_depth = img_utils.dpv_to_depthmap(unc_field_truth.unsqueeze(2), self.d_candi, BV_log=False).squeeze(0).squeeze(0)
-        unc_field_predicted_depth = img_utils.dpv_to_depthmap(unc_field_predicted.unsqueeze(2), self.d_candi, BV_log=False).squeeze(0).squeeze(0)
-        unc_field_predicted_depth[0] = 0
-        unc_field_predicted_depth[-1] = 0
-        unc_field_mask = ~torch.isnan(unc_field_truth_depth) & ~torch.isnan(unc_field_predicted_depth)
-        unc_field_truth_depth[~unc_field_mask] = 0.
-        unc_field_predicted_depth[~unc_field_mask] = 0.
-        unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
-        return unc_field_rmse
+        # # # Save to Disk
+        # # todisk = copy.copy(lc_params)
+        # # todisk["dpv_refined_predicted"] = dpv_refined_predicted
+        # # todisk["img_refined"] = img_refined
+        # # todisk["depth_refined_truth_eval"] = depth_refined_truth_eval
+        # # todisk["depth_refined_predicted"] = depth_refined_predicted
+        # # todisk["depthmap_truth_np"] = depthmap_truth_np
+        # # todisk["depthmap_truth_refined_np"] = depthmap_truth_refined_np
+        # # todisk["d_candi"] = d_candi
+        # # todisk["intr_refined"] = intr_refined
+        # # np.save("test.npy", todisk)
+        # # stop
 
     def visualize(self, model_input, gt_input, output):
         import cv2
@@ -525,7 +406,7 @@ class DefaultTrainer(BaseTrainer):
             img_color_low = img_utils.torchrgb_to_cv2(img)
 
             # UField Display
-            unc_field_truth, unc_field_predicted, debugmap = self.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined)
+            unc_field_truth, unc_field_predicted, debugmap = img_utils.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined, self.cfg)
 
             # Display
             img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
@@ -538,8 +419,8 @@ class DefaultTrainer(BaseTrainer):
             img_depth_low = cv2.cvtColor(depth_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             truth_depth = cv2.cvtColor(depth_refined_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
             truth_depth_low = cv2.cvtColor(depth_truth_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
-            combined_low = np.hstack([img_color_low, img_depth_low])
-            combined = np.hstack([img_color, img_depth])
+            combined_low = np.hstack([img_color_low, img_depth_low, truth_depth_low])
+            combined = np.hstack([img_color, img_depth, truth_depth])
             #combined = np.hstack([img_color, truth_depth])
             #combined_low = np.hstack([img_color_low, truth_depth_low])
             cv2.imshow("combined", combined)
