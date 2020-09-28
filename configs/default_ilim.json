@@ -10,8 +10,8 @@
   "var": {
     "sigma_soft_max": 10.0,
     "t_win": 1,
-    "d_min": 5.0,
-    "d_max": 40.0,
+    "d_min": 2.0,
+    "d_max": 37.0,
     "feature_dim": 64,
     "ndepth": 64,
     "softce": 0.3,
