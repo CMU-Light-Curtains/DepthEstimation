@@ -452,7 +452,7 @@ class LightCurtain:
         pts_planned_all = []
         # THIS Z VAL NEEDS TO BE BASED ON D_CANDI!!!
         #stop
-        for z in np.arange(10, 35, cfg["step"]):
+        for z in np.arange(cfg["start"], cfg["end"], cfg["step"]):
             pts_planned = self.get_flat(z)
             pts_planned_all.append(pts_planned)
 

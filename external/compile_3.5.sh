@@ -24,7 +24,7 @@ cd ..; cd ..
 cd lcsim
 git submodule init
 git submodule update
-git checkout c7d70e2
+git checkout raaj_temp
 rm -rf build; mkdir build; cd build;
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j4

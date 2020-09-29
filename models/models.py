@@ -921,9 +921,10 @@ class BaseModel(nn.Module):
 
         pass
 
-    def lc_process(self, BV_cur_all, model_input, lc, mode="low", iterations=5, viz=False, score=False):
+    def lc_process(self, BV_cur_all, model_input, lc, mode="low", iterations=5, viz=False, score=False, planner="default", params=None):
         # Iterate each batch
         final_fused = []
+        unc_scores_all = []
         for b in range(0, model_input["dmaps"].shape[0]):
             if mode == "high":
                 intr = model_input["intrinsics_up"][b, :, :]
@@ -957,6 +958,7 @@ class BaseModel(nn.Module):
             # Fake the mean dist with some initial dist to see performance
 
             # Bayesian Iterations
+            unc_scores = []
             for i in range(0, iterations):
 
                 # Generate UField
@@ -965,15 +967,21 @@ class BaseModel(nn.Module):
                 # Score
                 if score:
                     unc_score = img_utils.compute_unc_rmse(unc_field_truth, unc_field_predicted, lc.d_candi)
-                    print(unc_score)
+                    unc_scores.append(unc_score.item())
 
                 # Plan
                 if mode == "high":
-                    lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                    #lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), {"step": 5})
+                    if planner == "default":
+                        lc_paths, field_visual = lc.plan_default_high(unc_field_predicted.squeeze(0), params)
+                    elif planner == "m1":
+                        lc_paths, field_visual = lc.plan_m1_high(unc_field_predicted.squeeze(0), params)
+                    elif planner == "sweep":
+                        lc_paths, field_visual = lc.plan_sweep_high(unc_field_predicted.squeeze(0), params)
                 elif mode == "low":
-                    #lc_paths, field_visual = lc.plan_default_low(unc_field_predicted.squeeze(0), {"step": [0.25, 0.5, 0.75]})
-                    lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), {"step": 5})
+                    if planner == "default":
+                        lc_paths, field_visual = lc.plan_default_low(unc_field_predicted.squeeze(0), params)
+                    elif planner == "m1":
+                        lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), params)
 
                 # # Viz
                 if viz:
@@ -995,13 +1003,26 @@ class BaseModel(nn.Module):
                 # Keep Renormalize
                 curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
 
+                # # Update
+                # curr_dist_log = torch.log(curr_dist)
+                # for lcdpv in lc_DPVs:
+                #     lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
+                #     curr_dist_log += torch.log(lcdpv)
+                # curr_dist = torch.exp(curr_dist_log)
+                # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
                 # Update
-                curr_dist_log = torch.log(curr_dist)
                 for lcdpv in lc_DPVs:
                     lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
-                    curr_dist_log += torch.log(lcdpv)
-                curr_dist = torch.exp(curr_dist_log)
-                curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+                    curr_dist = curr_dist * lcdpv
+                    curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
+                # #curr_dist = torch.exp(curr_dist_log)
+                # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+                # unc_field_lcdpv, _ = img_utils.gen_ufield(curr_dist, lc.d_candi, intr.squeeze(0), BV_log=False, cfg=self.cfg)
+                # _, unc_field_lcdpv = lc.plan_empty_high(unc_field_lcdpv.squeeze(0), {})
+                # cv2.imshow("faggot2", unc_field_lcdpv)
+                # cv2.waitKey(0)
 
                 # Spread
                 for i in range(0, 2):
@@ -1021,8 +1042,9 @@ class BaseModel(nn.Module):
             if final.shape[1] != BV_cur.shape[1]:
                 final = img_utils.upsample_dpv(final, N=BV_cur.shape[1], BV_log=True)
             final_fused.append(final)
+            unc_scores_all.append(unc_scores)
 
-        return torch.cat(final_fused, dim=0)
+        return torch.cat(final_fused, dim=0), unc_scores_all
         
     def forward(self, inputs, lc=None):
         outputs = []

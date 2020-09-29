@@ -214,6 +214,14 @@ def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi):
     unc_field_truth_depth[~unc_field_mask] = 0.
     unc_field_predicted_depth[~unc_field_mask] = 0.
     unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
+    unc_field_rmse = torch.sum(torch.abs(unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask))/torch.sum(unc_field_mask)
+    # import matplotlib.pyplot as plt
+    # # Plot
+    # plt.ion()
+    # plt.cla()
+    # plt.plot((unc_field_truth_depth*unc_field_mask).cpu().numpy())
+    # plt.plot((unc_field_predicted_depth*unc_field_mask).cpu().numpy())
+    # plt.pause(0.1)
     return unc_field_rmse
 
 spread_kernel = None

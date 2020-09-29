@@ -13,6 +13,7 @@ from kittiloader import batch_scheduler
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
@@ -81,6 +82,7 @@ class DefaultTrainer(BaseTrainer):
         if self.cfg.lc.enabled:
             from lc import light_curtain
             self.lc = light_curtain.LightCurtain()
+            self.lc_results = dict()
 
         # Viz
         self.model.module.set_viz(self.viz)
@@ -346,8 +348,64 @@ class DefaultTrainer(BaseTrainer):
         # Eval
         BV_cur = output["output"][-1]
         BV_cur_refined = output["output_refined"][-1]
-        final = self.model.module.lc_process(BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=True, score=True)
-        print(final.shape)
+        plots = dict()
+
+        def handle_results(results, exp_name):
+            if exp_name in self.lc_results:
+                self.lc_results[exp_name].extend(unc_scores_all_default)
+            else:
+                self.lc_results[exp_name] = unc_scores_all_default
+            if len(self.lc_results[exp_name]) > 5:
+                print(np.array(self.lc_results[exp_name]).shape)
+                results = np.mean(np.array(self.lc_results[exp_name]), axis=0)
+                plots[exp_name] = results
+
+        # Exp
+        exp_name = "default_high_all"
+        final, unc_scores_all_default = self.model.module.lc_process(
+            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=True, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
+        )
+        handle_results(unc_scores_all_default, exp_name)
+        # Exp
+        for i in range(1,6):
+            exp_name = "default_m1_" + str(i)
+            final, unc_scores_all_default = self.model.module.lc_process(
+                BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="m1", params={"step": i}
+            )
+            handle_results(unc_scores_all_default, exp_name)
+
+        # Plot
+        if len(plots):
+            plt.ion()
+            plt.cla()
+            for key in plots.keys():
+                pass
+                plt.plot(plots[key], label=key)
+            plt.legend()
+            plt.pause(10)
+        
+
+        # final, unc_scores_all_m1 = self.model.module.lc_process(
+        #     BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="m1", params={"step": 5}
+        # )
+        # final, unc_scores_all_sweep = self.model.module.lc_process(
+        #     BV_cur_refined, model_input, self.lc, mode="high", iterations=2, viz=False, score=True, planner="sweep", params={"start": 5, "end": 35, "step": 0.5}
+        # )
+
+        # plt.ion()
+        # plt.cla()
+        # exps = [[0.25], [0.5], [0.75]]
+        # for exp in exps:
+        #     final, unc_scores_all_default = self.model.module.lc_process(
+        #         BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="default", params={"step": exp}
+        #     )
+        #     plt.plot(unc_scores_all_default[0], '--bo')
+        # for i in range(0, 5):
+        #     final, unc_scores_all_m1 = self.model.module.lc_process(
+        #         BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="m1", params={"step": i}
+        #     )
+        #     plt.plot(unc_scores_all_m1[0])
+        # plt.pause(0.1)
 
         # # # Save to Disk
         # # todisk = copy.copy(lc_params)

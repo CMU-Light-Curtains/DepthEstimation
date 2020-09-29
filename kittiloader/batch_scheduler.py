@@ -122,6 +122,7 @@ def generate_stereo_input(id, local_info_valid, cfg, camside = "left"):
         "masks": masks,
         "d_candi": d_candi,
         "d_candi_up": d_candi_up,
+        "dmaps_up": dmap_imgsizes
     }
 
     gt_input = {
@@ -256,6 +257,7 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "masks": masks,
         "d_candi": d_candi,
         "d_candi_up": d_candi_up,
+        "dmaps_up": dmap_imgsizes
     }
 
     gt_input = {
