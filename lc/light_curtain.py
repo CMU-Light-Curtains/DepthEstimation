@@ -368,6 +368,7 @@ class LightCurtain:
         #     [0, 0, 1]
         # ])
         # PARAMS['size_lc'] = [int(512*LC_SCALE), int(640*LC_SCALE)]
+        # PARAMS['dist_lc'] = [-0.033918, 0.027494, -0.001691, -0.001078, 0.000000]
         # PARAMS['lTc'] = np.linalg.inv(np.array([
         #        [9.9999867e-01,   1.6338158e-03,   1.2624934e-06,  -1.9989257e-01],
         #        [-1.6338158e-03,   9.9999747e-01,   1.5454519e-03,   0.0000000e+00],
@@ -683,8 +684,10 @@ class LightCurtain:
         field_preprocessed = F.conv2d(field_preprocessed.unsqueeze(0).unsqueeze(0), **mean_kernel).squeeze(0).squeeze(0)
 
         # Transform RGB to LC
+        #cv2.imshow("A", field_preprocessed.cpu().numpy()*100)
         if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
             field_preprocessed = fw.transformZTheta(field_preprocessed, self.d_candi_up, self.d_candi_up, "transform_" + kw)
+        #cv2.imshow("B", field_preprocessed.cpu().numpy()*100)
 
         # Normalize 0 to 1
         field_preprocessed = normalize(field_preprocessed.unsqueeze(0)).squeeze(0)
@@ -844,8 +847,16 @@ class LightCurtain:
             depth_lc, _, _ = pylc.transformPoints(pts_rgb, thick_rgb, self.PARAMS['intr_lc'], self.PARAMS['cTr'],
                                                   self.PARAMS['size_lc'][0], self.PARAMS['size_lc'][1],
                                                   uniform_params)
+
+            # # Pool Depth
+            # pool_val = 2
+            # depth_lc = img_utils.minpool(torch.Tensor(depth_lc).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
+            # depth_lc = cv2.resize(depth_lc, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
         else:
             depth_lc = depth_rgb
+
+        # cv2.imshow("depth_rgb", depth_rgb/100.)
+        # cv2.imshow("depth_lc", depth_lc/100.)
 
         # Sense
         output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
@@ -866,8 +877,93 @@ class LightCurtain:
             depth_sensed = output_lc[:, :, 2]
             thickness_sensed = thickness_lc
 
+        # depth_lc_x = output_lc[:, :, 2]
+        # depth_rgb_x = depth_sensed
+        # cv2.imshow("depth_rgb_x", depth_rgb_x/100.)
+        # cv2.imshow("depth_lc_x", depth_lc_x/100.)
+
         # Transfer to CUDA (How to know device?)
         mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
+        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
+        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+
+        # Compute DPV
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / 10.) ** 2
+        A = mapping(int_img)
+        # Try fucking with 1 in the 1-A value
+        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+
+        # Save information at pixel wanted
+        pixel_wanted = [150, 66]
+        debug_data = dict()
+        # debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["thickness_sensed"] = thickness_sensed[pixel_wanted[0], pixel_wanted[1]]
+        # debug_data["dist"] = DPV[:, pixel_wanted[0], pixel_wanted[1]].cpu().numpy()
+
+        # Generate XYZ version for viz
+        output_rgb = None
+        if visualizer:
+            pts_sensed = img_utils.depth_to_pts(depth_sensed.unsqueeze(0), self.PARAMS['intr_rgb']).cpu()
+            output_rgb = np.zeros((depth_sensed.shape[0], depth_sensed.shape[1], 4)).astype(np.float32)
+            output_rgb[:, :, 0] = pts_sensed[0, :, :]
+            output_rgb[:, :, 1] = pts_sensed[1, :, :]
+            output_rgb[:, :, 2] = pts_sensed[2, :, :]
+            output_rgb[:, :, 3] = int_sensed.cpu()
+            output_rgb[np.isnan(output_rgb[:, :, 0])] = 0
+
+        return DPV, output_rgb, debug_data
+
+        # Generate XYZ version for viz
+        # pts_sensed = util.depth_to_pts(torch.Tensor(depth_sensed).unsqueeze(0), self.PARAMS['intr_rgb'])
+        # output_rgb = np.zeros(output_lc.shape).astype(np.float32)
+        # output_rgb[:, :, 0] = pts_sensed[0, :, :]
+        # output_rgb[:, :, 1] = pts_sensed[1, :, :]
+        # output_rgb[:, :, 2] = pts_sensed[2, :, :]
+        # output_rgb[:, :, 3] = int_sensed
+
+        # cv2.imshow("depth_rgb", depth_rgb / 100.)
+        # cv2.imshow("depth_lc", depth_lc / 100.)
+        # cv2.imshow("depth_sensed_orig", output_lc[:,:,2] / 100.)
+        # cv2.imshow("int_sensed_orig", output_lc[:, :, 3] / 255.)
+        # cv2.imshow("depth_sensed", depth_sensed/100.)
+        # cv2.imshow("int_sensed", int_sensed/255.)
+        # cv2.waitKey(0)
+
+    def sense_real(self, depth_rgb, design_pts_lc, visualizer=None):
+        start = time.time()
+        depth_lc = depth_rgb
+
+        # Sense (Replace with Real Sensor)
+        output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
+        output_lc[np.isnan(output_lc[:, :, 0])] = 0
+        thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+
+        # Warp output to RGB frame
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
+            pts = output_lc.reshape((output_lc.shape[0] * output_lc.shape[1], 4))
+            thickness = thickness_lc.flatten()
+            depth_sensed, int_sensed, thickness_sensed = pylc.transformPoints(pts, thickness, self.PARAMS['intr_rgb'],
+                                                                              self.PARAMS['rTc'],
+                                                                              self.PARAMS['size_rgb'][0],
+                                                                              self.PARAMS['size_rgb'][1],
+                                                                              {"filtering": 0})
+        else:
+            int_sensed = output_lc[:, :, 3]
+            depth_sensed = output_lc[:, :, 2]
+            thickness_sensed = thickness_lc
+
+        # depth_lc_x = output_lc[:, :, 2]
+        # depth_rgb_x = depth_sensed
+        # cv2.imshow("depth_rgb_x", depth_rgb_x/100.)
+        # cv2.imshow("depth_lc_x", depth_lc_x/100.)
+
+        # Transfer to CUDA (How to know device?)
+        mask_sense = torch.tensor(depth_sensed > 0).float().cuda()
         depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
         thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
         int_sensed = torch.tensor(int_sensed).cuda() * mask_sense

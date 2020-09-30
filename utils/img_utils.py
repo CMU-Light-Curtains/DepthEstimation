@@ -177,7 +177,7 @@ def tocloud(depth, rgb, intr, extr=None, rgbr=None):
     return all_together
 
 def convert_flowfield(flowfield):
-    yv, xv = torch.meshgrid([torch.arange(0, flowfield.shape[1]).float().cuda(), torch.arange(0, flowfield.shape[2]).float().cuda()])
+    yv, xv = torch.meshgrid([torch.arange(0, flowfield.shape[1]).float().to(flowfield.device), torch.arange(0, flowfield.shape[2]).float().to(flowfield.device)])
     ystep = 2. / float(flowfield.shape[1] - 1)
     xstep = 2. / float(flowfield.shape[2] - 1)
     flowfield[0, :, :, 0] = -1 + xv * xstep - flowfield[0, :, :, 0] * xstep
@@ -259,22 +259,29 @@ def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
     return dpv_refined_predicted
 
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None):
-    if "kitti" in cfg.data.dataset_path:
-        pshift = 5
-        zstart = 0.6
-        zend = zstart + 0.3
-        maxd = 100.
-        mind = 0.
-    elif "ilim" in cfg.data.dataset_path:
+    if cfg is None:
         pshift = 0
-        zstart = 1.3
+        zstart = 0.4
         zend = zstart + 0.3
         maxd = 100.
         mind = 3.
+    else:
+        if "kitti" in cfg.data.dataset_path:
+            pshift = 5
+            zstart = 0.6
+            zend = zstart + 0.3
+            maxd = 100.
+            mind = 0.
+        elif "ilim" in cfg.data.dataset_path:
+            pshift = 0
+            zstart = 1.3
+            zend = zstart + 0.3
+            maxd = 100.
+            mind = 3.
 
     # Generate Shiftmap
-    flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
-    flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().cuda()
+    flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
+    flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
     flowfield[:, :, :, 1] = pshift
     flowfield_inv[:, :, :, 1] = -pshift
     convert_flowfield(flowfield)
