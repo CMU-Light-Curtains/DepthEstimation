@@ -886,11 +886,11 @@ class BaseModel(nn.Module):
             # Decoder
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
-            # LC
-            if lc is not None:
-                self.lc_process(BV_cur, model_input, lc, mode="low", viz=True)
-                #self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=True, iterations=5)
-                pass
+            # # LC
+            # if lc is not None:
+            #     self.lc_process(BV_cur, model_input, lc, mode="low", viz=True)
+            #     #self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=True, iterations=5)
+            #     pass
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
@@ -931,6 +931,11 @@ class BaseModel(nn.Module):
                 dmap = F.interpolate(model_input["dmaps"][b,:,:].unsqueeze(0).unsqueeze(0), scale_factor=4, mode='nearest').squeeze(0)
                 mask = F.interpolate(model_input["masks"][b,:,:,:].unsqueeze(0), scale_factor=4, mode='nearest')
                 img = model_input["rgb"][b, -1, :, :, :]
+
+                # # Special case for ilim due to higher res lidar
+                # if "ilim" in self.cfg.data.exp_name:
+                #     dmap = model_input["dmaps_up"][b,:,:].unsqueeze(0)
+
             elif mode == "low":
                 intr = model_input["intrinsics"][b, :, :]
                 dmap = model_input["dmaps"][b,:,:].unsqueeze(0)
@@ -983,14 +988,6 @@ class BaseModel(nn.Module):
                     elif planner == "m1":
                         lc_paths, field_visual = lc.plan_m1_low(unc_field_predicted.squeeze(0), params)
 
-                # # Viz
-                if viz:
-                    import cv2
-                    field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
-                    cv2.imshow("field_visual", field_visual)
-                    #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                    cv2.waitKey(0)
-
                 # Sensing
                 lc_DPVs = []
                 for lc_path in lc_paths:
@@ -999,6 +996,20 @@ class BaseModel(nn.Module):
                     elif mode == "low":
                         lc_DPV, _ = lc.sense_low(true_depth, lc_path, True)
                     lc_DPVs.append(lc_DPV)
+
+                # 3D
+                if viz:
+                    if self.viz is not None:
+                        self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 3)
+                        self.viz.swapBuffer()
+
+                # # Viz
+                if viz:
+                    import cv2
+                    field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
+                    cv2.imshow("field_visual", field_visual)
+                    #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
+                    cv2.waitKey(0)
 
                 # Keep Renormalize
                 curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
@@ -1033,11 +1044,6 @@ class BaseModel(nn.Module):
 
                 # Back to Log space
                 final = torch.log(curr_dist)
-
-                # 3D
-                if self.viz is not None:
-                    self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 3)
-                    self.viz.swapBuffer()
 
             if final.shape[1] != BV_cur.shape[1]:
                 final = img_utils.upsample_dpv(final, N=BV_cur.shape[1], BV_log=True)

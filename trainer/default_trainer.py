@@ -363,7 +363,7 @@ class DefaultTrainer(BaseTrainer):
         # Exp
         exp_name = "default_high_all"
         final, unc_scores_all_default = self.model.module.lc_process(
-            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=True, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
+            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
         )
         handle_results(unc_scores_all_default, exp_name)
         # Exp

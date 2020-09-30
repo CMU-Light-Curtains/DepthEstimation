@@ -272,12 +272,12 @@ class LightCurtain:
         LASER_PARAMS_LARGE = {
             'lTc': PARAMS["lTc"],
             'fov': PARAMS["laser_fov"],
-            'laser_timestep': 1.5e-5
+            'laser_timestep': PARAMS['laser_timestep']
         }
         LASER_PARAMS_SMALL = {
             'lTc': PARAMS["lTc"],
             'fov': PARAMS["laser_fov"],
-            'laser_timestep': 1.5e-5 * 4
+            'laser_timestep': PARAMS['laser_timestep'] * 4
         }
         PARAMS["intr_rgb_small"] = img_utils.intr_scale_unit(PARAMS["intr_rgb"], 1 / 4.)
         PARAMS["intr_lc_small"] = img_utils.intr_scale_unit(PARAMS["intr_lc"], 1 / 4.)
@@ -342,6 +342,53 @@ class LightCurtain:
             "d_candi_up": model_input["d_candi_up"],
             "r_candi_up": model_input["d_candi_up"]
         }
+        PARAMS['laser_timestep'] = 2.5e-5
+
+        # PARAMS['intr_lc'] = np.array(
+        #     [[177.43524,   0.,      160.     ],
+        #     [  0.,      178.5432,  60.     ],
+        #     [  0.,        0.,        1.     ]]
+        # )
+        # PARAMS['size_lc'] = [320, 120]
+
+        # PARAMS['intr_lc'] = np.array(
+        #     [[177.43524,   0.,      60.     ],
+        #     [  0.,      178.5432,  160.     ],
+        #     [  0.,        0.,        1.     ]]
+        # )
+        # PARAMS['size_lc'] = [120, 320]
+
+        # # Real Sensor
+        # LC_SCALE = 0.625 # ilim
+        # # LC_SCALE = 1. # kitti
+        # PARAMS['laser_timestep'] = 2.5e-5 / LC_SCALE
+        # PARAMS['intr_lc'] = np.array([
+        #     [446.537*LC_SCALE, 0, 262.073*LC_SCALE],
+        #     [0, 446.589*LC_SCALE, 323.383*LC_SCALE],
+        #     [0, 0, 1]
+        # ])
+        # PARAMS['size_lc'] = [int(512*LC_SCALE), int(640*LC_SCALE)]
+        # PARAMS['lTc'] = np.linalg.inv(np.array([
+        #        [9.9999867e-01,   1.6338158e-03,   1.2624934e-06,  -1.9989257e-01],
+        #        [-1.6338158e-03,   9.9999747e-01,   1.5454519e-03,   0.0000000e+00],
+        #        [1.2624934e-06,  -1.5454519e-03,   9.9999881e-01,   1.4010292e-02],
+        #        [0.0000000e+00,   0.0000000e+00,   0.0000000e+00,   1.0000000e+00]
+        # ]))
+        # PARAMS['rTc'] = np.array([
+        #     [ 0.9999845,   0.00197387, -0.00520207,  0.08262175],
+        #     [-0.00208896,  0.9997511 , -0.0222123,  -0.0229844 ],
+        #     [ 0.00515693,  0.02222283,  0.99973977, -0.23375846],
+        #     [ 0.,          0.,          0.,          1.        ]
+        # ])
+
+        print(PARAMS['size_lc']) # 384, 480
+        print(PARAMS['size_rgb']) # 384, 256 or # 320, 256
+
+        """
+        Issue: The RGB camera is smaller than the Light Curtain image size
+
+        """
+
         return PARAMS
 
     def plan_default_high(self, field, cfg):
@@ -394,7 +441,7 @@ class LightCurtain:
         #field_preprocessed[50:55, :] = 1.
 
         # Warp from Z to theta
-        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+        field_preprocessed_range = fw.ztheta2zrange_output(field_preprocessed, self.d_candi_up, self.r_candi_up,
                                                           "z2rwarp_" + kw)
 
         fw.save_flowfields()
@@ -437,7 +484,7 @@ class LightCurtain:
         #field_preprocessed[50:55, :] = 1.
 
         # Warp from Z to theta
-        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+        field_preprocessed_range = fw.ztheta2zrange_output(field_preprocessed, self.d_candi_up, self.r_candi_up,
                                                           "z2rwarp_" + kw)
 
         fw.save_flowfields()
@@ -508,7 +555,7 @@ class LightCurtain:
         #field_preprocessed[50:55, :] = 1.
 
         # Warp from Z to theta
-        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+        field_preprocessed_range = fw.ztheta2zrange_output(field_preprocessed, self.d_candi_up, self.r_candi_up,
                                                           "z2rwarp_" + kw)
 
         fw.save_flowfields()
@@ -526,7 +573,7 @@ class LightCurtain:
         pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
 
         pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
-        field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 1, 0]
+        field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 1]
 
         # Try few times
         pts_planned_all = [pts_main]
@@ -553,7 +600,6 @@ class LightCurtain:
                 sampled = np.random.choice(ray_dist.shape[0], 1, p=ray_dist)
                 sampled_vals.append(sampled[0])
                 sampled_pts.append([c, sampled[0], 5.])
-                #cv2.circle(field_visual, (c, sampled[0]), 3, (255, 0, 255), -1)
 
             # Variance based? Compute var/mean for each ray then pick extent
 
@@ -565,8 +611,7 @@ class LightCurtain:
                             & (spline[:,1] >= 0) & (spline[:,1] < field_visual.shape[0])]
 
             # Draw Spline
-            #for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
-                #cv2.circle(field_visual, (spixel[0], spixel[1]), 1, (255, 0, 255), -1)
+            # for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
 
             # Create Empty Field
             empty_field = field_preprocessed_range_temp*0
@@ -587,6 +632,7 @@ class LightCurtain:
             empty_field = empty_field / np.sum(empty_field, axis=0)
             multiply = field_towork * empty_field
             field_towork = multiply / np.sum(multiply, axis=0)
+            field_towork[np.isnan(field_towork)] = 0.
 
             #end = time.time()
             #print(end-start)
@@ -645,7 +691,7 @@ class LightCurtain:
         field_preprocessed[torch.isnan(field_preprocessed)] = img_utils.epsilon
 
         # Warp from Z to theta
-        field_preprocessed_range = fw.ztheta2zrange_input(field_preprocessed, self.d_candi_up, self.r_candi_up,
+        field_preprocessed_range = fw.ztheta2zrange_output(field_preprocessed, self.d_candi_up, self.r_candi_up,
                                                           "z2rwarp_" + kw)
 
         # Main Field
@@ -690,6 +736,11 @@ class LightCurtain:
         fw.save_flowfields()
 
         #print("Plan: " + str(time.time() - start))
+        # cv2.imshow("field", field.cpu().numpy())
+        # cv2.imshow("field_preprocessed", field_preprocessed.cpu().numpy())
+        # cv2.imshow("field_visual", field_visual)
+        # cv2.waitKey(0)
+
         return all_pts, field_visual
 
     # def sense_low(self, np_depth_image, np_design_pts):
@@ -789,9 +840,10 @@ class LightCurtain:
             pts_rgb = torch.cat([pts_rgb, torch.ones(1, pts_rgb.shape[1])])
             pts_rgb = pts_rgb.numpy().T
             thick_rgb = np.ones((pts_rgb.shape[0], 1)).astype(np.float32)
+            uniform_params = {"filtering": 2}
             depth_lc, _, _ = pylc.transformPoints(pts_rgb, thick_rgb, self.PARAMS['intr_lc'], self.PARAMS['cTr'],
                                                   self.PARAMS['size_lc'][0], self.PARAMS['size_lc'][1],
-                                                  {"filtering": 2})
+                                                  uniform_params)
         else:
             depth_lc = depth_rgb
 
@@ -841,7 +893,7 @@ class LightCurtain:
         output_rgb = None
         if visualizer:
             pts_sensed = img_utils.depth_to_pts(depth_sensed.unsqueeze(0), self.PARAMS['intr_rgb']).cpu()
-            output_rgb = np.zeros(output_lc.shape).astype(np.float32)
+            output_rgb = np.zeros((depth_sensed.shape[0], depth_sensed.shape[1], 4)).astype(np.float32)
             output_rgb[:, :, 0] = pts_sensed[0, :, :]
             output_rgb[:, :, 1] = pts_sensed[1, :, :]
             output_rgb[:, :, 2] = pts_sensed[2, :, :]
