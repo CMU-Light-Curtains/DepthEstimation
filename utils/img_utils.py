@@ -52,14 +52,21 @@ def dpv_to_depthmap(dpv, d_candi, BV_log=False):
     if dpv.shape[0] != 1:
         raise Exception('Unable to handle this case')
 
-    depth_regress = torch.zeros(1, dpv.shape[2], dpv.shape[3]).to(dpv.device)
-    for idx_d, d in enumerate(d_candi):
-        if BV_log:
-            depth_regress = depth_regress + torch.exp(dpv[0,idx_d,:,:]) * d
-        else:
-            depth_regress = depth_regress + dpv[0,idx_d,:,:] * d
+    # depth_regress = torch.zeros(1, dpv.shape[2], dpv.shape[3]).to(dpv.device)
+    # for idx_d, d in enumerate(d_candi):
+    #     if BV_log:
+    #         depth_regress = depth_regress + torch.exp(dpv[0,idx_d,:,:]) * d
+    #     else:
+    #         depth_regress = depth_regress + dpv[0,idx_d,:,:] * d
 
-    return depth_regress
+    # #return depth_regress
+
+    z = dpv.squeeze(0)
+    if BV_log: z = torch.exp(z)
+    d_candi_expanded = torch.tensor(d_candi).unsqueeze(1).unsqueeze(1).float().to(z.device)
+    mean = torch.sum(d_candi_expanded * z, dim=0).unsqueeze(0)
+
+    return mean
 
 def demean(input):
     __imagenet_stats = {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}
@@ -225,23 +232,32 @@ def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi):
     return unc_field_rmse
 
 spread_kernel = None
+spread_conv = None
 def spread_dpv_hack(dpv, N=5):
     # torch.Size([128, 384])
     # torch.Size([1, 1, 5, 5])
     global spread_kernel
+    global spread_conv
     dpv_permuted = dpv.permute(0, 3, 2, 1)
+
     if spread_kernel is None:
         kernel = torch.Tensor(np.zeros((N, N)).astype(np.float32))
         kernel[int(N / 2), :] = 1.
         # kernel[2,2] = 1.
         kernel = kernel.unsqueeze(0).unsqueeze(0)
         kernel = kernel.repeat((1, 1, 1, 1))
-        kernel = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
-        spread_kernel = kernel.copy()
+        kernel_dict = {'weight': kernel.to(dpv_permuted.device), 'padding': N // 2}
+        spread_kernel = kernel_dict.copy()
+        spread_conv = torch.nn.Conv2d(in_channels=dpv_permuted.shape[1], out_channels=dpv_permuted.shape[1], groups=dpv_permuted.shape[1], kernel_size= (N,N), padding=N//2, bias=False).cuda()
+        spread_conv.weight.requires_grad = False
+        spread_conv.weight[:,:,:,:] = kernel
 
-    for b in range(0, dpv_permuted.shape[0]):
-        for c in range(0, dpv_permuted.shape[1]):
-            dpv_permuted[b,c,:,:] = F.conv2d(dpv_permuted[b,c].unsqueeze(0).unsqueeze(0), **spread_kernel).squeeze(0).squeeze(0)
+    # dpv_permuted_copy = dpv_permuted.clone()
+    # for b in range(0, dpv_permuted.shape[0]):
+    #     for c in range(0, dpv_permuted.shape[1]):
+    #         dpv_permuted[b,c,:,:] = F.conv2d(dpv_permuted[b,c].unsqueeze(0).unsqueeze(0), **spread_kernel).squeeze(0).squeeze(0)
+
+    dpv_permuted = spread_conv(dpv_permuted)
 
     dpv = dpv_permuted.permute(0, 3, 2, 1)
     tofuse_dpv = dpv / torch.sum(dpv, dim=1).unsqueeze(1)
@@ -280,20 +296,25 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
             mind = 3.
 
     # Generate Shiftmap
-    flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
-    flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
-    flowfield[:, :, :, 1] = pshift
-    flowfield_inv[:, :, :, 1] = -pshift
-    convert_flowfield(flowfield)
-    convert_flowfield(flowfield_inv)
+    if pshift != 0:
+        flowfield = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
+        flowfield_inv = torch.zeros((1, dpv_predicted.shape[2], dpv_predicted.shape[3], 2)).float().to(dpv_predicted.device)
+        flowfield[:, :, :, 1] = pshift
+        flowfield_inv[:, :, :, 1] = -pshift
+        convert_flowfield(flowfield)
+        convert_flowfield(flowfield_inv)
 
-    # Shift the DPV
-    dpv_shifted = F.grid_sample(dpv_predicted, flowfield, mode='nearest')
+        # Shift the DPV
+        dpv_shifted = F.grid_sample(dpv_predicted, flowfield, mode='nearest')
+    else:
+        dpv_shifted = dpv_predicted.clone()
+
+    # To Depthmap
     depthmap_shifted = dpv_to_depthmap(dpv_shifted, d_candi, BV_log=BV_log)
     depthmap_predicted = dpv_to_depthmap(dpv_predicted, d_candi, BV_log=BV_log)
 
     # Get Mask for Pts within Y range
-     # This is bad as i dont want zero regions. so i max it out now
+    # This is bad as i dont want zero regions. so i max it out now
     pts_shifted = depth_to_pts(depthmap_shifted, intr_up)
     #zero_mask = (~((pts_shifted[1,:,:] > 1.4) | (pts_shifted[1,:,:] < -1.0))).float()
     #zero_mask = (~((pts_shifted[1, :, :] > 1.3) | (pts_shifted[1, :, :] < 1.0))).float()
@@ -304,7 +325,10 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
         zero_mask = zero_mask * mask_shifted.squeeze(0)
 
     # Shift Mask
-    zero_mask_predicted = F.grid_sample(zero_mask.unsqueeze(0).unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0).squeeze(0)
+    if pshift != 0:
+        zero_mask_predicted = F.grid_sample(zero_mask.unsqueeze(0).unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0).squeeze(0)
+    else:
+        zero_mask_predicted = zero_mask.clone()
     depthmap_predicted_zero = depthmap_predicted * zero_mask_predicted
 
     # DPV Zero out and collapse

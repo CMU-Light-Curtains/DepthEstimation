@@ -2,6 +2,7 @@
 import numpy as np
 import time
 import sys
+import os
 
 import torch
 import torch.nn.functional as F
@@ -185,7 +186,8 @@ class FieldWarp:
         pass
 
     def load_flowfield(self):
-        import os
+        if len(self.flowfields.keys()):
+            return
         if os.path.isfile("lc_flowfields.npy") and os.access("lc_flowfields.npy", os.R_OK):
             self.flowfields = np.load("lc_flowfields.npy", allow_pickle=True).item()
 
@@ -938,12 +940,23 @@ class LightCurtain:
         start = time.time()
         depth_lc = depth_rgb
 
+        """
+        Can we speed up this processing somehow so it takes in multiple points?
+        No point optimizing for the get_return part
+
+        The Warping can be done with the warp tool? Or just do using openmp?
+        Warp tool too difficult due to scaling etc.
+        """
+
         # Sense (Replace with Real Sensor)
+        start = time.time()
         output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
         output_lc[np.isnan(output_lc[:, :, 0])] = 0
         thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+        time_sense = time.time() - start
 
         # Warp output to RGB frame
+        start = time.time()
         if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))):
             pts = output_lc.reshape((output_lc.shape[0] * output_lc.shape[1], 4))
             thickness = thickness_lc.flatten()
@@ -956,6 +969,7 @@ class LightCurtain:
             int_sensed = output_lc[:, :, 3]
             depth_sensed = output_lc[:, :, 2]
             thickness_sensed = thickness_lc
+        time_warp = time.time() - start
 
         # depth_lc_x = output_lc[:, :, 2]
         # depth_rgb_x = depth_sensed
@@ -963,6 +977,7 @@ class LightCurtain:
         # cv2.imshow("depth_lc_x", depth_lc_x/100.)
 
         # Transfer to CUDA (How to know device?)
+        start = time.time()
         mask_sense = torch.tensor(depth_sensed > 0).float().cuda()
         depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
         thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
@@ -975,10 +990,16 @@ class LightCurtain:
         A = mapping(int_img)
         # Try fucking with 1 in the 1-A value
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+        time_dpv = time.time() - start
+
+        # print("---")
+        # print(" time_sense: " + str(time_sense))
+        # print(" time_warp: " + str(time_warp))
+        # print(" time_dpv: " + str(time_dpv))
 
         # Save information at pixel wanted
-        pixel_wanted = [150, 66]
-        debug_data = dict()
+        # pixel_wanted = [150, 66]
+        # debug_data = dict()
         # debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
         # debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
         # debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
@@ -996,7 +1017,7 @@ class LightCurtain:
             output_rgb[:, :, 3] = int_sensed.cpu()
             output_rgb[np.isnan(output_rgb[:, :, 0])] = 0
 
-        return DPV, output_rgb, debug_data
+        return DPV, output_rgb, None
 
         # Generate XYZ version for viz
         # pts_sensed = util.depth_to_pts(torch.Tensor(depth_sensed).unsqueeze(0), self.PARAMS['intr_rgb'])
