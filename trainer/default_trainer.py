@@ -13,7 +13,6 @@ from kittiloader import batch_scheduler
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
-import matplotlib.pyplot as plt
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
@@ -344,6 +343,7 @@ class DefaultTrainer(BaseTrainer):
         return error_list, error_keys
 
     def lc_process(self, model_input, gt_input, output):
+        import matplotlib.pyplot as plt
 
         # Eval
         BV_cur = output["output"][-1]
