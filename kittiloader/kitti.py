@@ -295,10 +295,13 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
             width, height = pixel_width, pixel_height
     elif p_data.mode == "ilim":
         if out_size is not None:
-            xscale = float(out_size[0])/float(width)
-            yscale = float(out_size[1])/float(height)
+            pixel_width, pixel_height = out_size[0], out_size[1]
+            xscale = float(pixel_width)/float(width)
+            yscale = float(pixel_height)/float(height)
             IntM[0,:] *= xscale
             IntM[1,:] *= yscale
+            focal_length = xscale * focal_length
+            width, height = pixel_width, pixel_height
 
     # In scanenet dataset, the depth is perperdicular z, not ray distance #
     pixel_to_ray_array = View.normalised_pixel_to_ray_array(\
