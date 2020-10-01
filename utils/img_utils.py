@@ -321,7 +321,10 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     # (~((pts_shifted[1, :, :] > 1.0) | (pts_shifted[1, :, :] < 0.5)
     zero_mask = (~((pts_shifted[1, :, :] > zend) | (pts_shifted[1, :, :] < zstart) | (pts_shifted[2, :, :] > maxd-1) | (pts_shifted[2, :, :] < mind))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
     if mask is not None:
-        mask_shifted = F.grid_sample(mask.unsqueeze(1), flowfield, mode='nearest').squeeze(1)
+        if pshift != 0:
+            mask_shifted = F.grid_sample(mask.unsqueeze(1), flowfield, mode='nearest').squeeze(1)
+        else:
+            mask_shifted = mask.clone()
         zero_mask = zero_mask * mask_shifted.squeeze(0)
 
     # Shift Mask
