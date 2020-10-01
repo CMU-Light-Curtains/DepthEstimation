@@ -598,8 +598,8 @@ class KITTI_dataset(data.Dataset):
         # Velodyne or Depth Load
         if self.velodyne_depth:
             if indx >= len(self.p_data.get_lidar_files()):
-                str = "Index accessed wrongly: " + str(indx) + " " + str(len(self.p_data.get_lidar_files()))
-                raise Exception(str)
+                string = "Index accessed wrongly: " + str(indx) + " " + str(len(self.p_data.get_lidar_files()))
+                raise Exception(string)
             velodata = self.p_data.get_lidar(indx) # [N x 4] [We could clean up the low intensity ones here!]
             intr_raw_append = np.append(intr_raw, np.array([[0, 0, 0]]).T, axis=1)
             velodata[:,3] = 1.
