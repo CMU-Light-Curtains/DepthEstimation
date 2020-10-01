@@ -280,22 +280,29 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
     h_fov = math.degrees(math.atan(IntM[0, 2] / IntM[0, 0]) * 2)
     v_fov = math.degrees(math.atan(IntM[1, 2] / IntM[1, 1]) * 2)
 
-    if out_size is not None: # the depth map is re-scaled #
-        camera_intrinsics = np.zeros((3,4))
-        pixel_width, pixel_height = out_size[0], out_size[1]
-        camera_intrinsics[2,2] = 1.
-        camera_intrinsics[0,0] = (pixel_width/2.0)/math.tan(math.radians(h_fov/2.0))
-        camera_intrinsics[0,2] = pixel_width/2.0
-        camera_intrinsics[1,1] = (pixel_height/2.0)/math.tan(math.radians(v_fov/2.0))
-        camera_intrinsics[1,2] = pixel_height/2.0
+    if p_data.mode == "kitti":
+        if out_size is not None: # the depth map is re-scaled #
+            camera_intrinsics = np.zeros((3,4))
+            pixel_width, pixel_height = out_size[0], out_size[1]
+            camera_intrinsics[2,2] = 1.
+            camera_intrinsics[0,0] = (pixel_width/2.0)/math.tan(math.radians(h_fov/2.0))
+            camera_intrinsics[0,2] = pixel_width/2.0
+            camera_intrinsics[1,1] = (pixel_height/2.0)/math.tan(math.radians(v_fov/2.0))
+            camera_intrinsics[1,2] = pixel_height/2.0
 
-        IntM = camera_intrinsics
-        focal_length = pixel_width / width * focal_length
-        width, height = pixel_width, pixel_height
+            IntM = camera_intrinsics
+            focal_length = pixel_width / width * focal_length
+            width, height = pixel_width, pixel_height
+    elif p_data.mode == "ilim":
+        if out_size is not None:
+            xscale = float(out_size[0])/float(width)
+            yscale = float(out_size[1])/float(height)
+            IntM[0,:] *= xscale
+            IntM[1,:] *= yscale
 
     # In scanenet dataset, the depth is perperdicular z, not ray distance #
     pixel_to_ray_array = View.normalised_pixel_to_ray_array(\
-            width= width, height= height, hfov = h_fov, vfov = v_fov,
+            width= int(width), height= int(height), hfov = h_fov, vfov = v_fov,
             normalize_z = True)
 
     pixel_to_ray_array_2dM = np.reshape(np.transpose( pixel_to_ray_array, axes= [2,0,1] ), [3, -1])

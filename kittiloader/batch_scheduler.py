@@ -478,7 +478,7 @@ if __name__ == "__main__":
         "total_processes": 1,
         "process_num": 0,
         "t_win_r": 1,
-        "img_size": [384, 256],
+        "img_size": [320, 256],
         "crop_w": None,
         "d_candi": d_candi,
         "d_candi_up": d_candi_up,
