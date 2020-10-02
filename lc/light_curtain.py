@@ -508,7 +508,7 @@ class LightCurtain:
 
             # Draw
             pixels = np.array([np.digitize(pts_planned[:, 1], self.d_candi_up) - 1, range(0, pts_planned.shape[0])]).T
-            indices = (pixels[:,0] < 256) & (pixels[:,0] >= 0) & (pixels[:,1] >= 0) & (pixels[:,1] < 384)
+            indices = (pixels[:,0] < 256) & (pixels[:,0] >= 0) & (pixels[:,1] >= 0) & (pixels[:,1] < 320)
 
             # print(field_visual.shape)
             #
@@ -993,7 +993,7 @@ class LightCurtain:
 
         return DPVs
 
-    def sense_real(self, depth_lc, design_pts_lc, visualizer=None):
+    def sense_real(self, depth_lc, design_pts_lc, lc_wrapper=None):
         start = time.time()
 
         """
@@ -1005,11 +1005,18 @@ class LightCurtain:
         """
 
         # Sense (Replace with Real Sensor)
-        start = time.time()
-        output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
-        output_lc[np.isnan(output_lc[:, :, 0])] = 0
-        thickness_lc[np.isnan(thickness_lc[:, :])] = 0
-        time_sense = time.time() - start
+        if lc_wrapper is not None:
+            start = time.time()
+            output_lc, thickness_lc = lc_wrapper.sendAndWait(design_pts_lc)
+            output_lc[np.isnan(output_lc[:, :, 0])] = 0
+            thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+            time_sense = time.time() - start
+        else:
+            start = time.time()
+            output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
+            output_lc[np.isnan(output_lc[:, :, 0])] = 0
+            thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+            time_sense = time.time() - start
 
         # Warp output to RGB frame
         start = time.time()
@@ -1048,32 +1055,12 @@ class LightCurtain:
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
         time_dpv = time.time() - start
 
-        # print("---")
-        # print(" time_sense: " + str(time_sense))
-        # print(" time_warp: " + str(time_warp))
-        # print(" time_dpv: " + str(time_dpv))
+        print("---")
+        print(" time_sense: " + str(time_sense))
+        print(" time_warp: " + str(time_warp))
+        print(" time_dpv: " + str(time_dpv))
 
-        # Save information at pixel wanted
-        # pixel_wanted = [150, 66]
-        # debug_data = dict()
-        # debug_data["gt"] = depth_rgb[pixel_wanted[0], pixel_wanted[1]]
-        # debug_data["z_img"] = z_img[pixel_wanted[0], pixel_wanted[1]]
-        # debug_data["int_img"] = int_img[pixel_wanted[0], pixel_wanted[1]]
-        # debug_data["thickness_sensed"] = thickness_sensed[pixel_wanted[0], pixel_wanted[1]]
-        # debug_data["dist"] = DPV[:, pixel_wanted[0], pixel_wanted[1]].cpu().numpy()
-
-        # Generate XYZ version for viz
-        output_rgb = None
-        if visualizer:
-            pts_sensed = img_utils.depth_to_pts(depth_sensed.unsqueeze(0), self.PARAMS['intr_rgb']).cpu()
-            output_rgb = np.zeros((depth_sensed.shape[0], depth_sensed.shape[1], 4)).astype(np.float32)
-            output_rgb[:, :, 0] = pts_sensed[0, :, :]
-            output_rgb[:, :, 1] = pts_sensed[1, :, :]
-            output_rgb[:, :, 2] = pts_sensed[2, :, :]
-            output_rgb[:, :, 3] = int_sensed.cpu()
-            output_rgb[np.isnan(output_rgb[:, :, 0])] = 0
-
-        return DPV, output_rgb, None
+        return DPV, None, None
 
         # Generate XYZ version for viz
         # pts_sensed = util.depth_to_pts(torch.Tensor(depth_sensed).unsqueeze(0), self.PARAMS['intr_rgb'])

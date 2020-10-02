@@ -53,20 +53,41 @@ devel_folder = '/'.join(devel_folder[:len(devel_folder)-2]) + "/devel/lib/"
 sys.path.append(devel_folder)
 import params_lib_python
 
+import rospkg
+devel_folder = rospkg.RosPack().get_path('lc_wrapper').split("/")
+devel_folder = '/'.join(devel_folder[:len(devel_folder)-3]) + "/devel/lib/"
+print(devel_folder)
+sys.path.append(devel_folder)
+import lc_wrapper_python
+
+# import signal
+# import sys
+# def signal_handler(signal, frame):
+#     print("Ending")
+#     sys.exit(0)
+# signal.signal(signal.SIGINT, signal_handler)
+
 class LC:
     def __init__(self, visualize=False):
         self.visualize = visualize
 
+        # Real Device
+        self.lc_wrapper = None
+        lc_wrapper_python.ros_init("lc_wrapper_example")
+        self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=30, dev="/dev/ttyACM0")
+
         # Light Curtain Params
         N = 128
+        self.S_RANGE = 3.
+        self.E_RANGE = 15.
         param = dict()
-        param["d_candi"] = img_utils.powerf(3., 38., N, 1.)
+        param["d_candi"] = img_utils.powerf(self.S_RANGE, self.E_RANGE, N, 1.)
         param["d_candi_up"] = param["d_candi"]
         param["r_candi"] = param["d_candi"]
         param["r_candi_up"] = param["d_candi"]
         param["expand_A"] = N
         param["expand_B"] = 128
-        param['laser_fov'] = 80.
+        param['laser_fov'] = 40.
         param['intr_rgb'] = np.array(
             [[177.43524,   0.,      160.     ],
             [  0.,      178.5432 , 128.     ],
@@ -196,7 +217,7 @@ class LC:
             cv2.imshow("unc_field_truth_lc", self.unc_field_truth_lc.squeeze(0).cpu().numpy())
     
     def init_unc_field(self):
-        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 20
+        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + self.E_RANGE / 2.
         self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 6.0))
 
     def disp_final_cloud(self):
@@ -223,9 +244,11 @@ class LC:
         # Iterate
         mode = "high"
         planner = "default"
-        params = {"step": [0.25, 0.5, 0.75]}
-        #planner = "m1"
-        #params = {"step": 5}
+        #params = {"step": [0.5]}
+        planner = "m1"
+        params = {"step": 3}
+        #planner = "sweep"
+        #params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
         for i in range(0, iterations):
             print(i)
 
@@ -261,8 +284,8 @@ class LC:
             time_plan = time.time() - start
 
             # Viz
+            field_visual[:,:,2] = self.unc_field_truth_lc[0,:,:].cpu().numpy()*3
             if self.visualize:
-                field_visual[:,:,2] = self.unc_field_truth_lc[0,:,:].cpu().numpy()*3
                 cv2.imshow("field_visual", field_visual)
                 #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
 
@@ -283,19 +306,19 @@ class LC:
                     self.viz.swapBuffer()
                 cv2.waitKey(0)
 
-            # # In Sensing Real
-            # lc_DPVs = []
-            # start = time.time()
-            # for lc_path in lc_paths:
-            #     if mode == "high":
-            #         lc_DPV, _, _ = self.real_lc.sense_real(self.depth_lc, lc_path, False)
-            #         lc_DPVs.append(lc_DPV)
-            # time_sense = time.time() - start
-
-            # Other
+            # In Sensing Real
+            lc_DPVs = []
             start = time.time()
-            lc_DPVs = self.real_lc.sense_real_batch(self.depth_lc, lc_paths)
+            for lc_path in lc_paths:
+                if mode == "high":
+                    lc_DPV, _, _ = self.real_lc.sense_real(self.depth_lc, lc_path, self.lc_wrapper)
+                    lc_DPVs.append(lc_DPV)
             time_sense = time.time() - start
+
+            # # Other
+            # start = time.time()
+            # lc_DPVs = self.real_lc.sense_real_batch(self.depth_lc, lc_paths)
+            # time_sense = time.time() - start
 
             # Keep Renormalize
             curr_dist = torch.clamp(torch.exp(self.final), img_utils.epsilon, 1.)
@@ -443,21 +466,25 @@ class Ros():
         self.lc.process_sim()
         process_time = time.time() - start
         print("process_time: " + str(process_time))
-        iterations = 5
+        iterations = 1
 
-        # # Strategy to init from Scratch
-        # if self.just_started:
-        #     self.lc.init_unc_field()
-        #     self.just_started = False
-        #     iterations = 15
+        # Strategy to init from Scratch
+        if self.just_started:
+            self.lc.init_unc_field()
+            self.just_started = False
+            iterations = 1
 
-        # # Iterate
-        # self.lc.iterate(iterations)
+        # Iterate
+        self.lc.iterate(iterations)
 
-        # # Display
-        # cv2.imshow("field_visual", self.lc.field_visual)
-        # self.lc.disp_final_cloud()
-        # cv2.waitKey(15)
+        # Display
+        cv2.imshow("field_visual", self.lc.field_visual)
+        #self.lc.disp_final_cloud()
+        key = cv2.waitKey(15)
+        if key == 27:
+            self.destroy()
+            del self.lc.real_lc
+            sys.exit(0)
 
 
         # # Save
@@ -469,10 +496,10 @@ class Ros():
 #     def __init__(self):
 #         pass
 
-# rospy.init_node('real_sensor', anonymous=False)
-# ros = Ros()
-# rospy.spin()
-# stop
+rospy.init_node('real_sensor', anonymous=False)
+ros = Ros()
+rospy.spin()
+stop
 
 # Create LC Object
 lc = LC(visualize=True)
