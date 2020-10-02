@@ -277,6 +277,7 @@ def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None):
     if cfg is None:
         pshift = 0
+        zstart = 1.0
         zstart = 0.4
         zend = zstart + 0.3
         maxd = 100.

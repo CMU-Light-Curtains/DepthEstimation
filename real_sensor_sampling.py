@@ -20,11 +20,38 @@ from sim import LCDevice
 from planner import PlannerRT
 import pylc_lib as pylc
 
-###########
-"""
-Put this Stuff into a class that I can call?
-"""
-###########
+import cv2
+import torch
+import numpy as np
+import pickle
+import os
+import rospy
+import rospkg
+import sys
+import json
+import tf
+import copy
+import multiprocessing
+import time
+import shutil
+
+import threading
+from collections import deque
+import functools
+import message_filters
+import os
+import rospy
+from message_filters import ApproximateTimeSynchronizer
+import sensor_msgs.msg
+import sensor_msgs.srv
+from tf.transformations import quaternion_matrix
+import image_geometry
+import cv_bridge
+from cv_bridge import CvBridge
+devel_folder = rospkg.RosPack().get_path('params_lib').split("/")
+devel_folder = '/'.join(devel_folder[:len(devel_folder)-2]) + "/devel/lib/"
+sys.path.append(devel_folder)
+import params_lib_python
 
 class LC:
     def __init__(self, visualize=False):
@@ -47,6 +74,11 @@ class LC:
         )
         param['size_rgb'] = [320, 256]
         param['dist_rgb'] = [0., 0., 0., 0., 0.]
+        param['intr_rgb'] = np.array(
+            [[184.3578,   0.0000, 166.2423],
+            [ 0.0000, 184.3578, 132.1686],
+            [  0.,        0. ,       1.     ]]
+        )
 
         # Real LC (Sim) - Replace with real sensor later
         LC_SCALE = 1. 
@@ -135,7 +167,7 @@ class LC:
         # Make a DPV out of the Depth Map
         mask_truth = (self.depth_r_tensor > 0.).float()
         dpv_truth = img_utils.gen_dpv_withmask(self.depth_r_tensor, mask_truth.unsqueeze(0), self.algo_lc.d_candi, 0.3)
-        depth_truth = img_utils.dpv_to_depthmap(dpv_truth, self.algo_lc.d_candi, BV_log=False)
+        depth_truth = img_utils.dpv_to_depthmap(dpv_truth, self.algo_lc.d_candi, BV_log=False) * mask_truth
         print(depth_truth.shape, depth_truth.dtype)
         cloud_truth = img_utils.tocloud(depth_truth, self.rgb_r_tensor, self.intr_r_tensor)
         depth_x = depth_truth.squeeze(0).cpu().numpy()
@@ -149,7 +181,7 @@ class LC:
         self.unc_field_truth_r, debugmap = img_utils.gen_ufield(dpv_truth, self.algo_lc.d_candi, self.intr_r_tensor.squeeze(0), BV_log=False, cfg=None)
 
         # Viz Debugmap
-        rgb_temp = rgb_r.copy()
+        rgb_temp = self.rgb_r.copy()
         rgb_temp[:,:,0] += debugmap.squeeze(0).cpu().numpy()
 
         # Unc Field Truth in LC (LC)
@@ -166,6 +198,26 @@ class LC:
     def init_unc_field(self):
         init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 20
         self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 6.0))
+
+    def disp_final_cloud(self):
+        # Start
+        if self.viz == None:
+            self.viz = viewer.Visualizer("V")
+            self.viz.start()
+
+        # Clean
+        z = torch.exp(self.final.squeeze(0))
+        d_candi_expanded = torch.tensor(self.algo_lc.d_candi).unsqueeze(1).unsqueeze(1).cuda()
+        mean = torch.sum(d_candi_expanded * z, dim=0)
+        variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
+        mask_var = (variance < 1.0).float()
+        final_temp = self.final * mask_var.unsqueeze(0)
+
+        if self.viz is not None:
+            cloud_truth = img_utils.tocloud(self.depth_truth, self.rgb_r_tensor, self.intr_r_tensor, rgbr=[255,255,0])
+            self.viz.addCloud(cloud_truth, 1)
+            self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final_temp, self.algo_lc.d_candi, BV_log=True), self.rgb_r_tensor, self.intr_r_tensor), 3)
+            self.viz.swapBuffer()
 
     def iterate(self, iterations=100):
         # Iterate
@@ -213,7 +265,7 @@ class LC:
                 field_visual[:,:,2] = self.unc_field_truth_lc[0,:,:].cpu().numpy()*3
                 cv2.imshow("field_visual", field_visual)
                 #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                
+
             # 3D
             if self.visualize:
                 # Clean
@@ -231,13 +283,18 @@ class LC:
                     self.viz.swapBuffer()
                 cv2.waitKey(0)
 
-            # In Sensing Real
-            lc_DPVs = []
+            # # In Sensing Real
+            # lc_DPVs = []
+            # start = time.time()
+            # for lc_path in lc_paths:
+            #     if mode == "high":
+            #         lc_DPV, _, _ = self.real_lc.sense_real(self.depth_lc, lc_path, False)
+            #         lc_DPVs.append(lc_DPV)
+            # time_sense = time.time() - start
+
+            # Other
             start = time.time()
-            for lc_path in lc_paths:
-                if mode == "high":
-                    lc_DPV, _, _ = self.real_lc.sense_real(self.depth_lc, lc_path, False)
-                    lc_DPVs.append(lc_DPV)
+            lc_DPVs = self.real_lc.sense_real_batch(self.depth_lc, lc_paths)
             time_sense = time.time() - start
 
             # Keep Renormalize
@@ -277,6 +334,7 @@ class LC:
 
             # Back to Log space
             self.final = torch.log(curr_dist)
+            self.field_visual = field_visual
 
             print("time_gen_ufield: " + str(time_gen_ufield))
             print("time_score: " + str(time_score))
@@ -286,8 +344,138 @@ class LC:
             print("time_spread: " + str(time_spread))
             print(torch.cuda.memory_allocated(0))
 
+###########
+"""
+Put this Stuff into a class that I can call?
+"""
+###########
+
+class ConsumerThread(threading.Thread):
+    def __init__(self, queue, function):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.function = function
+
+    def run(self):
+        while True:
+            # wait for an image (could happen at the very beginning when the queue is still empty)
+            while len(self.queue) == 0:
+                time.sleep(0.1)
+            self.function(self.queue[0])
+
+class Ros():
+    def __init__(self):
+        self.transforms = None
+        self.index = 0
+        self.prev_index = -1
+        self.bridge = CvBridge()
+        self.prev_seq = None
+        self.just_started = True
+
+        self.q_msg = deque([], 1)
+        lth = ConsumerThread(self.q_msg, self.handle_msg)
+        lth.setDaemon(True)
+        lth.start()
+
+        self.queue_size = 5
+        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
+        self.left_camsub = message_filters.Subscriber('/left_camera_resized/image_color_rect', sensor_msgs.msg.Image)
+        self.right_camsub = message_filters.Subscriber('right_camera_resized/image_color_rect', sensor_msgs.msg.Image)
+        self.depthsub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image)
+        self.ts = self.sync([self.left_camsub, self.right_camsub, self.depthsub], self.queue_size)
+        self.ts.registerCallback(self.callback)
+
+        self.lc = LC(visualize=False)
+
+    def destroy(self):
+        self.left_camsub.unregister()
+        self.right_camsub.unregister()
+        self.depthsub.unregister()
+        del self.ts
+
+    def get_transform(self, from_frame, to_frame):
+        listener = tf.TransformListener()
+        listener.waitForTransform(to_frame, from_frame, rospy.Time(), rospy.Duration(4.0))
+        (trans,rot) = listener.lookupTransform(to_frame, from_frame, rospy.Time(0))
+        matrix = quaternion_matrix(rot)
+        matrix[0:3, 3] = trans
+        return matrix.astype(np.float32)
+
+    def convert_imgmsg(self, cammsg, caminfomsg):
+        cvImg = self.bridge.imgmsg_to_cv2(cammsg, desired_encoding='passthrough')
+        cam_model = image_geometry.PinholeCameraModel()
+        cam_model.fromCameraInfo(caminfomsg)
+        cam_model.rectifyImage(cvImg, 0)
+        cvImg = cv2.remap(cvImg, cam_model.mapx, cam_model.mapy, 1)
+        return cvImg, cam_model
+
+    def callback(self, left_cammsg, right_cammsg, depth_cammsg):
+        # Append msg
+        self.q_msg.append((left_cammsg, right_cammsg, depth_cammsg))
+
+        # Index
+        self.index += 1
+
+    def handle_msg(self, msg):
+        if self.prev_index == self.index:
+            time.sleep(0.00001)
+            return
+        self.prev_index = self.index
+        left_cammsg, right_cammsg, depth_cammsg = msg
+        print("enter")
+
+        # Convert
+        left_img = self.bridge.imgmsg_to_cv2(left_cammsg, desired_encoding='passthrough').astype(np.float32)/255.
+        right_img = self.bridge.imgmsg_to_cv2(right_cammsg, desired_encoding='passthrough').astype(np.float32)/255.
+        depth_img = self.bridge.imgmsg_to_cv2(depth_cammsg, desired_encoding='passthrough').astype(np.float32)/1000.
+
+        # # Viz
+        # depth_disp = np.repeat(depth_img[:, :, np.newaxis], 3, axis=2)
+        # stack = np.vstack((depth_disp,left_img,right_img))
+        # cv2.imshow("win", stack)
+        # cv2.waitKey(1)
+
+        # Model here
+
+        # Set inputs
+        start = time.time()
+        self.lc.set_sim_cam(depth_img, left_img, pool_val=4)
+        self.lc.process_sim()
+        process_time = time.time() - start
+        print("process_time: " + str(process_time))
+        iterations = 5
+
+        # # Strategy to init from Scratch
+        # if self.just_started:
+        #     self.lc.init_unc_field()
+        #     self.just_started = False
+        #     iterations = 15
+
+        # # Iterate
+        # self.lc.iterate(iterations)
+
+        # # Display
+        # cv2.imshow("field_visual", self.lc.field_visual)
+        # self.lc.disp_final_cloud()
+        # cv2.waitKey(15)
+
+
+        # # Save
+        # np.save('/home/raaj/rgb.npy', left_img)
+        # np.save('/home/raaj/depth.npy', depth_img)
+        # stop
+
+# class Ros:
+#     def __init__(self):
+#         pass
+
+# rospy.init_node('real_sensor', anonymous=False)
+# ros = Ros()
+# rospy.spin()
+# stop
+
 # Create LC Object
-lc = LC(visualize=False)
+lc = LC(visualize=True)
 
 # Load some Sim Depth
 depth_r = np.load('/home/raaj/adapfusion/external/lcsim/python/example/depth_image.npy')
@@ -301,8 +489,17 @@ rgb_r = cv2.resize(rgb_r, lc.get_rgb_size(), interpolation = cv2.INTER_LINEAR)
 # cv2.imshow("depth_r", depth_r/100.)
 # cv2.imshow("rgb_r", rgb_r)
 
+# # Load some Sim Depth
+# depth_r = np.load('/home/raaj/depth.npy').astype(np.float32)/1000.
+# rgb_r = np.load('/home/raaj/rgb.npy')
+# depth_r = cv2.resize(depth_r, lc.get_rgb_size(), interpolation = cv2.INTER_LINEAR)
+# rgb_r = cv2.resize(rgb_r, lc.get_rgb_size(), interpolation = cv2.INTER_LINEAR)
+# # cv2.imshow("depth_r", depth_r/100.)
+# # cv2.imshow("rgb_r", rgb_r)
+# # cv2.waitKey(0)
+
 # Set it
-lc.set_sim_cam(depth_r, rgb_r)
+lc.set_sim_cam(depth_r, rgb_r, pool_val=4)
 # cv2.imshow("depth_lc", lc.depth_lc/100.)
 
 # Process Sim

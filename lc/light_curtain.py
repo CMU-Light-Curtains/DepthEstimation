@@ -936,9 +936,65 @@ class LightCurtain:
         # cv2.imshow("int_sensed", int_sensed/255.)
         # cv2.waitKey(0)
 
-    def sense_real(self, depth_rgb, design_pts_lc, visualizer=None):
+    def sense_real_batch(self, depth_lc, design_pts_lc_arr):
+
+        pass
+
+        # Sense (Replace with Real Sensor)
         start = time.time()
-        depth_lc = depth_rgb
+        output_lc_arr = []
+        thickness_lc_arr = []
+        for design_pts_lc in design_pts_lc_arr:
+            output_lc, thickness_lc = self.lightcurtain_large.get_return(depth_lc, design_pts_lc, True)
+            output_lc[np.isnan(output_lc[:, :, 0])] = 0
+            thickness_lc[np.isnan(thickness_lc[:, :])] = 0     
+            output_lc_arr.append(output_lc.reshape((output_lc.shape[0] * output_lc.shape[1], 4)))
+            thickness_lc_arr.append(thickness_lc.flatten())
+        sense_time = time.time() - start
+
+        
+        # Warp to RGB
+        start = time.time()
+        sensed_arr = pylc.transformPointsBatch(output_lc_arr, thickness_lc_arr, self.PARAMS['intr_rgb'],
+                                         self.PARAMS['rTc'],
+                                         self.PARAMS['size_rgb'][0],
+                                         self.PARAMS['size_rgb'][1],
+                                         {"filtering": 0})
+        warp_time = time.time() - start
+
+        # Put in CUDA
+        start = time.time()
+        depth_sensed = torch.tensor(sensed_arr[0]).cuda()
+        int_sensed = torch.tensor(sensed_arr[1]).cuda()
+        thickness_sensed = torch.tensor(sensed_arr[2]).cuda()
+        mask_sensed = torch.tensor(depth_sensed > 0).float().cuda()
+        cuda_time = time.time() - start
+
+        # Compute DPV
+        start = time.time()
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / 10.) ** 2
+        A = mapping(int_img)
+        DPVs = []
+        for i in range(0, A.shape[0]):
+            DPV = mixed_model(self.d_candi, z_img[i,:,:], unc_img[i,:,:], A[i,:,:], 1. - A[i,:,:])
+            DPVs.append(DPV)
+        dpv_time = time.time() - start
+
+        #mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+
+
+        print("---")
+        print(" sense_time: " + str(sense_time))
+        print(" warp_time: " + str(warp_time))
+        print(" cuda_time: " + str(cuda_time))
+        print(" dpv_time: " + str(dpv_time))
+
+        return DPVs
+
+    def sense_real(self, depth_lc, design_pts_lc, visualizer=None):
+        start = time.time()
 
         """
         Can we speed up this processing somehow so it takes in multiple points?
