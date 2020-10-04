@@ -291,7 +291,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
             mind = 0.
         elif "ilim" in cfg.data.dataset_path:
             pshift = 0
-            zstart = 1.3
+            zstart = 1.0
             zend = zstart + 0.3
             maxd = 100.
             mind = 3.
