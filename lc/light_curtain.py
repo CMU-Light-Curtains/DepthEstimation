@@ -16,7 +16,7 @@ import utils.img_utils as img_utils
 import cv2
 
 class FieldWarp:
-    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input):
+    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input, name):
         # Assign
         self.intr_input = intr_input
         self.dist_input = dist_input
@@ -25,6 +25,7 @@ class FieldWarp:
         self.dist_output = dist_output
         self.size_output = size_output
         self.output2input = output2input
+        self.name = name
 
         # Compute Scaled
         self.intr_input_scaled = img_utils.intr_scale(self.intr_input, self.size_input, self.size_output)
@@ -182,14 +183,14 @@ class FieldWarp:
             return output
 
     def save_flowfields(self):
-        np.save("lc_flowfields.npy", self.flowfields)
+        np.save(self.name + "_lc_flowfields.npy", self.flowfields)
         pass
 
     def load_flowfield(self):
         if len(self.flowfields.keys()):
             return
-        if os.path.isfile("lc_flowfields.npy") and os.access("lc_flowfields.npy", os.R_OK):
-            self.flowfields = np.load("lc_flowfields.npy", allow_pickle=True).item()
+        if os.path.isfile(self.name + "_lc_flowfields.npy") and os.access(self.name + "_lc_flowfields.npy", os.R_OK):
+            self.flowfields = np.load(self.name + "_lc_flowfields.npy", allow_pickle=True).item()
 
 
 def normalize(field):
@@ -294,10 +295,10 @@ class LightCurtain:
         dist_lc = np.array(PARAMS["dist_lc"]).astype(np.float32).reshape((1, 5))
         self.fw_large = FieldWarp(PARAMS["intr_rgb"], dist_rgb, PARAMS["size_rgb"],
                                   PARAMS["intr_lc"], dist_lc, PARAMS["size_lc"],
-                                  PARAMS["rTc"])
+                                  PARAMS["rTc"], PARAMS["name"])
         self.fw_small = FieldWarp(PARAMS["intr_rgb_small"], dist_rgb, PARAMS["size_rgb_small"],
                                   PARAMS["intr_lc_small"], dist_lc, PARAMS["size_lc_small"],
-                                  PARAMS["rTc"])
+                                  PARAMS["rTc"], PARAMS["name"])
         self.d_candi = PARAMS["d_candi"]
         self.r_candi = PARAMS["r_candi"]
         self.d_candi_up = PARAMS["d_candi_up"]
@@ -346,76 +347,30 @@ class LightCurtain:
         }
         PARAMS['laser_timestep'] = 2.5e-5
 
-        # PARAMS['intr_lc'] = np.array(
-        #     [[177.43524,   0.,      160.     ],
-        #     [  0.,      178.5432,  60.     ],
-        #     [  0.,        0.,        1.     ]]
-        # )
-        # PARAMS['size_lc'] = [320, 120]
-
-        # PARAMS['intr_lc'] = np.array(
-        #     [[177.43524,   0.,      60.     ],
-        #     [  0.,      178.5432,  160.     ],
-        #     [  0.,        0.,        1.     ]]
-        # )
-        # PARAMS['size_lc'] = [120, 320]
-
-        # # Real Sensor
-        # LC_SCALE = 0.625 # ilim
-        # # LC_SCALE = 1. # kitti
-        # PARAMS['laser_timestep'] = 2.5e-5 / LC_SCALE
-        # PARAMS['intr_lc'] = np.array([
-        #     [446.537*LC_SCALE, 0, 262.073*LC_SCALE],
-        #     [0, 446.589*LC_SCALE, 323.383*LC_SCALE],
-        #     [0, 0, 1]
-        # ])
-        # PARAMS['size_lc'] = [int(512*LC_SCALE), int(640*LC_SCALE)]
-        # PARAMS['dist_lc'] = [-0.033918, 0.027494, -0.001691, -0.001078, 0.000000]
-        # PARAMS['lTc'] = np.linalg.inv(np.array([
-        #        [9.9999867e-01,   1.6338158e-03,   1.2624934e-06,  -1.9989257e-01],
-        #        [-1.6338158e-03,   9.9999747e-01,   1.5454519e-03,   0.0000000e+00],
-        #        [1.2624934e-06,  -1.5454519e-03,   9.9999881e-01,   1.4010292e-02],
-        #        [0.0000000e+00,   0.0000000e+00,   0.0000000e+00,   1.0000000e+00]
-        # ]))
-        # PARAMS['rTc'] = np.array([
-        #     [ 0.9999845,   0.00197387, -0.00520207,  0.08262175],
-        #     [-0.00208896,  0.9997511 , -0.0222123,  -0.0229844 ],
-        #     [ 0.00515693,  0.02222283,  0.99973977, -0.23375846],
-        #     [ 0.,          0.,          0.,          1.        ]
-        # ])
-
-        print(PARAMS['size_lc']) # 384, 480
-        print(PARAMS['size_rgb']) # 384, 256 or # 320, 256
-
-        """
-        Issue: The RGB camera is smaller than the Light Curtain image size
-
-        """
-
         return PARAMS
 
     def plan_default_high(self, field, cfg):
-        return self.plan_default(field, self.planner_large, self.fw_large, "high", cfg)
+        return list(self.plan_default(field, self.planner_large, self.fw_large, "high", cfg, yield_mode=False))[0]
 
     def plan_default_low(self, field, cfg):
-        return self.plan_default(field, self.planner_small, self.fw_small, "low", cfg)
+        return list(self.plan_default(field, self.planner_small, self.fw_small, "low", cfg, yield_mode=False))[0]
 
     def plan_m1_high(self, field, cfg):
-        return self.plan_m1(field, self.planner_large, self.fw_large, "high", cfg)
+        return list(self.plan_m1(field, self.planner_large, self.fw_large, "high", cfg, yield_mode=False))[0]
 
     def plan_m1_low(self, field, cfg):
-        return self.plan_m1(field, self.planner_small, self.fw_small, "low", cfg)
+        return list(self.plan_m1(field, self.planner_small, self.fw_small, "low", cfg, yield_mode=False))[0]
 
     def plan_sweep_high(self, field, cfg):
-        return self.plan_sweep(field, self.planner_large, self.fw_large, "high", cfg)
+        return list(self.plan_sweep(field, self.planner_large, self.fw_large, "high", cfg, yield_mode=False))[0]
 
     def plan_empty_high(self, field, cfg):
-        return self.plan_empty(field, self.planner_large, self.fw_large, "high", cfg)
+        return list(self.plan_empty(field, self.planner_large, self.fw_large, "high", cfg, yield_mode=False))[0]
 
     def plan_empty_low(self, field, cfg):
-        return self.plan_empty(field, self.planner_small, self.fw_small, "low", cfg)
+        return list(self.plan_empty(field, self.planner_small, self.fw_small, "low", cfg, yield_mode=False))[0]
 
-    def plan_empty(self, field, planner, fw, kw, cfg):
+    def plan_empty(self, field, planner, fw, kw, cfg, yield_mode):
         start = time.time()
         #fw = self.fw_large
         #planner = self.planner_large
@@ -456,9 +411,11 @@ class LightCurtain:
         # Generate CV
         field_visual = np.repeat(field_preprocessed_range.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
 
-        return [], field_visual
+        self.field_visual = field_visual
+        if not yield_mode:
+            yield(pts_planned_all, field_visual)
 
-    def plan_sweep(self, field, planner, fw, kw, cfg):
+    def plan_sweep(self, field, planner, fw, kw, cfg, yield_mode):
         start = time.time()
         #fw = self.fw_large
         #planner = self.planner_large
@@ -504,6 +461,7 @@ class LightCurtain:
         #stop
         for z in np.arange(cfg["start"], cfg["end"], cfg["step"]):
             pts_planned = self.get_flat(z)
+            if yield_mode: yield(pts_planned)
             pts_planned_all.append(pts_planned)
 
             # Draw
@@ -518,9 +476,11 @@ class LightCurtain:
 
             field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 1]
 
-        return pts_planned_all, field_visual
+        self.field_visual = field_visual
+        if not yield_mode:
+            yield(pts_planned_all, field_visual)
 
-    def plan_m1(self, field, planner, fw, kw, cfg):
+    def plan_m1(self, field, planner, fw, kw, cfg, yield_mode):
         start = time.time()
         #fw = self.fw_large
         #planner = self.planner_large
@@ -574,9 +534,13 @@ class LightCurtain:
 
         # Plan
         pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
+        if yield_mode: yield(pts_main)
 
         pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
         field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 1]
+
+        if yield_mode:
+            yield pts_main
 
         # Try few times
         pts_planned_all = [pts_main]
@@ -643,6 +607,7 @@ class LightCurtain:
             # Plan
             pts_planned = planner.get_design_points(field_towork)
             pts_planned_all.append(pts_planned)
+            if yield_mode: yield(pts_planned)
 
             # Draw
             pixels = np.array([np.digitize(pts_planned[:, 1], self.d_candi_up) - 1, range(0, pts_planned.shape[0])]).T
@@ -651,14 +616,11 @@ class LightCurtain:
             # Draw Pixels
             #for spixel in pixels: cv2.circle(field_visual, (spixel[1], spixel[0]), 1, (0, 255, 255), -1)
 
-        # cv2.imshow("field_visual", field_visual)
-        # cv2.waitKey(0)
+        self.field_visual = field_visual
+        if not yield_mode:
+            yield(pts_planned_all, field_visual)
 
-        #print(time.time()-start)
-
-        return pts_planned_all, field_visual
-
-    def plan_default(self, field, planner, fw, kw, cfg):
+    def plan_default(self, field, planner, fw, kw, cfg, yield_mode):
         # cv2.imshow("field", field.cpu().numpy())
 
         start = time.time()
@@ -701,6 +663,7 @@ class LightCurtain:
 
         # Main Field
         pts_main = planner.get_design_points(field_preprocessed_range.cpu().numpy())
+        if yield_mode: yield(pts_main)
         field_visual = np.repeat(field_preprocessed.cpu().numpy()[:, :, np.newaxis], 3, axis=2)
         pixels = np.array([np.digitize(pts_main[:, 1], self.d_candi_up) - 1, range(0, pts_main.shape[0])]).T
         field_visual[pixels[:, 0], pixels[:, 1], :] = [1, 0, 0]
@@ -726,7 +689,9 @@ class LightCurtain:
 
             # Plan
             pts_up = planner.get_design_points(left_field_inv.cpu().numpy())
+            if yield_mode: yield(pts_up)
             pts_down = planner.get_design_points(right_field_inv.cpu().numpy())
+            if yield_mode: yield(pts_down)
 
             # Visual
             pixels = np.array([np.digitize(pts_up[:, 1], self.d_candi_up) - 1, range(0, pts_up.shape[0])]).T
@@ -746,15 +711,9 @@ class LightCurtain:
         # cv2.imshow("field_visual", field_visual)
         # cv2.waitKey(0)
 
-        return all_pts, field_visual
-
-    # def sense_low(self, np_depth_image, np_design_pts):
-    #     output = self.lightcurtain_small.get_return(np_depth_image, np_design_pts)
-    #
-    #     print(output.shape) # 64,96,4
-
-    #
-    #     return output
+        self.field_visual = field_visual
+        if not yield_mode:
+            yield(all_pts, field_visual)
 
     def sense_low(self, depth_rgb, design_pts_lc, visualizer=None):
         start = time.time()

@@ -274,11 +274,10 @@ def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
         dpv_refined_predicted = torch.log(dpv_refined_predicted)
     return dpv_refined_predicted
 
-def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None):
-    if cfg is None:
-        pshift = 0
-        zstart = 1.0
-        zstart = 0.4
+def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None, cfgx=None):
+    if cfgx is not None:
+        pshift = cfgx["unc_ang"]
+        zstart = cfgx["unc_shift"]
         zend = zstart + 0.3
         maxd = 100.
         mind = 3.

@@ -1,4 +1,3 @@
-from .pwclite import PWCLite
 from .models import DefaultModel, BaseModel
 from .packnet import PacknetModel
 
