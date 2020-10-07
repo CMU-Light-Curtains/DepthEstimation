@@ -307,6 +307,7 @@ class LightCurtain:
         self.expand_A = PARAMS["expand_A"]
         self.expand_B = PARAMS["expand_B"]
         self.initialized = True
+        self.sensed_arr = None
 
     def expand_params(self, PARAMS, cfg, expand_A, expand_B):
         d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
@@ -1036,3 +1037,33 @@ class LightCurtain:
         # cv2.imshow("depth_sensed", depth_sensed/100.)
         # cv2.imshow("int_sensed", int_sensed/255.)
         # cv2.waitKey(0)
+
+    def transform_measurement(self, output_lc, thickness_lc):
+        pts = output_lc.reshape((output_lc.shape[0] * output_lc.shape[1], 4))
+        thickness = thickness_lc.flatten()
+        depth_sensed, int_sensed, thickness_sensed = pylc.transformPoints(pts, thickness, self.PARAMS['intr_rgb'],
+                                                                            self.PARAMS['rTc'],
+                                                                            self.PARAMS['size_rgb'][0],
+                                                                            self.PARAMS['size_rgb'][1],
+                                                                            {"filtering": 0})
+
+        sensed_arr = torch.tensor(np.array([depth_sensed, int_sensed, thickness_sensed]).astype(np.float32))
+        if self.sensed_arr == None:
+            self.sensed_arr = sensed_arr.pin_memory()
+        self.sensed_arr[:] = sensed_arr[:]
+        return self.sensed_arr.cuda(non_blocking=True)
+
+    def gen_lc_dpv(self, sensed_arr):
+        depth_sensed = sensed_arr[0,:,:]
+        mask_sense = (depth_sensed > 0).float()
+        thickness_sensed = sensed_arr[2,:,:] * mask_sense
+        int_sensed = sensed_arr[1,:,:] * mask_sense
+
+        # Compute DPV
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / 10.) ** 2
+        A = mapping(int_img)
+        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+
+        return DPV

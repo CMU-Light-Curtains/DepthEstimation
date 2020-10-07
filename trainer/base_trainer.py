@@ -7,7 +7,7 @@ import torch.distributed as dist
 from utils.torch_utils import bias_parameters, weight_parameters, \
     load_checkpoint, save_checkpoint, AdamW
 
-class BaseTrainer:
+class BaseTrainer(object):
     """
     Base class for all trainers
     """
@@ -35,11 +35,11 @@ class BaseTrainer:
 
     @abstractmethod
     def _run_one_epoch(self):
-        ...
+        pass
 
     @abstractmethod
     def _validate_with_gt(self):
-        ...
+        pass
 
     def train(self):
         for epoch in range(self.cfg.train.epoch_num):
