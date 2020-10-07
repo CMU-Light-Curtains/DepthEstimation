@@ -70,6 +70,13 @@ from rospy_tutorials.msg import Floats
 import zlib
 from threading import Thread, Lock
 
+import rospkg
+devel_folder = rospkg.RosPack().get_path('lc_wrapper').split("/")
+devel_folder = '/'.join(devel_folder[:len(devel_folder)-3]) + "/devel/lib/"
+print(devel_folder)
+sys.path.append(devel_folder)
+import lc_wrapper_python
+
 class ConsumerThread(threading.Thread):
     def __init__(self, queue, function):
         threading.Thread.__init__(self)
@@ -98,17 +105,8 @@ class RosAll():
             lc_wrapper_python.ros_init("lc_wrapper_example")
             self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=30, dev="/dev/ttyACM0")
 
-        self.queue_size = 2
-        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
-        self.depth_sub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image)
-        self.dpv_sub = message_filters.Subscriber('ros_net/dpv_pub', TensorMsg)
-        #self.ts = self.sync([self.depth_sub, self.dpv_sub], self.queue_size)
-        self.depth_sub.registerCallback(self.depth_callback)
-        self.dpv_sub.registerCallback(self.dpv_callback)
-        self.debug_pub = rospy.Publisher('ros_planner/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
-
         #  Params
-        with open('toy_sensor.json') as f:
+        with open('basement_sensor.json') as f:
             param = json.load(f)
 
         # Precompute additional param
@@ -169,6 +167,16 @@ class RosAll():
         self.just_started = True
         self.counter = 0
         print("Ready")
+
+        # ROS
+        self.queue_size = 1
+        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
+        self.depth_sub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image, queue_size=self.queue_size, buff_size=2**24)
+        self.dpv_sub = message_filters.Subscriber('ros_net/dpv_pub', TensorMsg, queue_size=self.queue_size)
+        #self.ts = self.sync([self.depth_sub, self.dpv_sub], self.queue_size)
+        self.depth_sub.registerCallback(self.depth_callback)
+        self.dpv_sub.registerCallback(self.dpv_callback)
+        self.debug_pub = rospy.Publisher('ros_planner/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
 
     def init_unc_field(self):
         init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + self.E_RANGE / 2.
@@ -252,6 +260,11 @@ class RosAll():
         depth_msg = msg
         depth_img = torch.tensor(self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)/1000.)
 
+        # time.sleep(0.1)
+        # cv2.imshow("win", depth_img.numpy())
+        # cv2.waitKey(1)
+        # return
+
         # Generate Depth LC
         depth_lc = None
         if self.mode == "sim":
@@ -279,13 +292,13 @@ class RosAll():
         # return
 
         # Get Planner
-        planner = "m1"
+        planner = "default"
         start = time.time()
         if planner == "default":
             params = {"step": [0.5]}
             plan_func = self.algo_lc.plan_default
         elif planner == "m1":
-            params = {"step": 3}
+            params = {"step": 3, "interval": 5}
             plan_func = self.algo_lc.plan_m1
         elif planner == "sweep":
             params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
@@ -330,8 +343,13 @@ class RosAll():
 
             # Plan and Sense
             if self.mode == "real":
-                lc_DPVs = []
+            
+                # Send Curtains while planning
+                sensed_arr_all = []
+                base_start = time.time()
+                i=-1
                 for lc_path in plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True):
+                    i+=1
                     lc_path = lc_path.astype(np.float32)
 
                     """
@@ -343,21 +361,49 @@ class RosAll():
                     outside of loop, call getLastCurtain() again
                     """
 
-                    # Once I receive a curtain I send it out
-                    output_lc, thickness_lc = self.lc_wrapper.sendAndWait(lc_path)
+                    # Send Curtain
+                    self.lc_wrapper.sendCurtain(lc_path)
+                    if i==0:
+                        continue
+
+                    # Receive Curtain
+                    output_lc, thickness_lc = self.lc_wrapper.receiveCurtainAndProcess()[1]
                     output_lc[np.isnan(output_lc[:, :, 0])] = 0
                     thickness_lc[np.isnan(thickness_lc[:, :])] = 0
 
-                    # Transform to LC
-                    start = time.time()
+                    # Transform to RGB
                     sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
-                    transform_time = time.time() - start
+                    sensed_arr_all.append(sensed_arr)
+
+                    # # Once I receive a curtain I send it out
+                    # start = time.time()
+                    # output_lc, thickness_lc = self.lc_wrapper.sendAndWait(lc_path)
+                    # output_lc[np.isnan(output_lc[:, :, 0])] = 0
+                    # thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+                    # curtains.append([output_lc, thickness_lc])
+                    # measure_time = time.time() - start
+
+                # Receive Curtain
+                output_lc, thickness_lc = self.lc_wrapper.receiveCurtainAndProcess()[1]
+                output_lc[np.isnan(output_lc[:, :, 0])] = 0
+                thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+
+                # Transform to RGB
+                sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
+                sensed_arr_all.append(sensed_arr)
+
+                # Generate DPV
+                lc_DPVs = []
+                for sensed_arr in sensed_arr_all:
 
                     # Gen DPV
                     start = time.time()
-                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr)
+                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, 1.)
                     lc_DPVs.append(lc_DPV)
                     dpv_time = time.time() - start
+
+                base_time = time.time() - base_start
+                print(base_time)
 
             # Plane and Sense
             elif self.mode == "sim":
@@ -385,7 +431,7 @@ class RosAll():
 
                     # Gen DPV
                     start = time.time()
-                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr)
+                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, 10.)
                     lc_DPVs.append(lc_DPV)
                     dpv_time = time.time() - start
 

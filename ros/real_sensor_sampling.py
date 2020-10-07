@@ -185,7 +185,7 @@ class LC:
     
     def init_unc_field(self):
         init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + self.E_RANGE / 2.
-        self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 6.0))
+        self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 0.5))
 
     def disp_final_cloud(self):
         # Start
@@ -213,7 +213,7 @@ class LC:
         planner = "default"
         params = {"step": [0.5]}
         #planner = "m1"
-        #params = {"step": 3}
+        #params = {"step": 3, "interval": 5}
         #planner = "sweep"
         #params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
         for i in range(0, iterations):
@@ -457,10 +457,10 @@ class Ros():
 #     def __init__(self):
 #         pass
 
-# rospy.init_node('real_sensor', anonymous=False)
-# ros = Ros(params_file="real_sensor.json", visualize=False, real_sensor=True)
-# rospy.spin()
-# stop
+rospy.init_node('real_sensor', anonymous=False)
+ros = Ros(params_file="basement_sensor.json", visualize=True, real_sensor=True)
+rospy.spin()
+stop
 
 # Create LC Object
 lc = LC(params_file="toy_sensor.json", visualize=True)

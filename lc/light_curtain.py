@@ -561,7 +561,7 @@ class LightCurtain:
             # Sample Based Strategy
             sampled_vals = []
             sampled_pts = []
-            for c in range(0, field_preprocessed_range_temp.shape[1], 10):
+            for c in range(0, field_preprocessed_range_temp.shape[1], cfg["interval"]):
                 ray_dist = field_preprocessed_range_temp[:,c]
                 ray_dist[np.isnan(ray_dist)] = 1e-5
                 ray_dist = ray_dist / np.sum(ray_dist)
@@ -1006,10 +1006,16 @@ class LightCurtain:
         thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
         int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
 
+        # Div
+        if lc_wrapper is not None:
+            std_div = 10.
+        else:
+            std_div = 10.
+
         # Compute DPV
         z_img = depth_sensed
         int_img = int_sensed / 255.
-        unc_img = (thickness_sensed / 10.) ** 2
+        unc_img = (thickness_sensed / std_div) ** 2
         A = mapping(int_img)
         # Try fucking with 1 in the 1-A value
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
@@ -1053,7 +1059,7 @@ class LightCurtain:
         self.sensed_arr[:] = sensed_arr[:]
         return self.sensed_arr.cuda(non_blocking=True)
 
-    def gen_lc_dpv(self, sensed_arr):
+    def gen_lc_dpv(self, sensed_arr, std_div):
         depth_sensed = sensed_arr[0,:,:]
         mask_sense = (depth_sensed > 0).float()
         thickness_sensed = sensed_arr[2,:,:] * mask_sense
@@ -1062,7 +1068,7 @@ class LightCurtain:
         # Compute DPV
         z_img = depth_sensed
         int_img = int_sensed / 255.
-        unc_img = (thickness_sensed / 10.) ** 2
+        unc_img = (thickness_sensed / std_div) ** 2
         A = mapping(int_img)
         DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
 

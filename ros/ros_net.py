@@ -93,23 +93,6 @@ class RosNet():
         self.mode = rospy.get_param('~mode', 'stereo')
         print(self.mode)
 
-        self.q_msg = deque([], 1)
-        lth = ConsumerThread(self.q_msg, self.handle_msg)
-        lth.setDaemon(True)
-        lth.start()
-
-        self.queue_size = 2
-        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
-        self.left_camsub = message_filters.Subscriber('/left_camera_resized/image_color_rect', sensor_msgs.msg.Image)
-        self.right_camsub = message_filters.Subscriber('right_camera_resized/image_color_rect', sensor_msgs.msg.Image)
-        self.ts = self.sync([self.left_camsub, self.right_camsub], self.queue_size)
-        self.ts.registerCallback(self.callback)
-        self.prev_left_cammsg = None
-        self.depth_pub = rospy.Publisher('ros_net/depth', sensor_msgs.msg.Image, queue_size=self.queue_size)
-        self.dpv_pub = rospy.Publisher('ros_net/dpv_pub', TensorMsg, queue_size=self.queue_size)
-        self.unc_pub = rospy.Publisher('ros_net/unc_pub', TensorMsg, queue_size=self.queue_size)
-        self.debug_pub = rospy.Publisher('ros_net/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
-
         #  Params
         with open('real_sensor.json') as f:
             self.param = json.load(f)
@@ -172,6 +155,23 @@ class RosNet():
         self.model = self.model.cuda()
         self.model.eval()
         print("Model Loaded")
+
+        # ROS
+        self.q_msg = deque([], 1)
+        lth = ConsumerThread(self.q_msg, self.handle_msg)
+        lth.setDaemon(True)
+        lth.start()
+        self.queue_size = 1
+        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
+        self.left_camsub = message_filters.Subscriber('/left_camera_resized/image_color_rect', sensor_msgs.msg.Image)
+        self.right_camsub = message_filters.Subscriber('right_camera_resized/image_color_rect', sensor_msgs.msg.Image)
+        self.ts = self.sync([self.left_camsub, self.right_camsub], self.queue_size)
+        self.ts.registerCallback(self.callback)
+        self.prev_left_cammsg = None
+        self.depth_pub = rospy.Publisher('ros_net/depth', sensor_msgs.msg.Image, queue_size=self.queue_size)
+        self.dpv_pub = rospy.Publisher('ros_net/dpv_pub', TensorMsg, queue_size=self.queue_size)
+        self.unc_pub = rospy.Publisher('ros_net/unc_pub', TensorMsg, queue_size=self.queue_size)
+        self.debug_pub = rospy.Publisher('ros_net/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
 
     def gen_rgb_tensor(self, inp1, inp2):
         inp1 = torch.tensor(inp1).permute(2,0,1)
