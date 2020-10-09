@@ -344,7 +344,8 @@ class LightCurtain:
             "d_candi": model_input["d_candi"],
             "r_candi": model_input["d_candi"],
             "d_candi_up": model_input["d_candi_up"],
-            "r_candi_up": model_input["d_candi_up"]
+            "r_candi_up": model_input["d_candi_up"],
+            "name": "default"
         }
         PARAMS['laser_timestep'] = 2.5e-5
 

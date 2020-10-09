@@ -74,6 +74,7 @@ class DefaultTrainer(BaseTrainer):
         self.train_loader = batch_scheduler.BatchSchedulerMP(train_loader_params, self.cfg.var.mload)
         self.val_loader = batch_scheduler.BatchSchedulerMP(val_loader_params, self.cfg.var.mload)
         self.prev_output = None
+        self.prev_lc = None
         self.first_run = True
 
         # Light Curtain Module
@@ -143,6 +144,11 @@ class DefaultTrainer(BaseTrainer):
             model_input_right["prev_output"] = self.prev_output["right"]
             model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
 
+            # Set LC
+            if self.prev_lc is not None:
+                model_input_left["prev_lc"] = self.prev_lc["left"]
+                model_input_right["prev_lc"] = self.prev_lc["right"]
+
             # Setup LC
             if self.lc is not None:
                 lc_params = self.lc.gen_params_from_model_input(model_input_left)
@@ -156,6 +162,12 @@ class DefaultTrainer(BaseTrainer):
             output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
             output_right_intp = F.interpolate(output_right["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
             self.prev_output = {"left": output_left_intp, "right": output_right_intp}
+
+            # Set LC is available
+            if "output_lc" in output_left.keys():
+                output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                output_right_lc = F.interpolate(output_right["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                self.prev_lc = {"left": output_left_lc, "right": output_right_lc}
 
             # Loss Function
             loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
@@ -223,6 +235,10 @@ class DefaultTrainer(BaseTrainer):
             model_input_left["prev_output"] = self.prev_output["left"]
             model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
+            # Set LC
+            if self.prev_lc is not None:
+                model_input_left["prev_lc"] = self.prev_lc["left"]
+
             # Setup LC
             if self.lc is not None:
                 lc_params = self.lc.gen_params_from_model_input(model_input_left)
@@ -242,6 +258,11 @@ class DefaultTrainer(BaseTrainer):
             # Set Prev
             output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
             self.prev_output = {"left": output_left_intp, "right": None}
+
+            # Set LC is available
+            if "output_lc" in output_left.keys():
+                output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                self.prev_lc = {"left": output_left_lc, "right": None}
 
             # Visualization
             if self.cfg.var.viz:
@@ -344,6 +365,8 @@ class DefaultTrainer(BaseTrainer):
 
     def lc_process(self, model_input, gt_input, output):
         import matplotlib.pyplot as plt
+        print("Enable here to do exp")
+        return
 
         # Eval
         BV_cur = output["output"][-1]
@@ -355,7 +378,7 @@ class DefaultTrainer(BaseTrainer):
                 self.lc_results[exp_name].extend(unc_scores_all_default)
             else:
                 self.lc_results[exp_name] = unc_scores_all_default
-            if len(self.lc_results[exp_name]) > 5:
+            if len(self.lc_results[exp_name]) > 3:
                 print(np.array(self.lc_results[exp_name]).shape)
                 results = np.mean(np.array(self.lc_results[exp_name]), axis=0)
                 plots[exp_name] = results
@@ -363,14 +386,15 @@ class DefaultTrainer(BaseTrainer):
         # Exp
         exp_name = "default_high_all"
         final, unc_scores_all_default = self.model.module.lc_process(
-            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
+            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=True, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
         )
         handle_results(unc_scores_all_default, exp_name)
         # Exp
         for i in range(1,6):
+            print(i)
             exp_name = "default_m1_" + str(i)
             final, unc_scores_all_default = self.model.module.lc_process(
-                BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="m1", params={"step": i}
+                BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="m1", params={"step": i, "interval": 10}
             )
             handle_results(unc_scores_all_default, exp_name)
 

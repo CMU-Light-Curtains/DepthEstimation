@@ -253,6 +253,7 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "src_cam_poses": src_cam_poses,
         "rgb": rgb,
         "prev_output": None,  # Has to be [B, 64, H, W],
+        "prev_lc": None,
         "dmaps": dmaps,
         "masks": masks,
         "d_candi": d_candi,
