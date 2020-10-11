@@ -364,9 +364,10 @@ class DefaultTrainer(BaseTrainer):
         return error_list, error_keys
 
     def lc_process(self, model_input, gt_input, output):
-        import matplotlib.pyplot as plt
         print("Enable here to do exp")
         return
+
+        import matplotlib.pyplot as plt
 
         # Eval
         BV_cur = output["output"][-1]

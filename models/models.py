@@ -939,7 +939,7 @@ class BaseModel(nn.Module):
 
             # LC
             if lc is not None:
-                BV_lc, score = self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=True, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+                BV_lc, score = self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
             else:
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
