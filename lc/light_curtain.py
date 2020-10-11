@@ -717,7 +717,7 @@ class LightCurtain:
         if not yield_mode:
             yield(all_pts, field_visual)
 
-    def sense_low(self, depth_rgb, design_pts_lc, visualizer=None):
+    def sense_low(self, depth_rgb, design_pts_lc, device, visualizer=None):
         start = time.time()
 
         # Warp depthmap to LC frame
@@ -753,10 +753,10 @@ class LightCurtain:
             thickness_sensed = thickness_lc
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
-        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
-        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(device)
+        depth_sensed = torch.tensor(depth_sensed).to(device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed
@@ -796,7 +796,7 @@ class LightCurtain:
         # cv2.waitKey(0)
 
 
-    def sense_high(self, depth_rgb, design_pts_lc, visualizer=None):
+    def sense_high(self, depth_rgb, design_pts_lc, device, visualizer=None):
         start = time.time()
 
         # Warp depthmap to LC frame
@@ -846,10 +846,10 @@ class LightCurtain:
         # cv2.imshow("depth_lc_x", depth_lc_x/100.)
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
-        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
-        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(device)
+        depth_sensed = torch.tensor(depth_sensed).to(device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed

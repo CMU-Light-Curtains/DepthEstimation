@@ -1020,9 +1020,9 @@ class BaseModel(nn.Module):
                 lc_DPVs = []
                 for lc_path in lc_paths:
                     if mode == "high":
-                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path, True)
+                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path, BV_cur_all.device)
                     elif mode == "low":
-                        lc_DPV, _ = lc.sense_low(true_depth, lc_path, True)
+                        lc_DPV, _ = lc.sense_low(true_depth, lc_path, BV_cur_all.device)
                     lc_DPVs.append(lc_DPV)
 
                 # 3D
