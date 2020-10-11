@@ -151,9 +151,10 @@ class DefaultTrainer(BaseTrainer):
 
             # Setup LC
             if self.lc is not None:
-                lc_params = self.lc.gen_params_from_model_input(model_input_left)
-                lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
-                self.lc.init(lc_params)
+                if not self.lc.initialized:
+                    lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                    lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                    self.lc.init(lc_params)
 
             # Model
             output_left, output_right = self.model([model_input_left, model_input_right])
@@ -241,9 +242,10 @@ class DefaultTrainer(BaseTrainer):
 
             # Setup LC
             if self.lc is not None:
-                lc_params = self.lc.gen_params_from_model_input(model_input_left)
-                lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
-                self.lc.init(lc_params)
+                if not self.lc.initialized:
+                    lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                    lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                    self.lc.init(lc_params)
 
             # Model
             start = time.time()

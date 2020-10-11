@@ -159,6 +159,7 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing ztheta2zrange_input")
             output, flowfield = self._ztheta2zrange(field, self.angles_input_scaled, d_candi, r_candi)
             self.flowfields[name] = flowfield
             return output
@@ -168,6 +169,7 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing ztheta2zrange_output")
             output, flowfield = self._ztheta2zrange(field, self.angles_output, d_candi, r_candi)
             self.flowfields[name] = flowfield
             return output
@@ -177,15 +179,19 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing transformZTheta")
             output, flowfield = self._transformZTheta(field, self.angles_input_scaled, d_candi_input,
                                                       self.angles_output, d_candi_output, self.output2input)
             self.flowfields[name] = flowfield
-            print("stored " + name)
             return output
 
     def save_flowfields(self):
+        if str(self.device) != "cuda:0":
+            return
+        if os.path.isfile(self.name + "_lc_flowfields.npy"):
+            return
+        print("Saving Flowfields " + str(self.device))
         np.save(self.name + "_lc_flowfields.npy", self.flowfields)
-        pass
 
     def load_flowfield(self):
         if len(self.flowfields.keys()):
@@ -194,8 +200,9 @@ class FieldWarp:
             self.flowfields = np.load(self.name + "_lc_flowfields.npy", allow_pickle=True).item()
 
             # Store on correct GPU
-            for field in self.flowfields:
-                field = field.to(self.device)
+            for key in self.flowfields.keys():
+                self.flowfields[key] = self.flowfields[key].to(self.device)
+
 
 def normalize(field):
     minv, _ = field.min(1)  # [1,384]

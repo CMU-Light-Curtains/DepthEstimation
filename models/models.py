@@ -946,7 +946,7 @@ class BaseModel(nn.Module):
 
             # LC
             if self.lc is not None:
-                BV_lc, score = self.lc_process(BV_cur_refined, model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
             else:
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
@@ -1090,9 +1090,10 @@ class BaseModel(nn.Module):
     def forward(self, inputs):
         # Setup LC if setup
         if self.lc is not None:
-            lc_params = self.lc.gen_params_from_model_input(inputs[0])
-            lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
-            self.lc.init(lc_params)
+            if not self.lc.initialized:
+                lc_params = self.lc.gen_params_from_model_input(inputs[0])
+                lc_params = self.lc.expand_params(lc_params, self.cfg, 64, 128)
+                self.lc.init(lc_params)
 
         outputs = []
         for input in inputs:
