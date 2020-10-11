@@ -308,6 +308,7 @@ class LightCurtain:
         self.expand_B = PARAMS["expand_B"]
         self.initialized = True
         self.sensed_arr = None
+        self.device = PARAMS["device"]
 
     def expand_params(self, PARAMS, cfg, expand_A, expand_B):
         d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
@@ -347,7 +348,8 @@ class LightCurtain:
             "r_candi_up": model_input["d_candi_up"],
             "name": "default"
         }
-        PARAMS['laser_timestep'] = 2.5e-5
+        PARAMS['laser_timestep'] = 3.5e-5
+        PARAMS["device"] = model_input["intrinsics"].device
 
         return PARAMS
 
@@ -717,7 +719,7 @@ class LightCurtain:
         if not yield_mode:
             yield(all_pts, field_visual)
 
-    def sense_low(self, depth_rgb, design_pts_lc, device, visualizer=None):
+    def sense_low(self, depth_rgb, design_pts_lc, visualizer=None):
         start = time.time()
 
         # Warp depthmap to LC frame
@@ -753,10 +755,10 @@ class LightCurtain:
             thickness_sensed = thickness_lc
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().to(device)
-        depth_sensed = torch.tensor(depth_sensed).to(device) * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).to(device) * mask_sense
-        int_sensed = torch.tensor(int_sensed).to(device) * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(self.device)
+        depth_sensed = torch.tensor(depth_sensed).to(self.device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed
@@ -796,7 +798,7 @@ class LightCurtain:
         # cv2.waitKey(0)
 
 
-    def sense_high(self, depth_rgb, design_pts_lc, device, visualizer=None):
+    def sense_high(self, depth_rgb, design_pts_lc, visualizer=None):
         start = time.time()
 
         # Warp depthmap to LC frame
@@ -846,10 +848,10 @@ class LightCurtain:
         # cv2.imshow("depth_lc_x", depth_lc_x/100.)
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().to(device)
-        depth_sensed = torch.tensor(depth_sensed).to(device) * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).to(device) * mask_sense
-        int_sensed = torch.tensor(int_sensed).to(device) * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(self.device)
+        depth_sensed = torch.tensor(depth_sensed).to(self.device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed

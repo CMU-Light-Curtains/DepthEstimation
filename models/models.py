@@ -477,6 +477,13 @@ class BaseModel(nn.Module):
         # Viz
         self.viz = None
 
+        # LC Init
+        self.lc = None
+        if self.cfg.lc.enabled:
+            from lc import light_curtain
+            self.lc = light_curtain.LightCurtain()
+            print("Setup LC")
+
     def set_viz(self, viz):
         self.viz = viz
 
@@ -649,7 +656,7 @@ class BaseModel(nn.Module):
         first_features = [feat_imgs_all[:,0,:-3, :,:], feat_imgs_layer_1[:,0,:,:,:]]
         return BV, cost_volumes, last_features, first_features, warped_features
 
-    def forward_int(self, model_input, lc=None):
+    def forward_int(self, model_input):
 
         if self.nmode == "default":
             # Encoder
@@ -938,8 +945,8 @@ class BaseModel(nn.Module):
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
             # LC
-            if lc is not None:
-                BV_lc, score = self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+            if self.lc is not None:
+                BV_lc, score = self.lc_process(BV_cur_refined, model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
             else:
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
@@ -1020,9 +1027,9 @@ class BaseModel(nn.Module):
                 lc_DPVs = []
                 for lc_path in lc_paths:
                     if mode == "high":
-                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path, BV_cur_all.device)
+                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path)
                     elif mode == "low":
-                        lc_DPV, _ = lc.sense_low(true_depth, lc_path, BV_cur_all.device)
+                        lc_DPV, _ = lc.sense_low(true_depth, lc_path)
                     lc_DPVs.append(lc_DPV)
 
                 # 3D
@@ -1080,10 +1087,16 @@ class BaseModel(nn.Module):
 
         return torch.cat(final_fused, dim=0), unc_scores_all
         
-    def forward(self, inputs, lc=None):
+    def forward(self, inputs):
+        # Setup LC if setup
+        if self.lc is not None:
+            lc_params = self.lc.gen_params_from_model_input(inputs[0])
+            lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+            self.lc.init(lc_params)
+
         outputs = []
         for input in inputs:
-            outputs.append(self.forward_int(input, lc))
+            outputs.append(self.forward_int(input))
         return outputs
 
 class DefaultModel(nn.Module):

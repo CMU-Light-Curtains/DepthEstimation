@@ -156,7 +156,7 @@ class DefaultTrainer(BaseTrainer):
                 self.lc.init(lc_params)
 
             # Model
-            output_left, output_right = self.model([model_input_left, model_input_right], self.lc)
+            output_left, output_right = self.model([model_input_left, model_input_right])
 
             # Set Prev from last one
             output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
@@ -247,7 +247,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Model
             start = time.time()
-            output_left = self.model([model_input_left], self.lc)[0]
+            output_left = self.model([model_input_left])[0]
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
 
