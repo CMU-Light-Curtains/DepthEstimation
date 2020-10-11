@@ -16,7 +16,7 @@ import utils.img_utils as img_utils
 import cv2
 
 class FieldWarp:
-    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input, name):
+    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input, name, device):
         # Assign
         self.intr_input = intr_input
         self.dist_input = dist_input
@@ -26,6 +26,7 @@ class FieldWarp:
         self.size_output = size_output
         self.output2input = output2input
         self.name = name
+        self.device = device
 
         # Compute Scaled
         self.intr_input_scaled = img_utils.intr_scale(self.intr_input, self.size_input, self.size_output)
@@ -192,6 +193,9 @@ class FieldWarp:
         if os.path.isfile(self.name + "_lc_flowfields.npy") and os.access(self.name + "_lc_flowfields.npy", os.R_OK):
             self.flowfields = np.load(self.name + "_lc_flowfields.npy", allow_pickle=True).item()
 
+            # Store on correct GPU
+            for field in self.flowfields:
+                field = field.to(self.device)
 
 def normalize(field):
     minv, _ = field.min(1)  # [1,384]
@@ -295,10 +299,10 @@ class LightCurtain:
         dist_lc = np.array(PARAMS["dist_lc"]).astype(np.float32).reshape((1, 5))
         self.fw_large = FieldWarp(PARAMS["intr_rgb"], dist_rgb, PARAMS["size_rgb"],
                                   PARAMS["intr_lc"], dist_lc, PARAMS["size_lc"],
-                                  PARAMS["rTc"], PARAMS["name"])
+                                  PARAMS["rTc"], PARAMS["name"], PARAMS["device"])
         self.fw_small = FieldWarp(PARAMS["intr_rgb_small"], dist_rgb, PARAMS["size_rgb_small"],
                                   PARAMS["intr_lc_small"], dist_lc, PARAMS["size_lc_small"],
-                                  PARAMS["rTc"], PARAMS["name"])
+                                  PARAMS["rTc"], PARAMS["name"], PARAMS["device"])
         self.d_candi = PARAMS["d_candi"]
         self.r_candi = PARAMS["r_candi"]
         self.d_candi_up = PARAMS["d_candi_up"]
