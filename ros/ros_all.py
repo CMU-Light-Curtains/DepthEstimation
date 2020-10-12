@@ -117,6 +117,7 @@ class Planner():
         param["r_candi"] = param["d_candi"]
         param["r_candi_up"] = param["d_candi"]
         param['cTr'] = np.linalg.inv(param['rTc'])
+        param["device"] = torch.device(0)
         self.real_param = copy.deepcopy(param)
         self.real_lc = light_curtain.LightCurtain()
         if not self.real_lc.initialized:
@@ -157,7 +158,7 @@ class Planner():
         self.unc_scores = []
 
     def init_unc_field(self):
-        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 30.
+        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 5.
         self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 10.0))
 
     def integrate(self, DPVs):
