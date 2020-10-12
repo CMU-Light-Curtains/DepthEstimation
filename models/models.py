@@ -464,6 +464,8 @@ class BaseModel(nn.Module):
             self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg = self.bn_avg, id = self.id)
         if self.nmode == "exp6" or self.nmode == "exp7":
             self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
+        if self.nmode == "exp7_lc":
+            self.based_3d = Base3D(5, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
             self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
         if self.nmode == "exp8":
@@ -474,6 +476,13 @@ class BaseModel(nn.Module):
 
         # Viz
         self.viz = None
+
+        # LC Init
+        self.lc = None
+        if self.cfg.lc.enabled:
+            from lc import light_curtain
+            self.lc = light_curtain.LightCurtain()
+            print("Setup LC")
 
     def set_viz(self, viz):
         self.viz = viz
@@ -647,7 +656,7 @@ class BaseModel(nn.Module):
         first_features = [feat_imgs_all[:,0,:-3, :,:], feat_imgs_layer_1[:,0,:,:,:]]
         return BV, cost_volumes, last_features, first_features, warped_features
 
-    def forward_int(self, model_input, lc=None):
+    def forward_int(self, model_input):
 
         if self.nmode == "default":
             # Encoder
@@ -886,12 +895,6 @@ class BaseModel(nn.Module):
             # Decoder
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
-            # # LC
-            # if lc is not None:
-            #     self.lc_process(BV_cur, model_input, lc, mode="low", viz=True)
-            #     #self.lc_process(BV_cur_refined, model_input, lc, mode="high", viz=True, iterations=5)
-            #     pass
-
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
         elif self.nmode == "exp8":
@@ -915,6 +918,38 @@ class BaseModel(nn.Module):
             BV_cur_refined_2 = self.base_decoder2(torch.exp(BV_downsampled), img_features=last_features)
 
             return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
+
+        elif self.nmode == "exp7_lc":
+            # Encoder
+            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
+            last_features.append(model_input["rgb"][:, -1, :, :, :])
+
+            # Prev Output
+            if model_input["prev_output"] is None:
+                prev_output = torch.log(torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D))
+            else:
+                prev_output = model_input["prev_output"].unsqueeze(1)
+
+            # Prev LC
+            if model_input["prev_lc"] is None:
+                prev_lc = torch.log(torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D))
+            else:
+                prev_lc = model_input["prev_lc"].unsqueeze(1)
+
+            # Volume
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), prev_output, prev_lc, warped_features], dim=1)
+            BV_resi = self.based_3d(comb_volume, prob=False)
+            BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
+
+            # Decoder
+            BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
+
+            # LC
+            if self.lc is not None:
+                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+                return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
+            else:
+                return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
         else:
             raise Exception("Nmode wrong")
@@ -992,9 +1027,9 @@ class BaseModel(nn.Module):
                 lc_DPVs = []
                 for lc_path in lc_paths:
                     if mode == "high":
-                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path, True)
+                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path)
                     elif mode == "low":
-                        lc_DPV, _ = lc.sense_low(true_depth, lc_path, True)
+                        lc_DPV, _ = lc.sense_low(true_depth, lc_path)
                     lc_DPVs.append(lc_DPV)
 
                 # 3D
@@ -1052,10 +1087,17 @@ class BaseModel(nn.Module):
 
         return torch.cat(final_fused, dim=0), unc_scores_all
         
-    def forward(self, inputs, lc=None):
+    def forward(self, inputs):
+        # Setup LC if setup
+        if self.lc is not None:
+            if not self.lc.initialized:
+                lc_params = self.lc.gen_params_from_model_input(inputs[0])
+                lc_params = self.lc.expand_params(lc_params, self.cfg, 64, 128)
+                self.lc.init(lc_params)
+
         outputs = []
         for input in inputs:
-            outputs.append(self.forward_int(input, lc))
+            outputs.append(self.forward_int(input))
         return outputs
 
 class DefaultModel(nn.Module):

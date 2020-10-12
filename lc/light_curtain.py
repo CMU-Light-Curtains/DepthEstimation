@@ -16,7 +16,7 @@ import utils.img_utils as img_utils
 import cv2
 
 class FieldWarp:
-    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input, name):
+    def __init__(self, intr_input, dist_input, size_input, intr_output, dist_output, size_output, output2input, name, device):
         # Assign
         self.intr_input = intr_input
         self.dist_input = dist_input
@@ -26,6 +26,7 @@ class FieldWarp:
         self.size_output = size_output
         self.output2input = output2input
         self.name = name
+        self.device = device
 
         # Compute Scaled
         self.intr_input_scaled = img_utils.intr_scale(self.intr_input, self.size_input, self.size_output)
@@ -158,6 +159,7 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing ztheta2zrange_input")
             output, flowfield = self._ztheta2zrange(field, self.angles_input_scaled, d_candi, r_candi)
             self.flowfields[name] = flowfield
             return output
@@ -167,6 +169,7 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing ztheta2zrange_output")
             output, flowfield = self._ztheta2zrange(field, self.angles_output, d_candi, r_candi)
             self.flowfields[name] = flowfield
             return output
@@ -176,21 +179,29 @@ class FieldWarp:
             output = self.warp(field, self.flowfields[name])
             return output
         else:
+            print("Recomputing transformZTheta")
             output, flowfield = self._transformZTheta(field, self.angles_input_scaled, d_candi_input,
                                                       self.angles_output, d_candi_output, self.output2input)
             self.flowfields[name] = flowfield
-            print("stored " + name)
             return output
 
     def save_flowfields(self):
+        if str(self.device) != "cuda:0":
+            return
+        if os.path.isfile(self.name + "_lc_flowfields.npy"):
+            return
+        print("Saving Flowfields " + str(self.device))
         np.save(self.name + "_lc_flowfields.npy", self.flowfields)
-        pass
 
     def load_flowfield(self):
         if len(self.flowfields.keys()):
             return
         if os.path.isfile(self.name + "_lc_flowfields.npy") and os.access(self.name + "_lc_flowfields.npy", os.R_OK):
             self.flowfields = np.load(self.name + "_lc_flowfields.npy", allow_pickle=True).item()
+
+            # Store on correct GPU
+            for key in self.flowfields.keys():
+                self.flowfields[key] = self.flowfields[key].to(self.device)
 
 
 def normalize(field):
@@ -295,10 +306,10 @@ class LightCurtain:
         dist_lc = np.array(PARAMS["dist_lc"]).astype(np.float32).reshape((1, 5))
         self.fw_large = FieldWarp(PARAMS["intr_rgb"], dist_rgb, PARAMS["size_rgb"],
                                   PARAMS["intr_lc"], dist_lc, PARAMS["size_lc"],
-                                  PARAMS["rTc"], PARAMS["name"])
+                                  PARAMS["rTc"], PARAMS["name"], PARAMS["device"])
         self.fw_small = FieldWarp(PARAMS["intr_rgb_small"], dist_rgb, PARAMS["size_rgb_small"],
                                   PARAMS["intr_lc_small"], dist_lc, PARAMS["size_lc_small"],
-                                  PARAMS["rTc"], PARAMS["name"])
+                                  PARAMS["rTc"], PARAMS["name"], PARAMS["device"])
         self.d_candi = PARAMS["d_candi"]
         self.r_candi = PARAMS["r_candi"]
         self.d_candi_up = PARAMS["d_candi_up"]
@@ -308,6 +319,7 @@ class LightCurtain:
         self.expand_B = PARAMS["expand_B"]
         self.initialized = True
         self.sensed_arr = None
+        self.device = PARAMS["device"]
 
     def expand_params(self, PARAMS, cfg, expand_A, expand_B):
         d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
@@ -344,9 +356,11 @@ class LightCurtain:
             "d_candi": model_input["d_candi"],
             "r_candi": model_input["d_candi"],
             "d_candi_up": model_input["d_candi_up"],
-            "r_candi_up": model_input["d_candi_up"]
+            "r_candi_up": model_input["d_candi_up"],
+            "name": "default"
         }
-        PARAMS['laser_timestep'] = 2.5e-5
+        PARAMS['laser_timestep'] = 3.5e-5
+        PARAMS["device"] = model_input["intrinsics"].device
 
         return PARAMS
 
@@ -752,10 +766,10 @@ class LightCurtain:
             thickness_sensed = thickness_lc
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
-        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
-        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(self.device)
+        depth_sensed = torch.tensor(depth_sensed).to(self.device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed
@@ -845,10 +859,10 @@ class LightCurtain:
         # cv2.imshow("depth_lc_x", depth_lc_x/100.)
 
         # Transfer to CUDA (How to know device?)
-        mask_sense = torch.tensor(depth_rgb > 0).float().cuda()
-        depth_sensed = torch.tensor(depth_sensed).cuda() * mask_sense
-        thickness_sensed = torch.tensor(thickness_sensed).cuda() * mask_sense
-        int_sensed = torch.tensor(int_sensed).cuda() * mask_sense
+        mask_sense = torch.tensor(depth_rgb > 0).float().to(self.device)
+        depth_sensed = torch.tensor(depth_sensed).to(self.device) * mask_sense
+        thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
+        int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
         # Compute DPV
         z_img = depth_sensed
