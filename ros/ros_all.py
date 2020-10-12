@@ -90,23 +90,18 @@ class ConsumerThread(threading.Thread):
                 time.sleep(0.1)
             self.function(self.queue[0])
 
-class RosAll():
-    def __init__(self):
-        self.transforms = None
-        self.index = 0
-        self.prev_index = -1
-        self.bridge = CvBridge()
-        self.prev_seq = None
+class Planner():
+    def __init__(self, mode, params_file):
+        self.mode = mode
+        self.counter = 0
         self.just_started = True
-        self.mode = rospy.get_param('~mode', 'sim')
-        print(self.mode)
 
         if self.mode == "real":
             lc_wrapper_python.ros_init("lc_wrapper_example")
-            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=30, dev="/dev/ttyACM0")
+            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=100, dev="/dev/ttyACM0")
 
         #  Params
-        with open('basement_sensor.json') as f:
+        with open(params_file) as f:
             param = json.load(f)
 
         # Precompute additional param
@@ -154,60 +149,50 @@ class RosAll():
 
         # Pin Memory
         self.intr_r_tensor = torch.tensor(self.real_param['intr_rgb']).cuda()
-        self.param = param
-        self.depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
-        self.unc_pinned = torch.zeros(1,64, int(self.param["size_rgb"][0])).float().pin_memory()
-        self.dpv_pinned = torch.zeros(1,64, int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0])).float().pin_memory()
-        self.dpv_r_tensor = None
 
         # Init Field
         self.init_unc_field()
-        self.mutex = Lock()
-        self.new_dpv = False
-        self.just_started = True
-        self.counter = 0
-        print("Ready")
 
-        # ROS
-        self.queue_size = 1
-        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
-        self.depth_sub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image, queue_size=self.queue_size, buff_size=2**24)
-        self.dpv_sub = message_filters.Subscriber('ros_net/dpv_pub', TensorMsg, queue_size=self.queue_size)
-        #self.ts = self.sync([self.depth_sub, self.dpv_sub], self.queue_size)
-        self.depth_sub.registerCallback(self.depth_callback)
-        self.dpv_sub.registerCallback(self.dpv_callback)
-        self.debug_pub = rospy.Publisher('ros_planner/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
+        # Gather
+        self.unc_scores = []
 
     def init_unc_field(self):
-        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + self.E_RANGE / 2.
-        self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 6.0))
+        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 30.
+        self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 10.0))
 
     def integrate(self, DPVs):
         # Keep Renormalize
         curr_dist = torch.clamp(torch.exp(self.final), img_utils.epsilon, 1.)
 
+        # # Update
+        # for dpv in DPVs:
+        #     dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
+        #     curr_dist = curr_dist * dpv
+        #     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
         # Update
+        curr_dist_log = torch.log(curr_dist)
         for dpv in DPVs:
             dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
-            curr_dist = curr_dist * dpv
-            curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+            curr_dist_log += torch.log(dpv)
+        curr_dist = torch.exp(curr_dist_log)
+        curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
         # Spread
         for i in range(0, 1):
             curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
-
+        # if self.counter < 20:
+        #     for i in range(0, 1):
+        #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+        # else:
+        #     for i in range(0, 3):
+        #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 3)
+        
         # Keep Renormalize
         curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)
 
         # Back to Log space
         self.final = torch.log(curr_dist)
-
-    def destroy(self):
-        self.depth_sub.unregister()
-        self.dpv_sub.unregister()
-        
-    def get_rgb_size(self):
-        return (self.real_param['size_rgb'][0], self.real_param['size_rgb'][1])
 
     def get_depth_lc(self, depth_r, pool_val=4):
         # Warp Depth Image to LC
@@ -225,56 +210,20 @@ class RosAll():
         depth_lc = cv2.resize(depth_lc, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
         return depth_lc
 
-    def dpv_callback(self, msg):
-        dpv_msg = msg
-        dpv_img = torch.tensor(np.frombuffer(dpv_msg.data, np.dtype(np.float32)).reshape(dpv_msg.shape))
-        self.dpv_pinned[:] = dpv_img[:]
-        self.mutex.acquire()
-        self.dpv_r_tensor = self.dpv_pinned.cuda()
-        self.new_dpv = True
-        self.mutex.release()
-        print("dpv")
-
-    def depth_callback(self, msg):
+    def run(self, dpv_r_tensor, depth_r_tensor):
         self.counter+=1
-
-        # Get DPV from RGB
-        self.mutex.acquire()
-        dpv_r_tensor = None
-        if self.new_dpv:
-            dpv_r_tensor = self.dpv_r_tensor.clone()
-            self.new_dpv = False
-            print("gotdpv")
-        self.mutex.release()
-
-        # # Hack
-        # dpv_r_tensor = None
-        # depth_r = np.load('/home/raaj/adapfusion/external/lcsim/python/example/depth_image.npy')
-        # items = [[250, 300, 50, 50, 10+5], [250, 200, 50, 50, 20.], [250, 100, 50, 50, 10.]]
-        # for item1 in items:
-        #     depth_r[item1[0]:item1[0] + item1[2], item1[1]:item1[1] + item1[3]] = item1[4] + float(self.counter * 0.1)
-        # depth_img = torch.tensor(cv2.resize(depth_r, self.get_rgb_size(), interpolation = cv2.INTER_LINEAR))
-
-        # Convert to Tensor
+        print(self.counter)
+        global_time = time.time()
         start = time.time()
-        depth_msg = msg
-        depth_img = torch.tensor(self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)/1000.)
-
-        # time.sleep(0.1)
-        # cv2.imshow("win", depth_img.numpy())
-        # cv2.waitKey(1)
-        # return
 
         # Generate Depth LC
         depth_lc = None
         if self.mode == "sim":
-            depth_lc = self.get_depth_lc(depth_img.numpy())
+            depth_lc = self.get_depth_lc(depth_r_tensor.squeeze(0).cpu().numpy())
 
         # Copy to GPU
         # self.unc_pinned[:] = unc_img[:]
         # unc_field_predicted_r = self.unc_pinned.cuda()
-        self.depth_pinned[:] = depth_img[:]
-        depth_r_tensor = self.depth_pinned.cuda(non_blocking=True).unsqueeze(0)
         intr_r_tensor = self.intr_r_tensor
 
         # Make a DPV out of the Depth Map
@@ -286,6 +235,10 @@ class RosAll():
         unc_field_truth_r, debugmap = img_utils.gen_ufield(dpv_truth, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=False, cfgx=self.real_param)
         unc_field_truth_lc = self.algo_lc.fw_large.preprocess(unc_field_truth_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
         unc_field_truth_lc = self.algo_lc.fw_large.transformZTheta(unc_field_truth_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
+        unc_field_truth_lc[:,:,0:50] = np.nan
+        unc_field_truth_lc[:,:,-50:-1] = np.nan
+        preprocess_time = time.time() - start
+        print("preprocess_time: " + str(preprocess_time)) # 30ms
 
         # cv2.imshow("win", unc_field_truth_lc.squeeze(0).cpu().numpy()*3)
         # cv2.waitKey(1)
@@ -295,10 +248,10 @@ class RosAll():
         planner = "default"
         start = time.time()
         if planner == "default":
-            params = {"step": [0.5]}
+            params = {"step": [0.5], "std_div": 5.}
             plan_func = self.algo_lc.plan_default
         elif planner == "m1":
-            params = {"step": 3, "interval": 5}
+            params = {"step": 3, "interval": 5, "std_div": 1.}
             plan_func = self.algo_lc.plan_m1
         elif planner == "sweep":
             params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
@@ -306,15 +259,19 @@ class RosAll():
         elif planner == "empty":
             params = {}
             plan_func = self.algo_lc.plan_empty
-        time_plan = time.time() - start
+        setup_time = time.time() - start
+        #print("setup_time: " + str(setup_time)) # 30ms
 
         # Expand DPV
+        start = time.time()
         if dpv_r_tensor is not None:
             #self.final = img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True)
             dpv_r_tensor = torch.exp(img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True))
             for i in range(0,3):
                 self.integrate([dpv_r_tensor])
-            
+        dpv_int_time = time.time() - start
+        print("dpv_int_time: " + str(dpv_int_time)) # 30ms
+
         # Iterations
         if self.just_started:
             iterations = 1
@@ -323,20 +280,29 @@ class RosAll():
             iterations = 1
 
         # Iterations
+        print("***********************")
         for i in range(0, iterations):
 
             # Generate UField (in RGB)
             start = time.time()
             unc_field_predicted_r, _ = img_utils.gen_ufield(self.final, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=True, cfgx=self.real_param)
             time_gen_ufield = time.time() - start
+            #print("time_gen_ufield: " + str(time_gen_ufield)) # 30ms
+
+            # Hack
+            #unc_field_predicted_r[:,-10:-1] = 0
 
             # Score (Need to compute in LC space as it is zoomed in sadly)
             start = time.time()
             unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
             unc_field_predicted_lc = self.algo_lc.fw_large.transformZTheta(unc_field_predicted_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
-            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi)
+            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, False)
             time_score = time.time() - start
+            #print("time_score: " + str(time_gen_ufield)) # 30ms
             print(unc_score)
+            self.unc_scores.append(unc_score.item())
+            if self.counter % 20 == 0:
+                print(self.unc_scores)
             # cv2.imshow("FAGA", unc_field_truth_lc.squeeze(0).cpu().numpy())
             # cv2.imshow("FAGB", unc_field_predicted_lc.squeeze(0).cpu().numpy())
             # cv2.waitKey(1)
@@ -346,7 +312,7 @@ class RosAll():
             
                 # Send Curtains while planning
                 sensed_arr_all = []
-                base_start = time.time()
+                start = time.time()
                 i=-1
                 for lc_path in plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True):
                     i+=1
@@ -392,18 +358,20 @@ class RosAll():
                 sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
                 sensed_arr_all.append(sensed_arr)
 
+                base_time = time.time() - start
+                print("base_time: " + str(base_time)) # 30ms
+
                 # Generate DPV
+                start = time.time()
                 lc_DPVs = []
                 for sensed_arr in sensed_arr_all:
 
                     # Gen DPV
-                    start = time.time()
-                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, 1.)
+                    lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, params["std_div"])
                     lc_DPVs.append(lc_DPV)
-                    dpv_time = time.time() - start
 
-                base_time = time.time() - base_start
-                print(base_time)
+                dpv_time = time.time() - start
+                #print("dpv_time: " + str(dpv_time)) # 30ms
 
             # Plane and Sense
             elif self.mode == "sim":
@@ -438,20 +406,121 @@ class RosAll():
                     print((measure_time, transform_time, dpv_time))
 
             # Integrate Measurement
+            start = time.time()
             self.integrate(lc_DPVs)
+            int_time = time.time() - start
+            #print("int_time: " + str(int_time)) # 30ms
 
-            # Viz
-            if self.debug_pub.get_num_connections():
-                field_visual = self.algo_lc.field_visual
-                field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
-                ros_debug = self.bridge.cv2_to_imgmsg((field_visual*255).astype(np.uint8), encoding="bgr8")
-                ros_debug.header = msg.header
-                self.debug_pub.publish(ros_debug)
+            # Gen Depth removing uncertainties
+            z = torch.exp(self.final.squeeze(0))
+            d_candi_expanded = torch.tensor(self.algo_lc.d_candi).unsqueeze(1).unsqueeze(1).cuda()
+            mean = torch.sum(d_candi_expanded * z, dim=0)
+            variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
+            mask_var = (variance < 2.0).float()
+            final_depth = (mean * mask_var).cpu().numpy()
 
-            #cv2.imshow("win", self.algo_lc.field_visual)
-            #cv2.waitKey(1)
-                
+            print("****global time: " + str(time.time() - global_time))
 
-rospy.init_node('ros_all', anonymous=False)
-rosall = RosAll()
-rospy.spin()
+            # Return
+            field_visual = self.algo_lc.field_visual
+            field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+        
+        return field_visual, final_depth
+
+class RosAll():
+    def __init__(self):
+        self.transforms = None
+        self.index = 0
+        self.prev_index = -1
+        self.bridge = CvBridge()
+        self.prev_seq = None
+        self.just_started = True
+        self.mode = rospy.get_param('~mode', 'sim')
+        self.counter = 0
+        self.mutex = Lock()
+        self.new_dpv = False
+        print(self.mode)
+
+        self.planner = Planner(mode = self.mode, params_file='real_sensor.json')
+
+        # Pin Memory
+        self.depth_pinned = torch.zeros((int(self.planner.real_param["size_rgb"][1]), int(self.planner.real_param["size_rgb"][0]))).float().pin_memory()
+        self.dpv_pinned = torch.zeros(1,64, int(self.planner.real_param["size_rgb"][1]), int(self.planner.real_param["size_rgb"][0])).float().pin_memory()
+        self.dpv_r_tensor = None
+
+        # ROS
+        self.queue_size = 1
+        self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
+        self.depth_sub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image, queue_size=self.queue_size, buff_size=2**24)
+        self.dpv_sub = message_filters.Subscriber('ros_net/dpv_pub', TensorMsg, queue_size=self.queue_size)
+        #self.ts = self.sync([self.depth_sub, self.dpv_sub], self.queue_size)
+        self.depth_sub.registerCallback(self.depth_callback)
+        self.dpv_sub.registerCallback(self.dpv_callback)
+        self.debug_pub = rospy.Publisher('ros_planner/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
+        self.depth_pub = rospy.Publisher('ros_planner/depth', sensor_msgs.msg.Image, queue_size=self.queue_size)
+
+    def destroy(self):
+        self.depth_sub.unregister()
+        self.dpv_sub.unregister()
+
+    def dpv_callback(self, msg):
+        dpv_msg = msg
+        dpv_img = torch.tensor(np.frombuffer(dpv_msg.data, np.dtype(np.float32)).reshape(dpv_msg.shape))
+        self.dpv_pinned[:] = dpv_img[:]
+        self.mutex.acquire()
+        self.dpv_r_tensor = self.dpv_pinned.cuda()
+        self.new_dpv = True
+        self.mutex.release()
+
+    def depth_callback(self, msg):
+        self.counter+=1
+        print(self.counter)
+        global_time = time.time()
+
+        # Get DPV from RGB
+        self.mutex.acquire()
+        dpv_r_tensor = None
+        if self.new_dpv:
+            dpv_r_tensor = self.dpv_r_tensor.clone()
+            self.new_dpv = False
+            print("gotdpv")
+        self.mutex.release()
+
+        # # Hack
+        # dpv_r_tensor = None
+        # depth_r = np.load('/home/raaj/adapfusion/external/lcsim/python/example/depth_image.npy')
+        # items = [[250, 300, 50, 50, 10+5], [250, 200, 50, 50, 20.], [250, 100, 50, 50, 10.]]
+        # for item1 in items:
+        #     depth_r[item1[0]:item1[0] + item1[2], item1[1]:item1[1] + item1[3]] = item1[4] + float(self.counter * 0.1)
+        # depth_img = torch.tensor(cv2.resize(depth_r, self.get_rgb_size(), interpolation = cv2.INTER_LINEAR))
+
+        # Convert to Tensor
+        start = time.time()
+        depth_msg = msg
+        depth_img = torch.tensor(self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)/1000.)
+        self.depth_pinned[:] = depth_img[:]
+        depth_r_tensor = self.depth_pinned.cuda(non_blocking=True).unsqueeze(0)
+
+        # Call Planner
+        field_visual, final_depth = self.planner.run(dpv_r_tensor, depth_r_tensor)
+
+        # Viz
+        if self.debug_pub.get_num_connections():
+            start = time.time()
+            ros_debug = self.bridge.cv2_to_imgmsg((field_visual*255).astype(np.uint8), encoding="bgr8")
+            ros_debug.header = msg.header
+            self.debug_pub.publish(ros_debug)
+            pub_time = time.time() - start
+            #print("pub_time: " + str(int_time)) # 30ms
+
+        if self.depth_pub.get_num_connections():
+            ros_depth = (final_depth * 1000).astype(np.uint16)
+            ros_depth = self.bridge.cv2_to_imgmsg(ros_depth)
+            ros_depth.header = depth_msg.header
+            ros_depth.header.stamp = rospy.Time.now()
+            self.depth_pub.publish(ros_depth)
+
+if __name__ == '__main__':
+    rospy.init_node('ros_all', anonymous=False)
+    rosall = RosAll()
+    rospy.spin()

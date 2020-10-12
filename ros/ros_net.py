@@ -69,6 +69,8 @@ from rospy.numpy_msg import numpy_msg
 from rospy_tutorials.msg import Floats
 import zlib
 
+from ros_all import *
+
 class ConsumerThread(threading.Thread):
     def __init__(self, queue, function):
         threading.Thread.__init__(self)
@@ -92,9 +94,14 @@ class RosNet():
         self.just_started = True
         self.mode = rospy.get_param('~mode', 'stereo')
         print(self.mode)
+        params_file = 'real_sensor.json'
+
+        # Planner
+        self.planner = None
+        #self.planner = Planner(mode="real", params_file=params_file)
 
         #  Params
-        with open('real_sensor.json') as f:
+        with open(params_file) as f:
             self.param = json.load(f)
         self.param["d_candi"] = img_utils.powerf(self.param["s_range"], self.param["e_range"], 64, 1.)
 
@@ -127,7 +134,8 @@ class RosNet():
         self.model_datum["prev_output"] = None
         self.rgb_pinned = torch.zeros((1,2,3,self.param["size_rgb"][1], self.param["size_rgb"][0])).float().pin_memory()
         self.dpv_pinned = torch.zeros((1,64,int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
-        self.depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        self.pred_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        self.true_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
         self.unc_pinned = torch.zeros(1,64, int(self.param["size_rgb"][0])).float().pin_memory()
         __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
                             'std': [0.229, 0.224, 0.225]}
@@ -161,11 +169,12 @@ class RosNet():
         lth = ConsumerThread(self.q_msg, self.handle_msg)
         lth.setDaemon(True)
         lth.start()
-        self.queue_size = 1
+        self.queue_size = 3
         self.sync = functools.partial(ApproximateTimeSynchronizer, slop=0.01)
         self.left_camsub = message_filters.Subscriber('/left_camera_resized/image_color_rect', sensor_msgs.msg.Image)
         self.right_camsub = message_filters.Subscriber('right_camera_resized/image_color_rect', sensor_msgs.msg.Image)
-        self.ts = self.sync([self.left_camsub, self.right_camsub], self.queue_size)
+        self.depth_sub = message_filters.Subscriber('/left_camera_resized/depth', sensor_msgs.msg.Image) # , queue_size=self.queue_size, buff_size=2**24
+        self.ts = self.sync([self.left_camsub, self.right_camsub, self.depth_sub], self.queue_size)
         self.ts.registerCallback(self.callback)
         self.prev_left_cammsg = None
         self.depth_pub = rospy.Publisher('ros_net/depth', sensor_msgs.msg.Image, queue_size=self.queue_size)
@@ -188,6 +197,7 @@ class RosNet():
     def destroy(self):
         self.left_camsub.unregister()
         self.right_camsub.unregister()
+        self.depth_sub.unregister()
         del self.ts
 
     def get_transform(self, from_frame, to_frame):
@@ -206,9 +216,9 @@ class RosNet():
         cvImg = cv2.remap(cvImg, cam_model.mapx, cam_model.mapy, 1)
         return cvImg, cam_model
 
-    def callback(self, left_cammsg, right_cammsg):
+    def callback(self, left_cammsg, right_cammsg, depth_msg):
         # Append msg
-        self.q_msg.append((left_cammsg, right_cammsg, self.prev_left_cammsg))
+        self.q_msg.append((left_cammsg, right_cammsg, self.prev_left_cammsg, depth_msg))
 
         # Store prev here
         self.prev_left_cammsg = left_cammsg
@@ -222,7 +232,7 @@ class RosNet():
             time.sleep(0.00001)
             return
         self.prev_index = self.index
-        left_cammsg, right_cammsg, prev_left_cammsg = msg
+        left_cammsg, right_cammsg, prev_left_cammsg, depth_msg = msg
         print("enter")
 
         # Convert
@@ -232,8 +242,9 @@ class RosNet():
             prev_left_img = self.bridge.imgmsg_to_cv2(prev_left_cammsg, desired_encoding='passthrough').astype(np.float32)/255.
         left_img = self.bridge.imgmsg_to_cv2(left_cammsg, desired_encoding='passthrough').astype(np.float32)/255.
         right_img = self.bridge.imgmsg_to_cv2(right_cammsg, desired_encoding='passthrough').astype(np.float32)/255.
-
-        #start = time.time()
+        depth_img = torch.tensor(self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)/1000.)
+        self.true_depth_pinned[:] = depth_img[:]
+        true_depth_r_tensor = self.true_depth_pinned.cuda(non_blocking=True).unsqueeze(0)
 
         # Gen Tensor
         if self.mode == "stereo":
@@ -254,31 +265,36 @@ class RosNet():
         # UField Display
         unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_refined_predicted, self.model_datum["d_candi"], self.model_datum["intrinsics_up"].squeeze(0), BV_log=True, cfgx=self.param)
 
-        # cv2.imshow("WIN", unc_field_predicted.squeeze(0).cpu().numpy())
-        # cv2.waitKey(1)
+        # Planner (Slow)
+        if self.planner is not None:
+            field_visual, final_depth = self.planner.run(dpv_refined_predicted, true_depth_r_tensor)
+            #pass
+            #cv2.imshow("WIN", field_visual)
+            #cv2.waitKey(1)
 
         # CPU
         #dpv_refined_predicted_cpu = dpv_refined_predicted.cpu().numpy()
         self.dpv_pinned[:] = dpv_refined_predicted[:]
-        self.depth_pinned[:] = depth_refined_predicted[:]
+        self.pred_depth_pinned[:] = depth_refined_predicted[:]
         self.unc_pinned[:] = unc_field_predicted[:]
 
         #print("End: " + str(time.time() - start))
 
         # Publish
-        ros_dpv = TensorMsg()
-        ros_dpv.data = self.dpv_pinned.numpy().tostring()
-        ros_dpv.shape = self.dpv_pinned.shape
-        ros_dpv.header = left_cammsg.header
-        ros_unc = TensorMsg()
-        ros_unc.data = self.unc_pinned.numpy().tostring()
-        ros_unc.shape = self.unc_pinned.shape
-        ros_unc.header = left_cammsg.header
-        self.dpv_pub.publish(ros_dpv)
-        self.unc_pub.publish(ros_unc)
+        if self.dpv_pub.get_num_connections() or self.unc_pub.get_num_connections():
+            ros_dpv = TensorMsg()
+            ros_dpv.data = self.dpv_pinned.numpy().tostring()
+            ros_dpv.shape = self.dpv_pinned.shape
+            ros_dpv.header = left_cammsg.header
+            ros_unc = TensorMsg()
+            ros_unc.data = self.unc_pinned.numpy().tostring()
+            ros_unc.shape = self.unc_pinned.shape
+            ros_unc.header = left_cammsg.header
+            self.dpv_pub.publish(ros_dpv)
+            self.unc_pub.publish(ros_unc)
 
         if self.depth_pub.get_num_connections():
-            ros_depth = ((depth_refined_predicted.cpu().squeeze(0).numpy()) * 1000).astype(np.uint16)
+            ros_depth = ((self.pred_depth_pinned[:].squeeze(0).numpy()) * 1000).astype(np.uint16)
             ros_depth = self.bridge.cv2_to_imgmsg(ros_depth)
             ros_depth.header = left_cammsg.header
             self.depth_pub.publish(ros_depth)
