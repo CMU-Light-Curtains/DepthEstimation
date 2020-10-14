@@ -1,0 +1,22 @@
+\begin{thebibliography}{1}\itemsep=-1pt
+
+\bibitem{Ancha_2020_ECCV}
+Ancha, Raaj, Hu, Narasimhan, and Held.
+\newblock Active perception using light curtains for autonomous driving.
+\newblock In {\em Proceedings of the European Conference on Computer Vision
+  (ECCV)}, September 2020.
+
+\bibitem{bartels2019Agile}
+Whittaker Joe~Bartels, Jian~Wang and Srinivasa G.
+\newblock Agile depth sensing using triangulating light curtains.
+\newblock In {\em 2019 IEEE International Conference on Computer Vision
+  (ICCV)}, 2019.
+
+\bibitem{wang2018programmable}
+Jian Wang, Joseph Bartels, William Whittaker, Aswin~C Sankaranarayanan, and
+  Srinivasa~G Narasimhan.
+\newblock Programmable triangulation light curtains.
+\newblock In {\em Proceedings of the European Conference on Computer Vision
+  (ECCV)}, pages 19--34, 2018.
+
+\end{thebibliography}
