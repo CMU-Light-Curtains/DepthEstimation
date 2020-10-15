@@ -84,9 +84,11 @@ Generating Prior from RGB
       Show table for above
    LC Integration
    Experiments:
+      Effect/Speedup of having a Prior
+      
       3D Upsampling of Lidar
       Time feedback vs no
-      Deep Learning vs no Deep Learning
+      Deep Learning vs no Deep Learning (Ruled Surface etc.)
 Outdoor Experiments:
    etc.
 Future Work
@@ -106,24 +108,6 @@ Our work, looks into marrying both modalities to counter each sensor's limitatio
 \input{sensor_setup}
 \input{formulation}
 \input{lc_only_exp}
-
-\iffalse
-Adaptive Sensing Formulation (say Light Curtain Only)
-   Simulator
-   3D Tensor to store Depth (initialization)
-   Ray 2D Projection into Flat Plane
-   Planning Formulation/Strategies Default/M1
-   Probabilistic Formulation (Inverted Gaussian Model)
-   Experiments (show Sim vs Real world, Indoor vs Outdoor):
-      Basic Sweep visualization (sanity check)
-      Prior sweeping approach
-      Non Inverted vs Inverted
-      STD encoding the uncertaintiy etc.
-      Default vs M1 (and diff strategies)
-   Having a Prior Depth (what if we had)
-   Experiments here
-         Show convergence speed/accuracy etc.
-\fi
 
 {\small
 \bibliographystyle{ieee_fullname}

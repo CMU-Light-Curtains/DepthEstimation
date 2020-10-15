@@ -1,7 +1,7 @@
 
 \section{Light Curtain only Experiments}
 
-In this initial baseline, we attempt to track the Uncertainty Field (UF) depth error by computing the RMSE error metric $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(P(\mathbf{d}(u)_{i})\right)-\mathbf{d_{gt}}(u)_{i}\right)^{2}}{n}}$ against the ground truth. We use 3 scenarios: One in a KITTI driving scene using the LC simulator (a), one indoors in the basement using the both a simulated and real Light Curtain (b), and one in an outdoor driving scene with the real device (c).
+In this initial baseline, we attempt to track the Uncertainty Field (UF) depth error by computing the RMSE error metric $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(P(\mathbf{d}(u)_{i})\right)-\mathbf{d_{gt}}(u)_{i}\right)^{2}}{n}}$ against the ground truth. We use 3 scenarios: One in a KITTI driving scene using the LC simulator (a), one indoors in the basement using the both a simulated and real Light Curtain (b), and lastly in various outdoor driving scenes with the real device (c0/c1/c2).
 
 \begin{figure}[h]
    \centering
@@ -44,7 +44,7 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
    \label{table:t1}
 \end{table}
 
-Earlier, we had noted how $\sigma$ defined for each $C_{i}$ measurement in $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma$ fixed. We observe that $\sigma$ being a function of the curtain thickness is critical to better performance over larger steps/placements. Results seen in ~\ref{table:t2}
+Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma_{c}$ fixed. We observe that $\sigma_{c}$ being a function of the curtain thickness is critical to better performance over larger steps/placements. Results seen in ~\ref{table:t2}
 
 \begin{table}[h]
    \centering
@@ -58,13 +58,68 @@ Earlier, we had noted how $\sigma$ defined for each $C_{i}$ measurement in $P\le
     Sweep $\mathbf{C}$ Step 0.5m  (Fixed) &1  &1.658  \\ \hline
     Sweep $\mathbf{C}$ Step 1.0m (Fixed) &0.5  &2.290  \\ \hline
    \end{tabular}
-   \caption{$\sigma$ in generated $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ being fixed vs being dynamic as a function of curtain thickness with real LC}
+   \caption{$\sigma_{c}$ in generated $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ being fixed vs being dynamic as a function of curtain thickness with real LC}
    \label{table:t2}
 \end{table}
 
-\textbf{Effect of Inverting Gaussian Model:} We attempt to run experiments on (a) and (b) testing the convergence time of policies $m0$ and $m1$, with $z=0.5$ and $z=1$ to test the effect of having the inverting gaussian model.
+\textbf{Effect of Inverting Gaussian Model:} Our Observation Model ensures that the sensor distribution tends to an inverted gaussian when intensities are low. We test the effect on (a) and (b) in the above case, and in cases where low intensities tend to a uniform distribution. We see significantly improved performance when low intensities tend to an Inverted Gaussian rather than a uniform distribution. Results seen in ~\ref{fig:figure01} ~\ref{fig:invgau}
 
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.49\textwidth]{figures/Figure_0.pdf}
+        \includegraphics[width=0.49\textwidth]{figures/Figure_1.pdf}
+    \end{minipage}\hfill
+    \centering
+    \caption{RMSE of Depth in UF over every iteration in scenarios left/(a) right/(b). Note the largely improved performance when low intensities tend to an Inverted Gaussian}
+    \label{fig:figure01}
+\end{figure}
 
+ \begin{figure}[h]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.49\textwidth]{figures/InvGau.png}
+        \includegraphics[width=0.49\textwidth]{figures/Uniform.png}
+    \end{minipage}\hfill
+    \centering
+    \caption{\textbf{Left:} Policies $m0$ and $m1$ where low intensities result in no information (Uniform Distribution). \textbf{Right:} Where low intensities result in an Inverted Gaussian based on our Sensor Model}
+    \label{fig:invgau}
+\end{figure}
+
+ \textbf{Effect of Placing more Curtains:} In both policies, placing more light curtains results in much faster convergence, at the cost of increased runtime. Results seen in ~\ref{fig:figure34}
+
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.49\textwidth]{figures/Figure_3.pdf}
+        \includegraphics[width=0.49\textwidth]{figures/Figure_4.pdf}
+    \end{minipage}\hfill
+    \centering
+    \caption{Placing more curtains results in faster convergence to the ground truth}
+    \label{fig:figure34}
+\end{figure}
+
+\textbf{Effect of a Stronger Prior:} While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow. As a quick primer, we show that a prior generated from a monocular RGB camera in a domain specific scenario yields better results. Results seen in ~\ref{fig:prior}
+
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=1.0\textwidth]{figures/placement.png}
+    \end{minipage}\hfill
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.5\textwidth]{figures/figure_X.pdf}
+    \end{minipage}\hfill
+    \centering
+    \caption{\textbf{Above:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image. \textbf{Below:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence}
+    \label{fig:prior}
+\end{figure}
+
+Hence, we need to work towards building a Neural Network that is capable of ingesting either Monocular/Stereo images, and generating a DPV to act as our prior. Additionally, a network that ingests a DPV from Light Curtain measurements is also ideal.
 
 % While this is a reasonable approach to estimating depth, it is also slow, as it requires placing many curtains. 
 
