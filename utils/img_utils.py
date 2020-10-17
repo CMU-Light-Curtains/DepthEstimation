@@ -2,6 +2,7 @@ import numpy as np
 import math
 import PIL.Image as image
 import warping.homography as warp_homo
+import copy
 
 import torch
 import torch.nn.functional as F
@@ -9,6 +10,41 @@ import torchvision
 import cv2
 import external.deval_lib.pyevaluatedepth_lib as dlib
 epsilon = torch.finfo(float).eps
+
+def process_lc_json(param, device=None):
+    param = copy.deepcopy(param)
+    param["intr_rgb"] = np.array(param["intr_rgb"]).astype(np.float32)
+    param["intr_lc"] = np.array(param["intr_lc"]).astype(np.float32)
+    param["lTc"] = np.array(param["lTc"]).astype(np.float32)
+    param["rTc"] = np.array(param["rTc"]).astype(np.float32)
+    N = param["N"]
+    S_RANGE = param["s_range"]
+    E_RANGE = param["e_range"]
+    param["d_candi"] = powerf(S_RANGE, E_RANGE, N, param["q_power"])
+    param["d_candi_up"] = param["d_candi"]
+    param["r_candi"] = param["d_candi"]
+    param["r_candi_up"] = param["d_candi"]
+    param['cTr'] = np.linalg.inv(param['rTc'])
+    if device is not None: param['device'] = device
+    else: param["device"] = torch.device("cuda:0")
+
+    return param
+
+def update_for_algo(param):
+    param = copy.deepcopy(param)
+    LC_SCALE = float(param['size_rgb'][0]) / float(param['size_lc'][0]) # 0.625
+    param['laser_timestep'] = 2.5e-5 / LC_SCALE
+    param['intr_lc'] = np.array([
+        [param['intr_lc'][0,0]*LC_SCALE, 0, param['intr_lc'][0,2]*LC_SCALE],
+        [0, param['intr_lc'][1,1]*LC_SCALE, param['intr_lc'][1,2]*LC_SCALE],
+        [0, 0, 1]
+    ])
+    param['size_lc'] = [int(512*LC_SCALE), int(640*LC_SCALE)]
+    TOP_CUT = 72
+    BOT_CUT = 72
+    param['size_lc'] = [param['size_lc'][0], param['size_lc'][1] - TOP_CUT - BOT_CUT]
+    param['intr_lc'][1,2] -=  (TOP_CUT/2 + BOT_CUT/2)
+    return param
 
 def eval_errors(errors):
     return dlib.evaluateErrors(errors)

@@ -321,6 +321,13 @@ class LightCurtain:
         self.sensed_arr = None
         self.device = PARAMS["device"]
 
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))) or 
+        self.PARAMS["size_rgb"][0] != self.PARAMS["size_lc"][0] or 
+        self.PARAMS["size_rgb"][1] != self.PARAMS["size_lc"][1]:
+            self.transform_needed = True
+        else:
+            self.transform_needed = False
+
     def expand_params(self, PARAMS, cfg, expand_A, expand_B):
         d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
         d_candi_expand_upsample = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_B, cfg.var.qpower)
@@ -481,7 +488,7 @@ class LightCurtain:
 
             # Draw
             pixels = np.array([np.digitize(pts_planned[:, 1], self.d_candi_up) - 1, range(0, pts_planned.shape[0])]).T
-            indices = (pixels[:,0] < 256) & (pixels[:,0] >= 0) & (pixels[:,1] >= 0) & (pixels[:,1] < 320)
+            indices = (pixels[:,0] < 256) & (pixels[:,0] >= 0) & (pixels[:,1] >= 0) & (pixels[:,1] < field_visual.shape[1])
 
             # print(field_visual.shape)
             #
@@ -593,7 +600,7 @@ class LightCurtain:
                             & (spline[:,1] >= 0) & (spline[:,1] < field_visual.shape[0])]
 
             # Draw Spline
-            # for spixel in spline: field_visual[spixel[1], spixel[0]] = (255,0,255)
+            # for spixel in spline: field_visual[spixel[1], spixel[0]] = (0,1,1)
 
             # Create Empty Field
             empty_field = field_preprocessed_range_temp*0
