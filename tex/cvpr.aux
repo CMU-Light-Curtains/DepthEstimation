@@ -53,9 +53,6 @@
 \@writefile{toc}{\contentsline {section}{\numberline {5}\hskip -1em.\nobreakspace  {}Light Curtain only Experiments}{4}{section.5}}
 \@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Scenarios (a), (b), (c) from left to right\relax }}{4}{figure.caption.8}}
 \newlabel{fig:exp}{{9}{4}{Scenarios (a), (b), (c) from left to right\relax }{figure.caption.8}{}}
-\bibstyle{ieee_fullname}
-\bibdata{egbib}
-\bibcite{Ancha_2020_ECCV}{1}
 \@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Doing a simple planar sweep across the scene. Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. Left: LC simulated from the Lidar Depth. Right: Using the real LC\relax }}{5}{figure.caption.9}}
 \newlabel{fig:planarsweep}{{10}{5}{Doing a simple planar sweep across the scene. Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. Left: LC simulated from the Lidar Depth. Right: Using the real LC\relax }{figure.caption.9}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Error wrt to time and number of Sweep steps\relax }}{5}{table.caption.10}}
@@ -68,7 +65,26 @@
 \newlabel{fig:invgau}{{12}{5}{\textbf {Left:} Policies $m0$ and $m1$ where low intensities result in no information (Uniform Distribution). \textbf {Right:} Where low intensities result in an Inverted Gaussian based on our Sensor Model\relax }{figure.caption.13}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Placing more curtains results in faster convergence to the ground truth\relax }}{5}{figure.caption.14}}
 \newlabel{fig:figure34}{{13}{5}{Placing more curtains results in faster convergence to the ground truth\relax }{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}\hskip -1em.\nobreakspace  {}Network Architecture}{5}{section.6}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}\hskip -1em.\nobreakspace  {}Motivation}{5}{subsection.6.1}}
+\citation{Yang-2019-118007}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Our network takes in RGB images to generate a Depth Probability Volume, plans and places Light Curtains based on this DPV, and recursively refines it. This is then fed back on the next timestep to get much more refined DPV estimate. \relax }}{6}{figure.caption.15}}
+\newlabel{fig:network}{{14}{6}{Our network takes in RGB images to generate a Depth Probability Volume, plans and places Light Curtains based on this DPV, and recursively refines it. This is then fed back on the next timestep to get much more refined DPV estimate. \relax }{figure.caption.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {15}{\ignorespaces  \textbf  {Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf  {Left:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.\relax }}{6}{figure.caption.16}}
+\newlabel{fig:prior}{{15}{6}{\textbf {Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf {Left:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.\relax }{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}\hskip -1em.\nobreakspace  {}Structure of Network}{6}{subsection.6.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}\hskip -1em.\nobreakspace  {}Loss Functions}{6}{subsection.6.3}}
+\@writefile{brf}{\backcite{Yang-2019-118007}{{6}{6.3}{subsection.6.3}}}
+\newlabel{eq:seloss}{{9}{6}{\hskip -1em.~Loss Functions}{equation.6.9}{}}
+\newlabel{eq:lrcons}{{12}{6}{\hskip -1em.~Loss Functions}{equation.6.12}{}}
+\newlabel{eq:smooth}{{13}{6}{\hskip -1em.~Loss Functions}{equation.6.13}{}}
+\bibstyle{ieee_fullname}
+\bibdata{egbib}
+\bibcite{Ancha_2020_ECCV}{1}
 \bibcite{bartels2019Agile}{2}
 \bibcite{wang2018programmable}{3}
-\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces \textbf  {Above:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image. \textbf  {Below:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence\relax }}{6}{figure.caption.15}}
-\newlabel{fig:prior}{{14}{6}{\textbf {Above:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image. \textbf {Below:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence\relax }{figure.caption.15}{}}
+\bibcite{Yang-2019-118007}{4}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}\hskip -1em.\nobreakspace  {}Datasets}{7}{subsection.6.4}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}\hskip -1em.\nobreakspace  {}Experiments}{7}{section.7}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Effects of various loss functions for the baseline of Monocular Depth Estimation only\relax }}{7}{table.caption.17}}
+\newlabel{table:xx}{{3}{7}{Effects of various loss functions for the baseline of Monocular Depth Estimation only\relax }{table.caption.17}{}}

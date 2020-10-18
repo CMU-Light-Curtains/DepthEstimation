@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2019.9.2)  15 OCT 2020 19:59
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2019.9.2)  18 OCT 2020 17:08
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -435,7 +435,7 @@ File: ot1phv.fd 2001/06/04 scalable font definitions for OT1/phv.
  </home/raaj/adapfusion/tex/figures/banner.pdf>]) (/home/raaj/adapfusion/tex/sensor_setup.tex
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/LC.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<figures/LC.pdf, id=41, 529.98pt x 472.164pt>
+<figures/LC.pdf, id=40, 529.98pt x 472.164pt>
 File: figures/LC.pdf Graphic file (type pdf)
  <use figures/LC.pdf>
 Package pdftex.def Info: figures/LC.pdf used on input line 10.
@@ -445,7 +445,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 8--17
  []$[]$ 
  []
 
-<figures/sim.png, id=42, 907.39pt x 314.17375pt>
+<figures/sim.png, id=41, 907.39pt x 314.17375pt>
 File: figures/sim.png Graphic file (type png)
  <use figures/sim.png>
 Package pdftex.def Info: figures/sim.png used on input line 28.
@@ -458,7 +458,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 26--31
 
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/array.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<figures/array.pdf, id=43, 963.6pt x 542.025pt>
+<figures/array.pdf, id=42, 963.6pt x 542.025pt>
 File: figures/array.pdf Graphic file (type pdf)
  <use figures/array.pdf>
 Package pdftex.def Info: figures/array.pdf used on input line 42.
@@ -471,7 +471,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 40--45
 ) (/home/raaj/adapfusion/tex/formulation.tex [2 </home/raaj/adapfusion/tex/figures/LC.pdf> </home/raaj/adapfusion/tex/figures/sim.png> </home/raaj/adapfusion/tex/figures/array.pdf>]
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/bev.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<figures/bev.pdf, id=192, 552.8655pt x 190.311pt>
+<figures/bev.pdf, id=191, 552.8655pt x 190.311pt>
 File: figures/bev.pdf Graphic file (type pdf)
  <use figures/bev.pdf>
 Package pdftex.def Info: figures/bev.pdf used on input line 34.
@@ -484,7 +484,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 32--37
 
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/planner.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<figures/planner.pdf, id=193, 721.49548pt x 269.80798pt>
+<figures/planner.pdf, id=192, 721.49548pt x 269.80798pt>
 File: figures/planner.pdf Graphic file (type pdf)
  <use figures/planner.pdf>
 Package pdftex.def Info: figures/planner.pdf used on input line 55.
@@ -497,7 +497,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 53--58
 
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/fields.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<figures/fields.pdf, id=194, 416.75702pt x 155.38051pt>
+<figures/fields.pdf, id=193, 416.75702pt x 155.38051pt>
 File: figures/fields.pdf Graphic file (type pdf)
  <use figures/fields.pdf>
 Package pdftex.def Info: figures/fields.pdf used on input line 67.
@@ -512,7 +512,7 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <9> not available
 (Font)              Font shape `OT1/ptm/b/n' tried instead on input line 80.
-[3 </home/raaj/adapfusion/tex/figures/bev.pdf> </home/raaj/adapfusion/tex/figures/planner.pdf>] <figures/graphs.png, id=251, 1279.78125pt x 678.535pt>
+[3 </home/raaj/adapfusion/tex/figures/bev.pdf> </home/raaj/adapfusion/tex/figures/planner.pdf>] <figures/graphs.png, id=250, 1279.78125pt x 678.535pt>
 File: figures/graphs.png Graphic file (type png)
  <use figures/graphs.png>
 Package pdftex.def Info: figures/graphs.png used on input line 102.
@@ -525,7 +525,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 100--105
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-) (/home/raaj/adapfusion/tex/lc_only_exp.tex <figures/exp.png, id=253, 1033.8625pt x 251.94125pt>
+) (/home/raaj/adapfusion/tex/lc_only_exp.tex <figures/exp.png, id=252, 1033.8625pt x 251.94125pt>
 File: figures/exp.png Graphic file (type png)
  <use figures/exp.png>
 Package pdftex.def Info: figures/exp.png used on input line 10.
@@ -535,7 +535,7 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 8--13
  []$[]$ 
  []
 
-<figures/sweep.png, id=254, 669.50125pt x 473.77pt>
+<figures/sweep.png, id=253, 669.50125pt x 473.77pt>
 File: figures/sweep.png Graphic file (type png)
  <use figures/sweep.png>
 Package pdftex.def Info: figures/sweep.png used on input line 23.
@@ -546,97 +546,70 @@ Overfull \hbox (11.29218pt too wide) in paragraph at lines 21--26
  []
 
 
-Overfull \hbox (3.28752pt too wide) in paragraph at lines 34--43
- [][] 
- []
-
-
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-[4 </home/raaj/adapfusion/tex/figures/fields.pdf> </home/raaj/adapfusion/tex/figures/graphs.png> </home/raaj/adapfusion/tex/figures/exp.png>] <figures/Figure_0.pdf, id=302, 462.52798pt x 346.89601pt>
+[4 </home/raaj/adapfusion/tex/figures/fields.pdf> </home/raaj/adapfusion/tex/figures/graphs.png> </home/raaj/adapfusion/tex/figures/exp.png>] <figures/Figure_0.pdf, id=300, 462.52798pt x 346.89601pt>
 File: figures/Figure_0.pdf Graphic file (type pdf)
  <use figures/Figure_0.pdf>
-Package pdftex.def Info: figures/Figure_0.pdf used on input line 71.
+Package pdftex.def Info: figures/Figure_0.pdf used on input line 75.
 (pdftex.def)             Requested size: 121.73114pt x 91.2971pt.
- <figures/Figure_1.pdf, id=303, 462.52798pt x 346.89601pt>
+ <figures/Figure_1.pdf, id=301, 462.52798pt x 346.89601pt>
 File: figures/Figure_1.pdf Graphic file (type pdf)
  <use figures/Figure_1.pdf>
-Package pdftex.def Info: figures/Figure_1.pdf used on input line 72.
+Package pdftex.def Info: figures/Figure_1.pdf used on input line 76.
 (pdftex.def)             Requested size: 121.73114pt x 91.2971pt.
 
-Overfull \hbox (11.29218pt too wide) in paragraph at lines 69--75
+Overfull \hbox (11.29218pt too wide) in paragraph at lines 73--79
  []$[]$ 
  []
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-<figures/InvGau.png, id=304, 595.22375pt x 797.98125pt>
+<figures/InvGau.png, id=302, 595.22375pt x 797.98125pt>
 File: figures/InvGau.png Graphic file (type png)
  <use figures/InvGau.png>
-Package pdftex.def Info: figures/InvGau.png used on input line 83.
+Package pdftex.def Info: figures/InvGau.png used on input line 87.
 (pdftex.def)             Requested size: 121.73114pt x 163.19757pt.
- <figures/Uniform.png, id=305, 591.20876pt x 793.96625pt>
+ <figures/Uniform.png, id=303, 591.20876pt x 793.96625pt>
 File: figures/Uniform.png Graphic file (type png)
  <use figures/Uniform.png>
-Package pdftex.def Info: figures/Uniform.png used on input line 84.
+Package pdftex.def Info: figures/Uniform.png used on input line 88.
 (pdftex.def)             Requested size: 121.73114pt x 163.47891pt.
 
-Overfull \hbox (11.29218pt too wide) in paragraph at lines 81--87
+Overfull \hbox (11.29218pt too wide) in paragraph at lines 85--91
  []$[]$ 
  []
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-<figures/Figure_3.pdf, id=307, 462.52798pt x 346.89601pt>
+<figures/Figure_3.pdf, id=305, 462.52798pt x 346.89601pt>
 File: figures/Figure_3.pdf Graphic file (type pdf)
  <use figures/Figure_3.pdf>
-Package pdftex.def Info: figures/Figure_3.pdf used on input line 97.
+Package pdftex.def Info: figures/Figure_3.pdf used on input line 101.
 (pdftex.def)             Requested size: 121.73114pt x 91.2971pt.
- <figures/Figure_4.pdf, id=308, 462.52798pt x 346.89601pt>
+ <figures/Figure_4.pdf, id=306, 462.52798pt x 346.89601pt>
 File: figures/Figure_4.pdf Graphic file (type pdf)
  <use figures/Figure_4.pdf>
-Package pdftex.def Info: figures/Figure_4.pdf used on input line 98.
+Package pdftex.def Info: figures/Figure_4.pdf used on input line 102.
 (pdftex.def)             Requested size: 121.73114pt x 91.2971pt.
 
-Overfull \hbox (11.29218pt too wide) in paragraph at lines 95--101
+Overfull \hbox (11.29218pt too wide) in paragraph at lines 99--105
  []$[]$ 
  []
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-<figures/placement.png, id=310, 1410.26875pt x 432.61626pt>
-File: figures/placement.png Graphic file (type png)
- <use figures/placement.png>
-Package pdftex.def Info: figures/placement.png used on input line 111.
-(pdftex.def)             Requested size: 248.42812pt x 76.20406pt.
- <figures/figure_X.pdf, id=311, 462.52798pt x 346.89601pt>
-File: figures/figure_X.pdf Graphic file (type pdf)
- <use figures/figure_X.pdf>
-Package pdftex.def Info: figures/figure_X.pdf used on input line 115.
-(pdftex.def)             Requested size: 124.21405pt x 93.16031pt.
+) (/home/raaj/adapfusion/tex/network_arch.tex
 
-Overfull \hbox (11.29218pt too wide) in paragraph at lines 109--118
- []$[]$ 
- []
-
-
-Overfull \hbox (11.29218pt too wide) in paragraph at lines 109--118
- []$ 
- []
-
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-) (/home/raaj/adapfusion/tex/cvpr.bbl (/home/raaj/adapfusion/tex/cvpr.brf)
-\tf@brf=\write3
-\openout3 = `cvpr.brf'.
-
+pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/network.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
+<figures/network.pdf, id=307, 862.90881pt x 160.23865pt>
+File: figures/network.pdf Graphic file (type pdf)
+ <use figures/network.pdf>
+Package pdftex.def Info: figures/network.pdf used on input line 2.
+(pdftex.def)             Requested size: 496.85625pt x 92.26364pt.
  [5 </home/raaj/adapfusion/tex/figures/sweep.png> </home/raaj/adapfusion/tex/figures/Figure_0.pdf> </home/raaj/adapfusion/tex/figures/Figure_1.pdf
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/Figure_1.pdf): PDF inclusion: multiple pdfs with page group included in a single page
@@ -646,31 +619,50 @@ pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/Figure_3.pdf): 
 > </home/raaj/adapfusion/tex/figures/Figure_4.pdf
 
 pdfTeX warning: pdflatex (file /home/raaj/adapfusion/tex/figures/Figure_4.pdf): PDF inclusion: multiple pdfs with page group included in a single page
->])
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 117.
- [6
+>] <figures/figure_X.pdf, id=504, 462.52798pt x 346.89601pt>
+File: figures/figure_X.pdf Graphic file (type pdf)
+ <use figures/figure_X.pdf>
+Package pdftex.def Info: figures/figure_X.pdf used on input line 19.
+(pdftex.def)             Requested size: 121.73114pt x 91.2971pt.
+ <figures/placement3.png, id=505, 361.35pt x 483.8075pt>
+File: figures/placement3.png Graphic file (type png)
+ <use figures/placement3.png>
+Package pdftex.def Info: figures/placement3.png used on input line 20.
+(pdftex.def)             Requested size: 72.04248pt x 96.4571pt.
 
- </home/raaj/adapfusion/tex/figures/placement.png> </home/raaj/adapfusion/tex/figures/figure_X.pdf>]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 117.
+Overfull \hbox (11.29218pt too wide) in paragraph at lines 17--23
+ []$[]$ 
+ []
+
+[6 </home/raaj/adapfusion/tex/figures/network.pdf> </home/raaj/adapfusion/tex/figures/figure_X.pdf> </home/raaj/adapfusion/tex/figures/placement3.png>]) (/home/raaj/adapfusion/tex/cvpr.bbl (/home/raaj/adapfusion/tex/cvpr.brf)
+\tf@brf=\write3
+\openout3 = `cvpr.brf'.
+
+)
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 118.
+ [7
+
+]
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 118.
  (/home/raaj/adapfusion/tex/cvpr.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 117.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 117.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 118.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 118.
 Package rerunfilecheck Info: File `cvpr.brf' has not changed.
-(rerunfilecheck)             Checksum: 13F9E5EB06FA6E2C21D5FDA4DBEBF280;147.
+(rerunfilecheck)             Checksum: E582F5D09DA85DC7A36991405CAA4C17;202.
  ) 
 Here is how much of TeX's memory you used:
- 8334 strings out of 494953
- 124168 string characters out of 6180978
- 228374 words of memory out of 5000000
- 11397 multiletter control sequences out of 15000+600000
+ 8367 strings out of 494953
+ 124719 string characters out of 6180978
+ 225939 words of memory out of 5000000
+ 11410 multiletter control sequences out of 15000+600000
  39685 words of font info for 91 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 39i,14n,40p,1060b,476s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 39i,14n,40p,1060b,358s stack positions out of 5000i,500n,10000p,200000b,80000s
 {/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc}</usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx5.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cmextra/cmex9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm7.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/helvetic/uhvb8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/helvetic/uhvr8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on /home/raaj/adapfusion/tex/cvpr.pdf (6 pages, 4186970 bytes).
+Output written on /home/raaj/adapfusion/tex/cvpr.pdf (7 pages, 4103900 bytes).
 PDF statistics:
- 660 PDF objects out of 1000 (max. 8388607)
- 247 compressed objects within 3 object streams
- 45 named destinations out of 1000 (max. 500000)
- 91 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 725 PDF objects out of 1000 (max. 8388607)
+ 281 compressed objects within 3 object streams
+ 61 named destinations out of 1000 (max. 500000)
+ 96 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -29,8 +29,10 @@ In this initial baseline, we attempt to track the Uncertainty Field (UF) depth e
 
 As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able to reasonably match the real device. We also demonstrate how decreasing the steps the curtain takes reduces runtime but increases RMSE. Results seen in ~\ref{table:t1}
 
+\noindent
 \begin{table}[h]
    \centering
+   \resizebox{0.9\linewidth}{!}{
    \begin{tabular}{|l|l|l|}
    \hline
     Policy&  Runtime/s&  RMSE/m\\ \hline
@@ -39,15 +41,17 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
     Sweep 50 $\mathbf{C}$ Step 0.25m (Real) &2  &1.284  \\ \hline
     Sweep 25 $\mathbf{C}$ Step 0.5m  (Real) &1  &1.574  \\ \hline
     Sweep 12 $\mathbf{C}$ Step 1.0m (Real) &0.5  &1.927  \\ \hline
-   \end{tabular}
+   \end{tabular}}
    \caption{Error wrt to time and number of Sweep steps}
    \label{table:t1}
 \end{table}
 
-Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma_{c}$ fixed. We observe that $\sigma_{c}$ being a function of the curtain thickness is critical to better performance over larger steps/placements. Results seen in ~\ref{table:t2}
+\textbf{Effect of Dynamic Sigma:} Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma_{c}$ fixed. We observe that $\sigma_{c}$ being a function of the curtain thickness is critical to better performance over larger steps/placements. Results seen in ~\ref{table:t2}
 
+\noindent
 \begin{table}[h]
    \centering
+   \resizebox{0.9\linewidth}{!}{
    \begin{tabular}{|l|l|l|}
    \hline
     Policy&  Runtime/s&  RMSE/m\\ \hline
@@ -57,7 +61,7 @@ Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $
     Sweep $\mathbf{C}$ Step 0.25m (Fixed) &2  &1.218  \\ \hline
     Sweep $\mathbf{C}$ Step 0.5m  (Fixed) &1  &1.658  \\ \hline
     Sweep $\mathbf{C}$ Step 1.0m (Fixed) &0.5  &2.290  \\ \hline
-   \end{tabular}
+   \end{tabular}}
    \caption{$\sigma_{c}$ in generated $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ being fixed vs being dynamic as a function of curtain thickness with real LC}
    \label{table:t2}
 \end{table}
@@ -101,25 +105,6 @@ Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $
     \caption{Placing more curtains results in faster convergence to the ground truth}
     \label{fig:figure34}
 \end{figure}
-
-\textbf{Effect of a Stronger Prior:} While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow. As a quick primer, we show that a prior generated from a monocular RGB camera in a domain specific scenario yields better results. Results seen in ~\ref{fig:prior}
-
-\begin{figure}[h]
-    \centering
-    \begin{minipage}{0.5\textwidth}
-        \centering
-        \includegraphics[width=1.0\textwidth]{figures/placement.png}
-    \end{minipage}\hfill
-    \begin{minipage}{0.5\textwidth}
-        \centering
-        \includegraphics[width=0.5\textwidth]{figures/figure_X.pdf}
-    \end{minipage}\hfill
-    \centering
-    \caption{\textbf{Above:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image. \textbf{Below:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence}
-    \label{fig:prior}
-\end{figure}
-
-Hence, we need to work towards building a Neural Network that is capable of ingesting either Monocular/Stereo images, and generating a DPV to act as our prior. Additionally, a network that ingests a DPV from Light Curtain measurements is also ideal.
 
 % While this is a reasonable approach to estimating depth, it is also slow, as it requires placing many curtains. 
 
