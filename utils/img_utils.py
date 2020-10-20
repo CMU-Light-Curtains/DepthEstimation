@@ -11,6 +11,13 @@ import cv2
 import external.deval_lib.pyevaluatedepth_lib as dlib
 epsilon = torch.finfo(float).eps
 
+def sim_lc_ptcloud(pts):
+    zval = torch.tensor(pts[:,:,2]).unsqueeze(0)
+    iimg = torch.zeros((3, pts.shape[0], pts.shape[1]))
+    iimg[1,:,:] = torch.tensor(pts[:,:,3])/255.
+    pts = img_utils.tocloud(zval, iimg, intr)
+    return pts
+
 def process_lc_json(param, device=None):
     param = copy.deepcopy(param)
     param["intr_rgb"] = np.array(param["intr_rgb"]).astype(np.float32)

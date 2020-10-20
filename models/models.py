@@ -970,6 +970,8 @@ class BaseModel(nn.Module):
                 # # Special case for ilim due to higher res lidar
                 # if "ilim" in self.cfg.data.exp_name:
                 #     dmap = model_input["dmaps_up"][b,:,:].unsqueeze(0)
+                #     # dmap = F.interpolate(dmap.unsqueeze(0), scale_factor=0.5, mode='nearest').squeeze(0)
+                #     # dmap = F.interpolate(dmap.unsqueeze(0), scale_factor=2, mode='nearest').squeeze(0)
 
             elif mode == "low":
                 intr = model_input["intrinsics"][b, :, :]
@@ -1025,17 +1027,23 @@ class BaseModel(nn.Module):
 
                 # Sensing
                 lc_DPVs = []
+                lc_pts = []
                 for lc_path in lc_paths:
                     if mode == "high":
-                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path)
+                        lc_DPV, lc_pt, _ = lc.sense_high(true_depth, lc_path, viz)
                     elif mode == "low":
                         lc_DPV, _ = lc.sense_low(true_depth, lc_path)
                     lc_DPVs.append(lc_DPV)
+                    lc_pts.append(lc_pt)
 
                 # 3D
                 if viz:
                     if self.viz is not None:
-                        self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 3)
+                        for pts in lc_pts:
+                            self.viz.addCloud(img_utils.lcoutput_to_cloud(pts), 2)
+                            break
+                        self.viz.addCloud(img_utils.tocloud(model_input["dmaps"][b,:,:].unsqueeze(0), img_utils.demean(F.interpolate(model_input["rgb"][b, -1, :, :, :].unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)), model_input["intrinsics"][b,:,:], rgbr=[255,255,0]), 2)
+                        #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 1)
                         self.viz.swapBuffer()
 
                 # # Viz
