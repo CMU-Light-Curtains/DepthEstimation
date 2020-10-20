@@ -1,19 +1,22 @@
 
 \section{Formulation}
 
+\newcommand{\DD}{\mathbf{D}}
+\newcommand{\dd}{\mathbf{d}}
+
 We begin by looking at a Light Curtain only problem of adaptively discovering the depth of a scene. We wouldn't know the path along the rays/pixels on which an object may lie/intersect, hence we choose to go with a sampling based approach. We treat each ray as initially having either a uniform distribution, or a gaussian with a large variance in the center, and we attempt to formulate our problem with a Recursive Bayesian update approach.
 
 \subsection{Representation}
 
 \smallskip
-Our state space is represented as a tensor of some fixed resolution [320x240] with each pixel in image $I$ encoding the depth value $\mathbf{d}(u,v)$ as a bernoulli distribution $P(\mathbf{d}(u,v))$. $D_{c}$ represents the list of depths quantizing the space of each pixel defined within $(d_{min}, d_{max})$ of some fixed size $N$ [64], resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
+We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some fixed resolution [320x240] with each pixel in image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent ambiguity in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. as a bernoulli distribution $P(\mathbf{d}(u,v))$. $\D$ represents a set of $N$ quantized, uniformly-spaced depth values for each pixel that lie within $(d_{min}, d_{max})$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
 \begin{align}
-   D_{c}=\left\{ d_{0}...d_{n}\right\} \quad d_{i}=d_{min}+(d_{max}-d_{min})*t 
+   &\D=\left\{ d_{0}, \dots, d_{n}\right\}; d_{i}=d_{min}+(d_{max}-d_{min}) \cdot t 
    \label{eq:d_candi}
    \\
-   P(\mathbf{d}(u,v))=I(u,v)
+   &P(\mathbf{d}(u,v))=I(u,v)
    \nonumber\\
-   \sum_{d}\left(P(\mathbf{d}(u,v))\right)=1\qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
+   &\sum_{d}\left(P(\mathbf{d}(u,v))\right)=1\qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
    \label{eq:depth_dist}
    %\vspace{-.1in}
 \end{align}
