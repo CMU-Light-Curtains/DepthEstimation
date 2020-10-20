@@ -321,8 +321,8 @@ class LightCurtain:
         self.sensed_arr = None
         self.device = PARAMS["device"]
 
-        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))) or 
-        self.PARAMS["size_rgb"][0] != self.PARAMS["size_lc"][0] or 
+        if not np.all(np.equal(self.PARAMS["rTc"], np.eye(4))) or \
+        self.PARAMS["size_rgb"][0] != self.PARAMS["size_lc"][0] or \
         self.PARAMS["size_rgb"][1] != self.PARAMS["size_lc"][1]:
             self.transform_needed = True
         else:
