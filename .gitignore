@@ -5,7 +5,7 @@
 *.fls
 *.log
 *.synctex.gz
-
+tex/cvpr.pdf
 ######################### Binary Files #########################
 code/runs/
 *.tar
