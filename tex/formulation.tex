@@ -9,19 +9,18 @@ We begin by looking at a Light Curtain only problem of adaptively discovering th
 \subsection{Representation}
 
 \smallskip
-We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some fixed resolution [320x240] with each pixel in image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent ambiguity in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. as a bernoulli distribution $P(\mathbf{d}(u,v))$. $\D$ represents a set of $N$ quantized, uniformly-spaced depth values for each pixel that lie within $(d_{min}, d_{max})$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
+We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some fixed resolution [320x240] with each pixel in image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent uncertainty in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. We quantize depth values into a set $\D = \{d_0, \dots, d_{N-1}\}$ of $N$ discrete, uniformly spaced depth values lying in $(d_\text{min}, d_\text{max})$. All our predictions $\dd_{u, v} \in \D$ belong to this set. The output of our depth estimation method for each pixel is a probability distribution $P(\dd_{u, v})$, modeled as a categorical distribution over $\D$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
 \begin{align}
-   &\D=\left\{ d_{0}, \dots, d_{n}\right\}; d_{i}=d_{min}+(d_{max}-d_{min}) \cdot t 
+   &\D=\{d_0, \dots, d_{N-1}\}; d_{i}=d_\text{min}+(d_\text{max}-d_\text{min}) \cdot i 
    \label{eq:d_candi}
    \\
-   &P(\mathbf{d}(u,v))=I(u,v)
-   \nonumber\\
-   &\sum_{d}\left(P(\mathbf{d}(u,v))\right)=1\qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
+   &\sum_{i=0}^{N-1} P(\dd_{u,v} = d_i) =1
+   % \qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
    \label{eq:depth_dist}
    %\vspace{-.1in}
 \end{align}
 
-While an ideal sensor could choose plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we select a subset of rays that correspond to a plane that we wish to sample, and generate an Uncertainty Field (UF) as follows:
+While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we select a subset of rays that correspond to a plane that we wish to sample, and generate an Uncertainty Field (UF) as follows:
 \begin{align}
    P(\mathbf{d}(u))=\frac{\sum_{u,v}P(\mathbf{d}{(u,v)}).\boldsymbol{1}}{\sum_{u,v}\boldsymbol{1}}
    \nonumber \\
