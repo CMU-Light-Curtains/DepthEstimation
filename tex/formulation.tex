@@ -16,7 +16,8 @@ We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which speci
    \\
    &\sum_{q=0}^{N-1} P(\dd_{u,v} = d_q) =1 \ \text{(q is the quantization index)}
    % \qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
-   \label{eq:depth_dist}
+   \label{eq:depth_dist}\\
+   &\nonumber\text{Output depth estimate } = \mathbb{E} [ \dd_{u,v}] = \sum_{q=0}^{N-1} P(\dd_{u,v}=d_q)\cdot d_q
    %\vspace{-.1in}
 \end{align}
 
@@ -30,7 +31,7 @@ While an ideal sensor could choose to plan a path to sample in the full 3D volum
    %\vspace{-.1in}
 \end{align}
 
-We denote the categorical distribution of the uncertainty field on the $u$-th camera ray as $UF(u)= \{UF(u, 0), \dots, UF(u, N-1)\}$.
+We denote the categorical distribution of the uncertainty field on the $u$-th camera ray as \\$UF(u)=\text{Categorical}(d_q \in \D\ |\ P=\{UF(u, q)\}_{q=0}^{N-1}\})$.
 
 \begin{figure}[h]
    \centering
@@ -97,19 +98,19 @@ Note that when $d^c_{u, v} = \dd_{u, v}$, the mean intensity is $1$ (the maximum
 \newcommand{\before}[1]{{\color{blue} P_\text{prev}(u, v, #1)}}
 \newcommand{\after}[1]{{\color{red} P_\text{next}(u, v, #1)}}
 
-The uncertainty field $UF$ contains the current uncertainty about piexl-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^c\ |\ UF)$ the placement policy of the light curtain, where $d^c = \{d^c_{u, v}\ |\ \forall u, v\}$. We sample a light curtain placement $d^c \sim \pi(d^c\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
+The uncertainty field $UF$ contains the current uncertainty about piexl-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^{c_k}\ |\ UF)$ the placement policy of the $k$-th light curtain, where $d^{c_k} = \{d^{c_k}_{u, v}\ |\ \forall u, v\}$. We sample a light curtain placement $d^{c_k} \sim \pi(d^{c_k}\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
 
 How do we incorporate the newly acquired information about the scene from the light curtain, to update our current beliefs of object depths? Since we have a probabilistic sensor model, we can use the Bayes' rule to infer the posterior distribution of the ground truth depths given the observations. Let $\before{q}$ denote the probability of the depth at pixel $(u, v)$ being equal to $d_q$ before sensing, and $\after{q}$ the updated probability after sensing. Then by Bayes' rule,
 
 \begin{align*}
    &\after{q} \\
-   &\hspace{5pt}= P(\dd_{u, v} = d_q\ |\ i_{u, v}, d^c_{u, v}) \\
-   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{P(i_{u, v}\ |\ d^c_{u, v})}\\
-   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{\sum_{\qb=0}^{N-1} P(\dd_{u, v} = d_{\qb}) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^c_{u, v})}\\
-   &\hspace{5pt}= \frac{\before{q} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{\sum_{\qb=0}^{N-1} \before{\qb} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^c_{u, v})}
+   &\hspace{5pt}= P(\dd_{u, v} = d_q\ |\ i_{u, v}, d^{c_k}_{u, v}) \\
+   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^{c_k}_{u, v})}{P(i_{u, v}\ |\ d^{c_k}_{u, v})}\\
+   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^{c_k}_{u, v})}{\sum_{\qb=0}^{N-1} P(\dd_{u, v} = d_{\qb}) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^{c_k}_{u, v})}\\
+   &\hspace{5pt}= \frac{\before{q} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^{c_k}_{u, v})}{\sum_{\qb=0}^{N-1} \before{\qb} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^{c_k}_{u, v})}
 \end{align*}
 
-Note that $P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})$ is the sensor model whose form is given in Equation~\ref{eqn:sensor_model}.
+Note that $P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^{c_k}_{u, v})$ is the sensor model whose form is given in Equation~\ref{eqn:sensor_model}.
 
 
 % We now have returns from curtains $\mathbf{C}$ with each $\mathbf{C}_{i}$ containing $[x,y,z,i]$, the 3D position and intensity value in the same spatial resolution as $I$, planned based on a particular policy, conditioned on our prior distribution $P(\mathbf{d}_{t})$ at time $t$. We need to convert $\mathbf{C}_{i}$ into a likelihood distribution $P(\mathbf{c}_{t}|\mathbf{d}_{t})$, such that this Hidden Markov Model representation and sum of log likelihoods holds true:
@@ -121,6 +122,16 @@ Note that $P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})$ is the sensor model who
 %    \label{eq:hmm}
 % \end{align}
 % \normalsize
+
+If we place $K$ light curtains at a given timestep, we can incorporate the information received from all of them into our Bayesian update simultaneously. Since the sensor noise is independent of curtain placement, the likelihoods of the observed intensities can be multiplied across the curtains. Hence, the overall update becomes: 
+
+\begin{align*}
+   &\after{q} \\
+   &\hspace{5pt}= \frac{\before{q} \cdot \prod_{k=1}^K P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^{c_k}_{u, v})}{\sum_{\qb=0}^{N-1} \before{\qb} \cdot \prod_{k=1}^K P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^{c_k}_{u, v})}
+\end{align*}
+
+% TODO: remove this
+\noindent\rule{\columnwidth}{1pt}
 
 We represent $P\left(\mathbf{c_{\mathit{i}}}_{t}|\mathbf{d}_{t}\right)$ as a linear combination of a gaussian and a uniform distribution, where $\sigma$ is a function of the thickness of the light curtain as described earlier where $t\in[-1..1]$. $t$ is a function of the intensity value $i$, based on two possible profiles where $z$ either takes a value of 0.5 or 1.0, and $m$ is some control factor we tune:
 
