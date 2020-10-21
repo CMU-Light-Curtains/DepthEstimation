@@ -370,6 +370,21 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
             mask_shifted = mask.clone()
         zero_mask = zero_mask * mask_shifted.squeeze(0)
 
+    # Need an algorithm to ensure two highly varied depthms are not in same column?
+    # Need to write in C++ this check
+    """
+    Pass in depthmap_shifted_cleaned
+    Iterate each column
+    column_sets = vector<vector> = [[0,1,2], [10,11,12,13]]
+    mean_depth = vector [[5, 10]]
+    Then iterate each row, once we hit a non zero start a counter and accumate depth, and get mean
+        We store the indices as well?
+    Finally at the end, write to mask the indices that match the depth?
+    """
+    #import cv2
+    #depthmap_shifted_cleaned = depthmap_shifted * zero_mask
+    #cv2.imshow("depthmap_shifted_cleaned", depthmap_shifted_cleaned.squeeze(0).cpu().numpy()/100)
+
     # Shift Mask
     if pshift != 0:
         zero_mask_predicted = F.grid_sample(zero_mask.unsqueeze(0).unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0).squeeze(0)
