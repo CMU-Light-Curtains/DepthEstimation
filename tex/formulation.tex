@@ -11,18 +11,18 @@ We begin by looking at a Light Curtain only problem of adaptively discovering th
 \smallskip
 We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some fixed resolution [320x240] with each pixel in image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent uncertainty in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. We quantize depth values into a set $\D = \{d_0, \dots, d_{N-1}\}$ of $N$ discrete, uniformly spaced depth values lying in $(d_\text{min}, d_\text{max})$. All our predictions $\dd_{u, v} \in \D$ belong to this set. The output of our depth estimation method for each pixel is a probability distribution $P(\dd_{u, v})$, modeled as a categorical distribution over $\D$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
 \begin{align}
-   &\D=\{d_0, \dots, d_{N-1}\}; d_{i}=d_\text{min}+(d_\text{max}-d_\text{min}) \cdot i 
+   &\D=\{d_0, \dots, d_{N-1}\}; d_{q}=d_\text{min}+(d_\text{max}-d_\text{min}) \cdot q
    \label{eq:d_candi}
    \\
-   &\sum_{i=0}^{N-1} P(\dd_{u,v} = d_i) =1
+   &\sum_{q=0}^{N-1} P(\dd_{u,v} = d_q) =1 \ \text{(q is the quantization index)}
    % \qquad \mathbb{E}[P(\mathbf{d}(u,v))]=\mathbf{d}(u,v)
    \label{eq:depth_dist}
    %\vspace{-.1in}
 \end{align}
 
-While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we generate an ``Uncertainty Field" (UF), by avergaing the probabilities of the DPV across columns. While computing this field, we only consider those pixels whose corresponding 3D heights are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $i$ as:
+While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we generate an ``Uncertainty Field" (UF), by avergaing the probabilities of the DPV across columns. While computing this field, we only consider those pixels whose corresponding 3D heights are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
 \begin{align}
-   UF(u, i) =\ &\frac{1}{|\mathcal{V}|}\sum_{v \in \mathcal{V}(u)} P(\dd_{u, v} = d_i)\nonumber\\
+   UF(u, q) =\ &\frac{1}{|\mathcal{V}|}\sum_{v \in \mathcal{V}(u)} P(\dd_{u, v} = d_q)\nonumber\\
    \text{where } &\mathcal{V}(u) = \{v\ |\ h_\text{min} \leq h(u, v) \leq h_\text{max}\} 
    % P(\mathbf{d}(u))=\frac{\sum_{u,v}P(\mathbf{d}{(u,v)}).\boldsymbol{1}}{\sum_{u,v}\boldsymbol{1}}
    % \;where\;h_{min}>\mathbb{E}[P(\mathbf{d}(u,v))]>h_{max}
@@ -80,15 +80,44 @@ As seen in Fig. ~\ref{fig:m0m1}, strategy $m0$ is able to generate fields that a
 
 \subsection{Observation Model}
 
-We now have returns from curtains $\mathbf{C}$ with each $\mathbf{C}_{i}$ containing $[x,y,z,i]$, the 3D position and intensity value in the same spatial resolution as $I$, planned based on a particular policy, conditioned on our prior distribution $P(\mathbf{d}_{t})$ at time $t$. We need to convert $\mathbf{C}_{i}$ into a likelihood distribution $P(\mathbf{c}_{t}|\mathbf{d}_{t})$, such that this Hidden Markov Model representation and sum of log likelihoods holds true:
-\small
+A curtain placement corresponds to specifying the depth for each camera ray indexed by $u$ from the top-down view. After placing the light curtain, intensities $i_{u,v}$ are imaged by the light curtain's camera at every pixel $(u, v)$. The produced intensity at each pixel is a function of the curtain placement depth $d^c_{u, v}$ on that camera ray, the unknown ground truth depth $\dd_{u, v}$ of that pixel, as well as the thickness of the galvanometer $\sigma(u, v, d^c_{u, v})$ for a particular pixel and curtain placement. We use an approximate sensor model that describes the distribution of intensities. The intensity roughly decays exponentially as the distance between the light curtain placement $d^c_u$ and ground truth depth $\dd_{u, v}$ increases.  We also simulate sensor noise as a Gaussian distribution with standard deviation $\sigma_\text{noise}$. The overall sensor model $P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v})$ can be described as:
+
 \begin{align}
-   P\left(\mathbf{d}_{0},...,\mathbf{d}_{T},\mathbf{c}_{1},...,\mathbf{c}_{T}\right)= 
-   P\left(\mathbf{d}_{0}\right)\mathbf{\mathbf{\prod}_{\mathrm{t=1}}^{\mathrm{T}}}P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)P\left(\mathbf{d}_{t}|\mathbf{d}_{t-1}\right) \nonumber\\
-   \log\left(P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)\right)=\stackrel[i=0]{n}{\sum}\left(\log\left(P\left(\mathbf{c_{\mathit{i}}}_{t}|\mathbf{d}_{t}\right)\right)\right)
-   \label{eq:hmm}
+   i_{u, v} \sim \mathcal{N} \Big(i_{u, v}\ |\ \exp \Big(-\Bigg(\frac{d^c_{u, v} - \dd_{u, v}}{\sigma(u, v, d^c_{u, v})}\Bigg)^2\Big), \sigma_\text{noise}^2\Big)
+   \label{eqn:sensor_model}
 \end{align}
-\normalsize
+
+Note that when $d^c_{u, v} = \dd_{u, v}$, the mean intensity is $1$ (the maximum value), and it reduces exponentially as the light curtain is placed farther from the true surface.
+
+\subsection{Recursive Bayesian Update}
+\newcommand{\qb}{q'}
+\newcommand{\before}[1]{{\color{blue} P_\text{prev}(u, v, #1)}}
+\newcommand{\after}[1]{{\color{red} P_\text{next}(u, v, #1)}}
+
+The uncertainty field $UF$ contains the current uncertainty about piexl-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^c\ |\ UF)$ the placement policy of the light curtain, where $d^c = \{d^c_{u, v}\ |\ \forall u, v\}$. We sample a light curtain placement $d^c \sim \pi(d^c\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
+
+How do we incorporate the newly acquired information about the scene from the light curtain, to update our current beliefs of object depths? Since we have a probabilistic sensor model, we can use the Bayes' rule to infer the posterior distribution of the ground truth depths given the observations. Let $\before{q}$ denote the probability of the depth at pixel $(u, v)$ being equal to $d_q$ before sensing, and $\after{q}$ the updated probability after sensing. Then by Bayes' rule,
+
+\begin{align*}
+   &\after{q} \\
+   &\hspace{5pt}= P(\dd_{u, v} = d_q\ |\ i_{u, v}, d^c_{u, v}) \\
+   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{P(i_{u, v}\ |\ d^c_{u, v})}\\
+   &\hspace{5pt}= \frac{P(\dd_{u, v} = d_q) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{\sum_{\qb=0}^{N-1} P(\dd_{u, v} = d_{\qb}) \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^c_{u, v})}\\
+   &\hspace{5pt}= \frac{\before{q} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})}{\sum_{\qb=0}^{N-1} \before{\qb} \cdot P(i_{u, v}\ |\ \dd_{u, v} = d_{\qb}, d^c_{u, v})}
+\end{align*}
+
+Note that $P(i_{u, v}\ |\ \dd_{u, v} = d_q, d^c_{u, v})$ is the sensor model whose form is given in Equation~\ref{eqn:sensor_model}.
+
+
+% We now have returns from curtains $\mathbf{C}$ with each $\mathbf{C}_{i}$ containing $[x,y,z,i]$, the 3D position and intensity value in the same spatial resolution as $I$, planned based on a particular policy, conditioned on our prior distribution $P(\mathbf{d}_{t})$ at time $t$. We need to convert $\mathbf{C}_{i}$ into a likelihood distribution $P(\mathbf{c}_{t}|\mathbf{d}_{t})$, such that this Hidden Markov Model representation and sum of log likelihoods holds true:
+% \small
+% \begin{align}
+%    P\left(\mathbf{d}_{0},...,\mathbf{d}_{T},\mathbf{c}_{1},...,\mathbf{c}_{T}\right)= 
+%    P\left(\mathbf{d}_{0}\right)\mathbf{\mathbf{\prod}_{\mathrm{t=1}}^{\mathrm{T}}}P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)P\left(\mathbf{d}_{t}|\mathbf{d}_{t-1}\right) \nonumber\\
+%    \log\left(P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)\right)=\stackrel[i=0]{n}{\sum}\left(\log\left(P\left(\mathbf{c_{\mathit{i}}}_{t}|\mathbf{d}_{t}\right)\right)\right)
+%    \label{eq:hmm}
+% \end{align}
+% \normalsize
 
 We represent $P\left(\mathbf{c_{\mathit{i}}}_{t}|\mathbf{d}_{t}\right)$ as a linear combination of a gaussian and a uniform distribution, where $\sigma$ is a function of the thickness of the light curtain as described earlier where $t\in[-1..1]$. $t$ is a function of the intensity value $i$, based on two possible profiles where $z$ either takes a value of 0.5 or 1.0, and $m$ is some control factor we tune:
 
