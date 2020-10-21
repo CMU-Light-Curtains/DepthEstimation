@@ -8,21 +8,7 @@
 
 \subsection{Motivation}
 
-\textbf{Effect of a Stronger Prior:} While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow. As a quick primer, we show that a prior generated from a monocular RGB camera in a domain specific scenario yields better results. Results seen in ~\ref{fig:prior}
-
-Hence, we need to work towards building a Neural Network that is capable of ingesting either Monocular/Stereo images, and generating a DPV to act as our prior. Additionally, a network that ingests a DPV from Light Curtain measurements is also ideal.
-
-\begin{figure}[h]
-    \centering
-    \begin{minipage}{0.5\textwidth}
-        \centering
-        \includegraphics[width=0.49\textwidth]{figures/figure_X.pdf}
-        \includegraphics[width=0.29\textwidth]{figures/placement3.png}
-    \end{minipage}\hfill
-    \centering
-    \caption{ \textbf{Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf{Left:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.}
-    \label{fig:prior} 
-\end{figure}
+While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow to converge. Furthermore, a Light Curtain only means of depth estimation is extracted primarily along the ruled placement of the curtain, at least based on our above placement policies. We would ideally like to use information from a Monocular RGB camera or Stereo Pair to initialize our prior, with a similar DPV representation. To this end, a Deep Learning based architecture is ideal, and we also reason that such an architecture could potentially learn to fuse/incorporate information from both modalities better.
 
 \subsection{Structure of Network}
 
@@ -66,14 +52,14 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 
 We train and validate our algorithms on the KITTI dataset. We then trained the same network by initializing on those weights, but using our custom ILIM dataset to evaluate our algorithms on our sensor platform / jeep.
 
-\section{Experiments}
+\section{RGB + Light Curtain Experiments}
 
 \textbf{Effects of our loss function:} We do some simple experiments, training the task of monocular depth estimation, and we explore the effects of enabling/disabling the various loss functions:
 
 \noindent
 \begin{table}[h]
    \centering
-   \resizebox{0.8\linewidth}{!}{
+   \resizebox{0.7\linewidth}{!}{
    \begin{tabular}{|l|l|}
    \hline
     Parameters&  RMSE/m\\ \hline
@@ -89,6 +75,39 @@ We train and validate our algorithms on the KITTI dataset. We then trained the s
 
 We note succesively improving performance as we increase $\sigma_{gt}$, with poorer performance when the depth is effectively encoded as a one-hot vector (eg. $\sigma_{gt}=0.05$), since the depth was more likely to be forced into one of the categories in $D_{c}$. Adding in $l_{dcl}, l_{rcl}$ and $l_{s}$ improved performance further, but we did not see any significant performance improvement in varying $t^{pow}$ especially once $\sigma_{gt}$ was increased.
 
+\textbf{Effect of Stereo Inputs:} We experiment with passing in a Monocular Pair at $t, t-1$, or a Stereo Pair at $t$, with $R,t$ known in both cases. We note significantly better performance with Stereo input. Note that our method can generalize to any N camera setup. Results seen in ~\ref{fig:stereodpv}
+
+\textbf{Effect of DPV Fusion Network:} We consider the task of Lidar Upsampling. The Velodyne Lidar in the KITTI dataset, can be converted into a low resolution depthmap, and consequently a low res DPV we call $dpv_{t}^{gt}$ . We could then fuse both $dpv_{t}^{l0}$ and $dpv_{t}^{gt}$ to generate $dpv_{t}^{l1}$ using Bayesian Inference. Alternatively, we could feed both of those inputs into our DPV Fusion Network above. We note improved performance in this upsampling task when using this approach as seen in ~\ref{fig:stereodpv}. 
+
+\begin{figure}[h]
+   \centering
+   \begin{minipage}{0.5\textwidth}
+       \centering
+       \includegraphics[width=0.49\textwidth]{figures/Figure_6.pdf}
+       \includegraphics[width=0.49\textwidth]{figures/Figure_7.pdf}
+   \end{minipage}\hfill
+   \centering
+   \caption{ \textbf{Left:} Same network but having a Stereo Pair at $t$ passed in instead of Monocular Pair at $t, t-1$. \textbf{Right:} Fusing the GT Lidar data with $dpv_{t}^{l0}$ to generate $dpv_{t}^{l1}$ and $dpv_{t}^{L}$ with Bayesian Inference vs DPV Fusion Network}
+   \label{fig:stereodpv} 
+\end{figure}
+
+\textbf{Effect of a Stronger Prior:} Here, we show that a prior generated from a monocular RGB camera yields higher accuracy and faster convergence. Results seen in ~\ref{fig:prior} 
+
+\begin{figure}[h]
+   \centering
+   \begin{minipage}{0.5\textwidth}
+       \centering
+       \includegraphics[width=0.49\textwidth]{figures/figure_X.pdf}
+       \includegraphics[width=0.29\textwidth]{figures/placement3.png}
+   \end{minipage}\hfill
+   \centering
+   \caption{ \textbf{Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf{Left:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.}
+   \label{fig:prior} 
+\end{figure}
+
+\textbf{Effect of a Stronger Prior:} Here, we show that a prior generated from a monocular RGB camera yields higher accuracy and faster convergence. Results seen in ~\ref{fig:prior} 
+
+
 \iffalse
 Generating Prior from RGB
    NN Formulation figure
@@ -102,7 +121,14 @@ Generating Prior from RGB
       3D Upsampling of Lidar
       Time feedback vs no
       Deep Learning vs no Deep Learning (Ruled Surface etc.)
-Outdoor Experiments:
+
+      experiment does actually seeing uncertinayt make a difference
+
+      move experiment prior to other part
+      
+      experiment for deep learning based full depth vs unc depth of no deep learning
+
+      Outdoor Experiments:
    etc.
 Future Work
 \fi
