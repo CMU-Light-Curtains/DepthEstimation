@@ -1,4 +1,5 @@
 ######################### Binary Files #########################
+*.pptx
 code/runs/
 *.tar
 results/*
