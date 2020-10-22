@@ -1,7 +1,7 @@
 
 \section{Light Curtain only Experiments}
 
-In this initial baseline, we attempt to track the Uncertainty Field (UF) depth error by computing the RMSE error metric $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(P(\mathbf{d}(u)_{i})\right)-\mathbf{d_{gt}}(u)_{i}\right)^{2}}{n}}$ against the ground truth. We use 3 scenarios: One in a KITTI driving scene using the LC simulator (a), one indoors in the basement using the both a simulated and real Light Curtain (b), and lastly in various outdoor driving scenes with the real device (c0/c1/c2).
+In this initial baseline, we attempt to track the Uncertainty Field (UF) depth error by computing the RMSE error metric $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(UF\left(u,q\right)\right)-\mathbf{d_{gt}}(u)_{i}\right)^{2}}{n}}$ against the ground truth. We use 3 scenarios: One in a KITTI driving scene using the LC simulator (a), one indoors in the basement using the both a simulated and real Light Curtain (b), and lastly in various outdoor driving scenes with the real device (c0/c1/c2). 
 
 \begin{figure}[h]
    \centering
@@ -46,7 +46,7 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
    \label{table:t1}
 \end{table}
 
-\textbf{Effect of Dynamic Sigma:} Earlier, we had noted how $\sigma_{c}$ defined for each $C_{i}$ measurement in $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma_{c}$ fixed. We observe that $\sigma_{c}$ being a function of the curtain thickness is critical to better performance over larger steps/placements. Results seen in ~\ref{table:t2}
+\textbf{Effect of Dynamic Sigma:} Earlier, we had noted how $\sigma(u,v,d_{u,v}^{c})$ defined for each $c_{k}$ measurement in $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma(u,v,d_{u,v}^{c})$ fixed. We observe that it being a function of the curtain thickness is critical to better performance over larger steps/placements. Results in ~\ref{table:t2}
 
 \noindent
 \begin{table}[h]
@@ -62,7 +62,7 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
     Sweep $\mathbf{C}$ Step 0.5m  (Fixed) &1  &1.658  \\ \hline
     Sweep $\mathbf{C}$ Step 1.0m (Fixed) &0.5  &2.290  \\ \hline
    \end{tabular}}
-   \caption{$\sigma_{c}$ in generated $P\left(\mathbf{c}_{t}|\mathbf{d}_{t}\right)$ being fixed vs being dynamic as a function of curtain thickness with real LC}
+   \caption{$\sigma_{c}$ in generated $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ being fixed vs being dynamic as a function of curtain thickness with real LC}
    \label{table:t2}
 \end{table}
 
@@ -88,8 +88,8 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
         \includegraphics[width=0.49\textwidth]{figures/Uniform.png}
     \end{minipage}\hfill
     \centering
-    \caption{\textbf{Left:} Policies $m0$ and $m1$ where low intensities result in no information (Uniform Distribution). \textbf{Right:} Where low intensities result in an Inverted Gaussian based on our Sensor Model}
-    \label{fig:invgau}
+    \caption{\textbf{Left:} Policies $\pi_{0}$ and $\pi_{1}$ where low intensities result in no information (Uniform Distribution). \textbf{Right:} Where low intensities result in an Inverted Gaussian based on our Sensor Model}
+    \label{fig:invgau} 
 \end{figure}
 
  \textbf{Effect of Placing more Curtains:} In both policies, placing more light curtains results in much faster convergence, at the cost of increased runtime. Results seen in ~\ref{fig:figure34}
@@ -102,7 +102,7 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
         \includegraphics[width=0.49\textwidth]{figures/Figure_4.pdf}
     \end{minipage}\hfill
     \centering
-    \caption{Placing more curtains results in faster convergence to the ground truth}
+    \caption{Placing more curtains results in faster convergence to the ground truth at the cost of runtime per iteration}
     \label{fig:figure34}
 \end{figure}
 

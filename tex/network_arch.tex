@@ -18,18 +18,16 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 
 \subsection{Loss Functions}
 
-\textbf{Soft Cross Entropy Loss:} We build upon the ideas found in \cite{Yang-2019-118007} and use a soft cross entropy loss function, with the ground truth lidar depthmap becoming a gaussian DPV with $\sigma_{gt}$ instead of a one hot vector. This way, when taking $\mathbb{E}\left(dpv^{gt}\right)$ we get the exact depth value instead of an approxmiation limited by the depth quantization $D_{c}$. We also make the quantization slightly non-linear to have more steps between objects that are closer to the camera.
-
+\textbf{Soft Cross Entropy Loss:} We build upon the ideas found in \cite{Yang-2019-118007} and use a soft cross entropy loss function, with the ground truth lidar depthmap becoming a gaussian DPV with $\sigma_{gt}$ instead of a one hot vector. This way, when taking $\mathbb{E}\left(dpv^{gt}\right)$ we get the exact depth value instead of an approxmiation limited by the depth quantization $\D$. We also make the quantization slightly non-linear to have more steps between objects that are closer to the camera.
 \small
 \begin{align}
     l_{sce}=\frac{-\sum_{i}\sum_{d}\left(dpv^{\mathrm{\{l0,l1,L\}}}*log\left(dpv^{gt}\right)\right)}{n} \\
-    D_{c}=\left\{ d_{0},...d_{n}\right\} \quad d_{i}=d_{min}+(d_{max}-d_{min})*t^{pow}
+    \D=\{d_{0},\dots,d_{N-1}\};d_{q}=d_{\text{min}}+(d_{\text{max}}-d_{\text{min}})\cdot q^{pow}
    \label{eq:seloss}
 \end{align}
 \normalsize
 
 \textbf{L/R Consistency Loss:} We train on both the Left and Right Images of the stereo pair where the Projection matrices $P_{l}, P_{r}$ are known. We enforce predicted Depth and RGB consistency by warping the Left Depthmap/Projected RGB into the Right Camera and vice-versa, and minimize the following metric:
-
 \small
 \begin{align}
     D_{l}=\mathbb{E}\left(dpv_{l}^{L}\right)\qquad D_{r}=\mathbb{E}\left(dpv_{r}^{L}\right) \\
@@ -40,7 +38,6 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 \normalsize
 
 \textbf{Edge aware Smoothness Loss:} We ensure that neighbouring pixels have consistent surface normals, except on the edges/boundaries of objects with the Sobel operator $S_{x}, S_{y}$ via the term:
-
 \small
 \begin{align}
     l_{s}=\frac{1}{n}\sum_{i}\left(\left|\frac{\partial I}{\partial x}\right|e^{-|S_{x}I|}+\left|\frac{\partial I}{\partial y}\right|e^{-|S_{y}I|}\right)
@@ -52,10 +49,17 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 
 We train and validate our algorithms on the KITTI dataset. We then trained the same network by initializing on those weights, but using our custom ILIM dataset to evaluate our algorithms on our sensor platform / jeep.
 
-\section{RGB + Light Curtain Experiments}
+\begin{figure*}[h!]
+   \includegraphics[width=1.0\textwidth]{figures/images.pdf}
+   \caption{Note the improved depthmap when Monocular inputs are fused with Light Curtain measurements. Also note that the same architecture can be used to solve several tasks, including Monocular Depth, Stereo Depth and Lidar Upsampling}
+   \label{fig:images2}
+\end{figure*}
+
+\section{RGB + Light Curtain Experiments} 
+
+Here we consider the RMSE metric against the entire depthmap as opposed to just the Uncertainity Field (UF) as $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(\mathbf{d}_{u,v}\right)-\mathbf{d_{gt}}(u,v)_{i}\right)^{2}}{n}}$ against our ground truth.
 
 \textbf{Effects of our loss function:} We do some simple experiments, training the task of monocular depth estimation, and we explore the effects of enabling/disabling the various loss functions:
-
 \noindent
 \begin{table}[h]
    \centering
@@ -73,13 +77,13 @@ We train and validate our algorithms on the KITTI dataset. We then trained the s
    \label{table:xx}
 \end{table}
 
-We note succesively improving performance as we increase $\sigma_{gt}$, with poorer performance when the depth is effectively encoded as a one-hot vector (eg. $\sigma_{gt}=0.05$), since the depth was more likely to be forced into one of the categories in $D_{c}$. Adding in $l_{dcl}, l_{rcl}$ and $l_{s}$ improved performance further, but we did not see any significant performance improvement in varying $t^{pow}$ especially once $\sigma_{gt}$ was increased.
+We note succesively improving performance as we increase $\sigma_{gt}$, with poorer performance when the depth is effectively encoded as a one-hot vector (eg. $\sigma_{gt}=0.05$), since the depth was more likely to be forced into one of the categories in $\D$. Adding in $l_{dcl}, l_{rcl}$ and $l_{s}$ improved performance further, but we did not see any significant performance improvement in varying $q^{pow}$ especially once $\sigma_{gt}$ was increased.
 
 \textbf{Effect of Stereo Inputs:} We experiment with passing in a Monocular Pair at $t, t-1$, or a Stereo Pair at $t$, with $R,t$ known in both cases. We note significantly better performance with Stereo input. Note that our method can generalize to any N camera setup. Results seen in ~\ref{fig:stereodpv}
 
 \textbf{Effect of DPV Fusion Network:} We consider the task of Lidar Upsampling. The Velodyne Lidar in the KITTI dataset, can be converted into a low resolution depthmap, and consequently a low res DPV we call $dpv_{t}^{gt}$ . We could then fuse both $dpv_{t}^{l0}$ and $dpv_{t}^{gt}$ to generate $dpv_{t}^{l1}$ using Bayesian Inference. Alternatively, we could feed both of those inputs into our DPV Fusion Network above. We note improved performance in this upsampling task when using this approach as seen in ~\ref{fig:stereodpv}. 
 
-\begin{figure}[h]
+\begin{figure}[H]
    \centering
    \begin{minipage}{0.5\textwidth}
        \centering
@@ -101,12 +105,25 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
        \includegraphics[width=0.29\textwidth]{figures/placement3.png}
    \end{minipage}\hfill
    \centering
-   \caption{ \textbf{Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf{Left:} Policy $m0$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.}
+   \caption{ \textbf{Right:} Starting from a Prior distribution from a Monocular Depth Network leads to faster convergence. \textbf{Left:} Policy $\pi_{0}$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.}
    \label{fig:prior} 
 \end{figure}
 
-\textbf{Effect of a Stronger Prior:} Here, we show that a prior generated from a monocular RGB camera yields higher accuracy and faster convergence. Results seen in ~\ref{fig:prior} 
+\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative and qualitative performance improvement of depth when using this approach. Note that we only enabled the Light Curtain to be planned from the current DPV after about 16 iterations, due to the fact that initially the estimated DPV is poor, leading to poor placement of the curtains to begin with. Results seen in ~\ref{fig:lfusion} 
 
+NEED REAL EXPERIMENTS HERE OF DEEP FUSION OF LC. OR WITHOUT 
+
+
+\begin{figure}[h]
+   \centering
+   \begin{minipage}{0.5\textwidth}
+       \centering
+       \includegraphics[width=0.5\textwidth]{figures/Figure_10.pdf}
+   \end{minipage}\hfill
+   \centering
+   \caption{We trained Monocular Depth Estimation on KITTI as per normal, and one where we enabled feedback of the sensed Light Curtain DPV at iteration 16}
+   \label{fig:lfusion} 
+\end{figure}
 
 \iffalse
 Generating Prior from RGB
