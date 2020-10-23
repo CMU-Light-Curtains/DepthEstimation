@@ -970,6 +970,8 @@ class BaseModel(nn.Module):
                 # # Special case for ilim due to higher res lidar
                 # if "ilim" in self.cfg.data.exp_name:
                 #     dmap = model_input["dmaps_up"][b,:,:].unsqueeze(0)
+                #     # dmap = F.interpolate(dmap.unsqueeze(0), scale_factor=0.5, mode='nearest').squeeze(0)
+                #     # dmap = F.interpolate(dmap.unsqueeze(0), scale_factor=2, mode='nearest').squeeze(0)
 
             elif mode == "low":
                 intr = model_input["intrinsics"][b, :, :]
@@ -1004,6 +1006,11 @@ class BaseModel(nn.Module):
                 # Generate UField
                 unc_field_predicted, _ = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True, cfg=self.cfg)
 
+                # # Add epsilon and renormalize in case some are nan
+                # unc_field_predicted[torch.isnan(unc_field_predicted)] = 0.
+                # unc_field_predicted += img_utils.epsilon
+                # unc_field_predicted = unc_field_predicted / torch.sum(unc_field_predicted, axis=1)
+
                 # Score
                 if score:
                     unc_score = img_utils.compute_unc_rmse(unc_field_truth, unc_field_predicted, lc.d_candi)
@@ -1025,23 +1032,32 @@ class BaseModel(nn.Module):
 
                 # Sensing
                 lc_DPVs = []
+                lc_pts = []
                 for lc_path in lc_paths:
                     if mode == "high":
-                        lc_DPV, _, _ = lc.sense_high(true_depth, lc_path)
+                        lc_DPV, lc_pt, _ = lc.sense_high(true_depth, lc_path, viz)
+
                     elif mode == "low":
                         lc_DPV, _ = lc.sense_low(true_depth, lc_path)
                     lc_DPVs.append(lc_DPV)
+                    lc_pts.append(lc_pt)
 
                 # 3D
                 if viz:
                     if self.viz is not None:
-                        self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 3)
+                        for pts in lc_pts:
+                            self.viz.addCloud(img_utils.lcoutput_to_cloud(pts), 2)
+                            break
+                        self.viz.addCloud(img_utils.tocloud(model_input["dmaps"][b,:,:].unsqueeze(0), img_utils.demean(F.interpolate(model_input["rgb"][b, -1, :, :, :].unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)), model_input["intrinsics"][b,:,:], rgbr=[255,255,0]), 2)
+                        #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 1)
                         self.viz.swapBuffer()
 
                 # # Viz
                 if viz:
                     import cv2
-                    field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
+                    unc_field_truth_image = unc_field_truth[0,:,:].cpu().numpy()
+                    unc_field_truth_image = cv2.resize(unc_field_truth_image, (field_visual[:,:,2].shape[1],field_visual[:,:,2].shape[0]))
+                    field_visual[:,:,2] = unc_field_truth_image*3
                     cv2.imshow("field_visual", field_visual)
                     #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
                     cv2.waitKey(0)
@@ -1059,6 +1075,7 @@ class BaseModel(nn.Module):
 
                 # Update
                 for lcdpv in lc_DPVs:
+                    lcdpv[torch.isnan(lcdpv)] = 0. # Check why this is happening
                     lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
                     curr_dist = curr_dist * lcdpv
                     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
