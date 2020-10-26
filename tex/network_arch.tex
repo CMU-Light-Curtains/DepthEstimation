@@ -51,8 +51,8 @@ We train and validate our algorithms on the KITTI dataset. We then trained the s
 
 \begin{figure*}[h!]
    \includegraphics[width=1.0\textwidth]{figures/images.pdf}
-   \caption{Note the improved depthmap when Monocular inputs are fused with Light Curtain measurements. Also note that the same architecture can be used to solve several tasks, including Monocular Depth, Stereo Depth and Lidar Upsampling}
-   \label{fig:images2}
+   \caption{Note the improved depthmap when Monocular inputs are fused with Light Curtain measurements. Also note that the same architecture can be used to solve several tasks, including Monocular Depth, Stereo Depth and Lidar Upsampling}  
+   \label{fig:images2} 
 \end{figure*}
 
 \section{RGB + Light Curtain Experiments} 
@@ -109,10 +109,7 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
    \label{fig:prior} 
 \end{figure}
 
-\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative and qualitative performance improvement of depth when using this approach. Note that we only enabled the Light Curtain to be planned from the current DPV after about 16 iterations, due to the fact that initially the estimated DPV is poor, leading to poor placement of the curtains to begin with. Results seen in ~\ref{fig:lfusion} 
-
-NEED REAL EXPERIMENTS HERE OF DEEP FUSION OF LC. OR WITHOUT 
-
+\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative and qualitative performance improvement of depth when using this approach. Note that we only enabled the Light Curtain to be planned from the current DPV after about 16 epochs, due to the fact that initially the estimated DPV is poor, leading to poor placement of the curtains to begin with. Results seen in ~\ref{fig:lfusion} 
 
 \begin{figure}[h]
    \centering
@@ -124,6 +121,10 @@ NEED REAL EXPERIMENTS HERE OF DEEP FUSION OF LC. OR WITHOUT
    \caption{We trained Monocular Depth Estimation on KITTI as per normal, and one where we enabled feedback of the sensed Light Curtain DPV at iteration 16}
    \label{fig:lfusion} 
 \end{figure}
+
+\section{Conclusion}
+
+We need 3D Optical Flow based tracking for real-time performance wrt moving cameras. A better model of the Light Curtain would have to be learnt as well with regards to how albedo/normals on surfaces are handled
 
 \iffalse
 Generating Prior from RGB
