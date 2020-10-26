@@ -1,6 +1,6 @@
 {
   "data": {
-    "exp_name": "default_exp7_lc_ilim",
+    "exp_name": "default_stereo_exp7_lc_ilim",
     "model_name": "base",
     "loss_name": "base",
     "trainer_name": "default",
@@ -22,7 +22,8 @@
     "pnoise": 0.0,
     "mload": true,
     "nmode": "exp7_lc",
-    "bn_avg": true
+    "bn_avg": true,
+    "stereo": true
   },
   "lidar": {
     "enabled": false

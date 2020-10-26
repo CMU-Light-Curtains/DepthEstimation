@@ -5,6 +5,7 @@ import math
 import numpy as np
 import warping.homography as warp_homo
 import utils.img_utils as img_utils
+import random
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=0, padding=1, isReLU=True):
     if isReLU:
@@ -930,8 +931,15 @@ class BaseModel(nn.Module):
             else:
                 prev_output = model_input["prev_output"].unsqueeze(1)
 
+            # Prev LC Prob
+            if self.cfg["eval"]:
+                ignore_prev_lc = False
+            else:
+                use_lc_prob = self.cfg.lc.use_lc_prob
+                ignore_prev_lc = random.random() > use_lc_prob
+
             # Prev LC
-            if model_input["prev_lc"] is None:
+            if model_input["prev_lc"] is None or ignore_prev_lc:
                 prev_lc = torch.log(torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D))
             else:
                 prev_lc = model_input["prev_lc"].unsqueeze(1)
