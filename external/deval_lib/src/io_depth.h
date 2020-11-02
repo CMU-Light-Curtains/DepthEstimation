@@ -241,7 +241,7 @@ public:
               }
             }
           } else {
-            float d_err = std::min(fabs(getDepth(u,v)-D_gt.getDepth(u,v)),5.0)/5.0;
+            float d_err = std::min(fabs(getDepth(u,v)-D_gt.getDepth(u,v)),(float)5.0)/5.0;
             val.red   = (uint8_t)(d_err*255.0);
             val.green = (uint8_t)(d_err*255.0);
             val.blue  = (uint8_t)(d_err*255.0);
