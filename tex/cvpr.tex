@@ -54,45 +54,28 @@ Programmable Triangulating Light Curtains are a low-cost, high speed and high re
 \end{abstract}
 
 \iffalse
-Introduction
-Prior Work
-   Joe's Paper
-   Sid's Paper
-   other stuff
-Sensor setup
-   Light Curtain Basics
-   Our Jeep setup
-   Calibration process (eqs. here)
-Adaptive Sensing Formulation (say Light Curtain Only)
-   Simulator
-   3D Tensor to store Depth (initialization)
-   Ray 2D Projection into Flat Plane
-   Planning Formulation/Strategies Default/M1
-   Probabilistic Formulation (Inverted Gaussian Model)
-   Experiments (show Sim vs Real world, Indoor vs Outdoor):
-      Basic Sweep visualization (sanity check)
-      Prior sweeping approach
-      Non Inverted vs Inverted
-      STD encoding the uncertaintiy etc.
-      Default vs M1 (and diff strategies)
-   Having a Prior Depth (what if we had)
-   Experiments here
-         Show convergence speed/accuracy etc.
-Generating Prior from RGB
-   NN Formulation figure
-   Soft CE, QPower, Left/Right Consistency (RGB + Depth), Smoothness
-   Experiments:
-      Show table for above
-   LC Integration
-   Experiments:
-      Effect/Speedup of having a Prior
-      
-      3D Upsampling of Lidar
-      Time feedback vs no
-      Deep Learning vs no Deep Learning (Ruled Surface etc.)
-Outdoor Experiments:
-   etc.
-Future Work
+seperately put the lidar pointcloud
+monocular depth image
+then lidar
+then light curtain
+teaser
+
+Figure 2 from the Agile Depth Sensing   
+
+mu + sigma - sigma * N
+
+Fig 13 - Spread 1st 2nd and 3rd std
+
+Fig 17 - Integers Numerical
+
+Experiments - Put graph of Train from scratch in (its running)
+Yes but this is because of the 0.7 thing?
+
+Train defailt_expy_lc_ilim with prob mode 0.7
+Experinment for Stereo Version
+Experiment for Train with prob mode 1.0?
+Experiment for Reducing the Itertaions or using diff policy
+
 \fi
 
 

@@ -27,7 +27,7 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 \end{align}
 \normalsize
 
-\textbf{L/R Consistency Loss:} We train on both the Left and Right Images of the stereo pair where the Projection matrices $P_{l}, P_{r}$ are known. We enforce predicted Depth and RGB consistency by warping the Left Depthmap/Projected RGB into the Right Camera and vice-versa, and minimize the following metric:
+\textbf{L/R Consistency Loss:} We train on both the Left and Right Images of the stereo pair where the Projection matrices $P_{l}, P_{r}$ are known \cite{godard2017unsupervised}. We enforce predicted Depth and RGB consistency by warping the Left Depthmap/Projected RGB into the Right Camera and vice-versa, and minimize the following metric:
 \small
 \begin{align}
     D_{l}=\mathbb{E}\left(dpv_{l}^{L}\right)\qquad D_{r}=\mathbb{E}\left(dpv_{r}^{L}\right) \\
@@ -109,7 +109,7 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
    \label{fig:prior} 
 \end{figure}
 
-\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative and qualitative performance improvement of depth when using this approach. Note that we only enabled the Light Curtain to be planned from the current DPV after about 16 epochs, due to the fact that initially the estimated DPV is poor, leading to poor placement of the curtains to begin with. Results seen in ~\ref{fig:lfusion} 
+\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative and qualitative performance improvement of depth when using this approach. Results seen in ~\ref{fig:lfusion} 
 
 \begin{figure}[h]
    \centering
@@ -124,31 +124,17 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
 
 \section{Conclusion}
 
-We need 3D Optical Flow based tracking for real-time performance wrt moving cameras. A better model of the Light Curtain would have to be learnt as well with regards to how albedo/normals on surfaces are handled
+In this work, we have demonstrated an approach on how an adaptive depth sensor in the form of a Triangulating Light Curtain, can be used in tandem with RGB cameras for better depth estimation. We have also for the first time, demonstrated the first known body of work that has shown Active Depth Sensing with RGB Fusion in the context of ADAS and Self Driving.
+
+In futuer work, we plan to extend it to run in fast moving scenes that are seen in this domain. Doing this will need 
+some notion of scene flow estimation, in order to better predict where light curtains need to be placed.
+
+\textcolor{red}{DO MORE EXPERIMENTS WITH REGARDS TO VARYING POLICY OF LC, AND SEE HOW NETWORK IS AFFECTED. DO STEREO + LC in REAL SENSOR}
 
 \iffalse
-Generating Prior from RGB
-   NN Formulation figure
-   Soft CE, QPower, Left/Right Consistency (RGB + Depth), Smoothness
-   Experiments:
-      Show table for above
-   LC Integration
-   Experiments:
-      Effect/Speedup of having a Prior
-      
-      3D Upsampling of Lidar
-      Time feedback vs no
-      Deep Learning vs no Deep Learning (Ruled Surface etc.)
-
-      experiment does actually seeing uncertinayt make a difference
-
-      move experiment prior to other part
-      
-      experiment for deep learning based full depth vs unc depth of no deep learning
-
-      Outdoor Experiments:
-   etc.
-Future Work
+Fig 15 maybe use the first image thing
+Train Experiment on Fig 18 to show early LC feedback negative effect
+Complete Future Work / Conclusion
 \fi
 
 

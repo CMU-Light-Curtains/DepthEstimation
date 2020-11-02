@@ -18,7 +18,7 @@ In this initial baseline, we attempt to track the Uncertainty Field (UF) depth e
 
 \begin{figure}
    \centering
-   \begin{minipage}{0.5\textwidth}
+   \begin{minipage}{0.4\textwidth}
        \centering
        \includegraphics[width=1.0\textwidth]{figures/sweep.png}
    \end{minipage}\hfill
@@ -48,6 +48,7 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
 
 \textbf{Effect of Dynamic Sigma:} Earlier, we had noted how $\sigma(u,v,d_{u,v}^{c})$ defined for each $c_{k}$ measurement in $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ is a function of the thickness of the curtain. We also experiment by making $\sigma(u,v,d_{u,v}^{c})$ fixed. We observe that it being a function of the curtain thickness is critical to better performance over larger steps/placements. Results in ~\ref{table:t2}
 
+%\vspace{-.1in}
 \noindent
 \begin{table}[h]
    \centering
@@ -72,8 +73,8 @@ As seen in Fig. ~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able
     \centering
     \begin{minipage}{0.5\textwidth}
         \centering
-        \includegraphics[width=0.49\textwidth]{figures/Figure_0.pdf}
         \includegraphics[width=0.49\textwidth]{figures/Figure_1.pdf}
+        \includegraphics[width=0.49\textwidth]{figures/Figure_0.pdf}
     \end{minipage}\hfill
     \centering
     \caption{RMSE of Depth in UF over every iteration in scenarios left/(a) right/(b). Note the largely improved performance when low intensities tend to an Inverted Gaussian}

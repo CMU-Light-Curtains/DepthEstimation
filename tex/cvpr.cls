@@ -468,7 +468,7 @@
       \end{tabular}
 
       \includegraphics[width=1.0\textwidth]{figures/banner.pdf}
-      \captionof{figure}{We present a novel method that predicts per pixel depth uncertainity from Monocular/Stereo RGB cameras, uses that information to adaptively place light curtains at regions of low uncertainty, and refines depth estimates over time\label{fig:teaser}}
+      \captionof{figure}{We present a novel method that predicts per pixel depth uncertainity from Monocular/Stereo RGB cameras, uses that information to adaptively drive a laser to place light curtains at regions of low uncertainty, and refines depth estimates\label{fig:teaser}}
       
       \par
       }

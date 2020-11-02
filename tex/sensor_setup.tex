@@ -14,7 +14,7 @@
    %     \includegraphics[width=0.9\textwidth]{light_curtain_iso.png} % second figure itself
    % \end{minipage}
    \centering
-   \caption{The Programmable Light Curtain device, consisting of a steerable laser, an IR camera and a microcontroller, capable of generating a slice in space to image in 3D}
+   \caption{The Programmable Light Curtain device \cite{bartels2019Agile}, consisting of a steerable laser, an IR camera and a microcontroller, capable of generating slices in space to image in 3D}
 \end{figure}
 
 The Light Curtain consists of a rolling shutter NIR camera flipped vertically, a Line Laser module and a Galvomirror. The rolling shutter NIR camera runs in sync with the laser, where each row of the camer can be thought of as a plane with some divergence going out vertically into space. The laser/projector fires a similar vertical sheet of light as a plane into space, which intersects with the camera's vertical plane to produce an intersecting volume. We call this the \textit{thickness} of the curtain. Any objects that lie within this space will then be imaged by the camera. We we will know the 3D position of said objects. Hence, a top-down XZ profile can be provided in the NIR camera's frame, to generate a ruled 3D curtain surface at ~50fps
@@ -23,14 +23,14 @@ The Light Curtain consists of a rolling shutter NIR camera flipped vertically, a
 
 \begin{figure}[h]
    \centering
-   \begin{minipage}{0.5\textwidth}
+   \begin{minipage}{0.4\textwidth}
        \centering
        \includegraphics[width=1.0\textwidth]{figures/sim.png}
    \end{minipage}\hfill
    \centering
    \caption{Light Curtain Simulator in CARLA environment}
 \end{figure}
-
+\vspace{-.1in}
 We also designed and open sourced a light curtain simulator to test and evaluate our algorithms, allowing for the Light Curtain paramters such as NIR instrinsics, Laser/NIR extrinsincs, Galvomirror speed etc. to be controlled.
 
 \subsection{Sensor Array}
