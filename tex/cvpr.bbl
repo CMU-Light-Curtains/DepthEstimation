@@ -1,5 +1,9 @@
 \begin{thebibliography}{10}\itemsep=-1pt
 
+\bibitem{raaj2019}
+Light curtain simulator.
+\newblock 2019.
+
 \bibitem{Ancha_2020_ECCV}
 Ancha, Raaj, Hu, Narasimhan, and Held.
 \newblock Active perception using light curtains for autonomous driving.
@@ -78,6 +82,11 @@ Yoav Grauer and Ezri Sonn.
   Transportation Imaging Applications 2015}, volume 9407, pages 112 -- 129.
   International Society for Optics and Photonics, SPIE, 2015.
 
+\bibitem{gruber2019gated2depth}
+Tobias Gruber, Frank Julca-Aguilar, Mario Bijelic, Werner Ritter, Klaus
+  Dietmayer, and Felix Heide.
+\newblock Gated2depth: Real-time dense lidar from gated images, 2019.
+
 \bibitem{isler2016information}
 Stefan Isler, Reza Sabzevari, Jeffrey Delmerico, and Davide Scaramuzza.
 \newblock An information gain formulation for active volumetric 3d
@@ -149,6 +158,11 @@ L. {von Stumberg}, V. {Usenko}, J. {Engel}, J. {Stückler}, and D. {Cremers}.
 \newblock From monocular slam to autonomous drone exploration.
 \newblock In {\em 2017 European Conference on Mobile Robots (ECMR)}, pages
   1--8, 2017.
+
+\bibitem{walz2020uncertainty}
+Stefanie Walz, Tobias Gruber, Werner Ritter, and Klaus Dietmayer.
+\newblock Uncertainty depth estimation with gated images for 3d reconstruction,
+  2020.
 
 \bibitem{wang2018programmable}
 Jian Wang, Joseph Bartels, William Whittaker, Aswin~C Sankaranarayanan, and

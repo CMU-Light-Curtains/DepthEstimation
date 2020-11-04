@@ -34,7 +34,7 @@
 \begin{document}
 
 %%%%%%%%% TITLE
-\title{Exploiting and Refining Probabilistic Depth Estimates with RGB and Triangulating Light Curtain Fusion}
+\title{Exploiting and Refining Depth Probability Volumes using Programmable Triangulating Light Curtains}
 
 \author{Yaadhav Raaj ~ Siddharth Ancha ~ Joe Bartels ~ Robert Tamburo ~ Srinivasa G. Narasimhan\\
 Carnegie Mellon University\\
@@ -82,7 +82,7 @@ Experiment for Reducing the Itertaions or using diff policy
 %%%%%%%%% BODY TEXT
 \section{Introduction}
 
-Programmable Triangulating Light Curtains were introduced last year, and have demonstrated viability in being a low cost (1k\$ vs lidar's ~25k\$), high spatial angular resolution (0.02$\degree$ vs lidar's  0.4$\degree$), and high frame-rate (~60fps vs lidar's ~20fps) sensor. They have demonstrated having strong returns in the presence of artifacts such as smoke, and also in seeing small targets such as pedestrians further away. They do however, require a user to specify at what depth per pixel one want's sensed, through providing a physically possible 2.5D ruled surface that intersects the world to provide returns. 
+Programmable Triangulating Light Curtains \cite{bartels2019Agile} were introduced last year, and have demonstrated viability in being a low cost (1k\$ vs lidar's ~25k\$), high spatial angular resolution (0.02$\degree$ vs lidar's  0.4$\degree$), and high frame-rate (~60fps vs lidar's ~20fps) sensor. They have demonstrated having strong returns in the presence of artifacts such as smoke, and also in seeing small targets such as pedestrians further away. They do however, require a user to specify a top-down 2D Curve, that results in a 3D Ruled Surface that intersects the world to provide returns. 
 
 Conversely, depth estimation through RGB cameras have been a heavily researched area, but do not provide the realiability in estimates as compared to a Lidar, which can be cost prohibitive. This has made both RGB and Lidar's en-masse adoption in safety critical systems such as Advanced driver-assistance systems (ADAS) rare. 
 

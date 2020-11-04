@@ -468,7 +468,7 @@
       \end{tabular}
 
       \includegraphics[width=1.0\textwidth]{figures/banner.pdf}
-      \captionof{figure}{We present a novel method that predicts per pixel depth uncertainity from Monocular/Stereo RGB cameras, uses that information to adaptively drive a laser to place light curtains at regions of low uncertainty, and refines depth estimates\label{fig:teaser}}
+      \captionof{figure}{\textbf{(a)} We demonstrate how errors in Monocular Depth Estimation alone are corrected when used in tandem with Triangulating Light Curtains (Yellow Points are LIDAR Ground Truth). \textbf{(b)} We predict a per-pixel Depth Probability Volume from Monocular RGB and we observe large per-pixel uncertainties ($\sigma=3m$) as seen in the top-down slice. \textbf{(c)} We actively drive a Programmable Light Curtain sensor's Laser to sense multiple regions along a curve that are uncertain. \textbf{(d)} We feed these measurements back recursively to get a corrected depth estimate, along with a reduction in uncertainity ($\sigma=1m$)\label{fig:teaser}}
       
       \par
       }

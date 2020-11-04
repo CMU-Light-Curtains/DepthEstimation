@@ -40,7 +40,7 @@ We denote the categorical distribution of the uncertainty field on the $u$-th ca
        \includegraphics[width=1.0\textwidth]{figures/bev.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our state space consisting of a Depth Probability Volume (DPV) its corrsp Bird's Eye Uncertainty Field (UF)}
+   \caption{Our state space consisting of a Depth Probability Volume (DPV) and Bird's Eye Uncertainty Field (UF)}
 \end{figure}
 
 \subsection{Curtain Planning}
@@ -61,7 +61,7 @@ The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera 
        \includegraphics[width=1.0\textwidth]{figures/planner.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Left: Light Curtain constraint graph subject to max angular velocity of Galvomirror. Right: Placing an optimal curtain along the highest probability region per column of rays}
+   \caption{\textbf{Left:} Light Curtain constraint graph subject to max angular velocity of Galvomirror. \textbf{Right:} Placing an optimal curtain along the highest probability region}
    \label{fig:plannerfig}
 \end{figure}
 
@@ -76,7 +76,7 @@ To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:p
        \centering
        \includegraphics[width=0.48\textwidth]{figures/fields.pdf}
    \centering
-   \caption{We look at a depth distribution of one of the rays in UF (yellow line), and figure out where additional curtains (blue points) can be placed such as to maximize information gained. Observe that $\pi_{1}$ is able to handle multimodal distributions}
+   \caption{We look at where additional curtains are planned to be placed, given a depth distribution. \textbf{Left:} $\pi_{0}$ given a unimodal gaussian with small $\sigma$. \textbf{Middle:} $\pi_{0}$ given a multimodal gaussian with larger $\sigma$. \textbf{Right:} $\pi_{1}$ given a multimodal gaussian with larger $\sigma$. Observe that $\pi_{1}$ results in curtains being placed on the second mode.} 
    \label{fig:m0m1} 
 \end{figure}
 
