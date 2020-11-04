@@ -1,4 +1,8 @@
-\begin{thebibliography}{1}\itemsep=-1pt
+\begin{thebibliography}{10}\itemsep=-1pt
+
+\bibitem{raaj2019}
+Light curtain simulator.
+\newblock 2019.
 
 \bibitem{Ancha_2020_ECCV}
 Ancha, Raaj, Hu, Narasimhan, and Held.
@@ -6,11 +10,159 @@ Ancha, Raaj, Hu, Narasimhan, and Held.
 \newblock In {\em Proceedings of the European Conference on Computer Vision
   (ECCV)}, September 2020.
 
+\bibitem{7759446}
+E. {Arruda}, J. {Wyatt}, and M. {Kopicki}.
+\newblock Active vision for dexterous grasping of novel objects.
+\newblock In {\em 2016 IEEE/RSJ International Conference on Intelligent Robots
+  and Systems (IROS)}, pages 2881--2888, 2016.
+
+\bibitem{bajcsy1988active}
+Ruzena Bajcsy.
+\newblock Active perception.
+\newblock {\em Proceedings of the IEEE}, 76(8):966--1005, 1988.
+
+\bibitem{DBLP:journals/corr/BajcsyAT16}
+Ruzena Bajcsy, Yiannis Aloimonos, and John~K. Tsotsos.
+\newblock Revisiting active perception.
+\newblock {\em CoRR}, abs/1603.02729, 2016.
+
+\bibitem{9105252}
+A.~W. {Bergman}, D.~B. {Lindell}, and G. {Wetzstein}.
+\newblock Deep adaptive lidar: End-to-end optimization of sampling and depth
+  completion at low sampling rates.
+\newblock In {\em 2020 IEEE International Conference on Computational
+  Photography (ICCP)}, pages 1--11, 2020.
+
+\bibitem{chang2018pyramid}
+Jia-Ren Chang and Yong-Sheng Chen.
+\newblock Pyramid stereo matching network.
+\newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 5410--5418, 2018.
+
+\bibitem{DBLP:journals/corr/abs-1811-08067}
+Ricson Cheng, Arpit Agarwal, and Katerina Fragkiadaki.
+\newblock Reinforcement learning of active vision formanipulating objects under
+  occlusions.
+\newblock {\em CoRR}, abs/1811.08067, 2018.
+
+\bibitem{coslam2012}
+Zou Danping and Ping Tan.
+\newblock Coslam: collaborative visual slam in dynamic environments.
+\newblock {\em IEEE transactions on pattern analysis and machine intelligence},
+  04 2012.
+
+\bibitem{daudelin2017adaptable}
+Jonathan Daudelin and Mark Campbell.
+\newblock An adaptable, probabilistic, next-best view algorithm for
+  reconstruction of unknown 3-d objects.
+\newblock {\em IEEE Robotics and Automation Letters}, 2(3):1540--1547, 2017.
+
+\bibitem{7989679}
+D. {Falanga}, E. {Mueggler}, M. {Faessler}, and D. {Scaramuzza}.
+\newblock Aggressive quadrotor flight through narrow gaps with onboard sensing
+  and computing using active vision.
+\newblock In {\em 2017 IEEE International Conference on Robotics and Automation
+  (ICRA)}, pages 5774--5781, 2017.
+
+\bibitem{4587671}
+D. {Gallup}, J. {Frahm}, P. {Mordohai}, and M. {Pollefeys}.
+\newblock Variable baseline/resolution stereo.
+\newblock In {\em 2008 IEEE Conference on Computer Vision and Pattern
+  Recognition}, pages 1--8, 2008.
+
+\bibitem{godard2017unsupervised}
+Clément Godard, Oisin~Mac Aodha, and Gabriel~J. Brostow.
+\newblock Unsupervised monocular depth estimation with left-right consistency,
+  2017.
+
+\bibitem{10.1117/12.2078169}
+Yoav Grauer and Ezri Sonn.
+\newblock {Active gated imaging for automotive safety applications}.
+\newblock In Robert~P. Loce and Eli Saber, editors, {\em Video Surveillance and
+  Transportation Imaging Applications 2015}, volume 9407, pages 112 -- 129.
+  International Society for Optics and Photonics, SPIE, 2015.
+
+\bibitem{gruber2019gated2depth}
+Tobias Gruber, Frank Julca-Aguilar, Mario Bijelic, Werner Ritter, Klaus
+  Dietmayer, and Felix Heide.
+\newblock Gated2depth: Real-time dense lidar from gated images, 2019.
+
+\bibitem{isler2016information}
+Stefan Isler, Reza Sabzevari, Jeffrey Delmerico, and Davide Scaramuzza.
+\newblock An information gain formulation for active volumetric 3d
+  reconstruction.
+\newblock In {\em 2016 IEEE International Conference on Robotics and Automation
+  (ICRA)}, pages 3477--3484. IEEE, 2016.
+
 \bibitem{bartels2019Agile}
 Whittaker Joe~Bartels, Jian~Wang and Srinivasa G.
 \newblock Agile depth sensing using triangulating light curtains.
 \newblock In {\em 2019 IEEE International Conference on Computer Vision
   (ICCV)}, 2019.
+
+\bibitem{kriegel2015efficient}
+Simon Kriegel, Christian Rink, Tim Bodenm{\"u}ller, and Michael Suppa.
+\newblock Efficient next-best-scan planning for autonomous 3d surface
+  reconstruction of unknown objects.
+\newblock {\em Journal of Real-Time Image Processing}, 10(4):611--631, 2015.
+
+\bibitem{sergey2017}
+Sergey Levine, Peter Pastor, Alex Krizhevsky, Julian Ibarz, and Deirdre
+  Quillen.
+\newblock Learning hand-eye coordination for robotic grasping with deep
+  learning and large-scale data collection.
+\newblock 2017.
+
+\bibitem{liu2019neural}
+Chao Liu, Jinwei Gu, Kihwan Kim, Srinivasa Narasimhan, and Jan Kautz.
+\newblock Neural rgb->d sensing: Depth and uncertainty from a video camera,
+  2019.
+
+\bibitem{Mohamed2018ActiveSP}
+Abdulla Mohamed, P. Culverhouse, A. Cangelosi, and C. Yang.
+\newblock Active stereo platform: online epipolar geometry update.
+\newblock {\em EURASIP Journal on Image and Video Processing}, 2018:1--16,
+  2018.
+
+\bibitem{Nakabo2005VariableBS}
+Y. Nakabo, Toshiharu Mukai, Yusuke Hattori, Y. Takeuchi, and N. Ohnishi.
+\newblock Variable baseline stereo tracking vision system using high-speed
+  linear slider.
+\newblock {\em Proceedings of the 2005 IEEE International Conference on
+  Robotics and Automation}, pages 1567--1572, 2005.
+
+\bibitem{pittaluga2020}
+Francesco Pittaluga, Zaid Tasneem, Justin Folden, Brevin Tilmon, Ayan
+  Chakrabarti, and Sanjeev Koppal.
+\newblock Towards a mems-based adaptive lidar, 10 2020.
+
+\bibitem{Schneider2018VisuallyGV}
+A. Schneider, N. Sharma, and Bryan Tripp.
+\newblock Visually guided vergence in a new stereo camera system.
+\newblock 2018.
+
+\bibitem{dtof}
+Zaid Tasneem, Dingkang Wang, Huikai Xie, and Koppal Sanjeev.
+\newblock Directionally controlled time-of-flight ranging for mobile sensing
+  platforms.
+\newblock 06 2018.
+
+\bibitem{9105183}
+B. {Tilmon}, E. {Jain}, S. {Ferrari}, and S. {Koppal}.
+\newblock Foveacam: A mems mirror-enabled foveating camera.
+\newblock In {\em 2020 IEEE International Conference on Computational
+  Photography (ICCP)}, pages 1--11, 2020.
+
+\bibitem{8098709}
+L. {von Stumberg}, V. {Usenko}, J. {Engel}, J. {Stückler}, and D. {Cremers}.
+\newblock From monocular slam to autonomous drone exploration.
+\newblock In {\em 2017 European Conference on Mobile Robots (ECMR)}, pages
+  1--8, 2017.
+
+\bibitem{walz2020uncertainty}
+Stefanie Walz, Tobias Gruber, Werner Ritter, and Klaus Dietmayer.
+\newblock Uncertainty depth estimation with gated images for 3d reconstruction,
+  2020.
 
 \bibitem{wang2018programmable}
 Jian Wang, Joseph Bartels, William Whittaker, Aswin~C Sankaranarayanan, and
@@ -18,6 +170,22 @@ Jian Wang, Joseph Bartels, William Whittaker, Aswin~C Sankaranarayanan, and
 \newblock Programmable triangulation light curtains.
 \newblock In {\em Proceedings of the European Conference on Computer Vision
   (ECCV)}, pages 19--34, 2018.
+
+\bibitem{wilkes1994active}
+David Wilkes.
+\newblock {\em Active object recognition}.
+\newblock 1994.
+
+\bibitem{8369664}
+T. {Yamamoto}, Y. {Kawanishi}, I. {Ide}, H. {Murase}, F. {Shinmura}, and D.
+  {Deguchi}.
+\newblock Efficient pedestrian scanning by active scan lidar.
+\newblock In {\em 2018 International Workshop on Advanced Image Technology
+  (IWAIT)}, pages 1--4, 2018.
+
+\bibitem{yang2019inferring}
+Gengshan Yang, Peiyun Hu, and Deva Ramanan.
+\newblock Inferring distributions over depth from a single image, 2019.
 
 \bibitem{Yang-2019-118007}
 Gengshan Yang, Peiyun Hu, and Deva Ramanan.

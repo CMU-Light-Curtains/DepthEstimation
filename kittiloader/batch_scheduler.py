@@ -299,7 +299,7 @@ class BatchSchedulerMP:
             smp = mp.get_context('spawn')
             queue = smp.Queue(maxsize=self.qmax)
             self.control = smp.Value('i', 1)
-            mp.spawn(self.worker, nprocs=1, args=(self.inputs, queue, self.control), join=False)
+            ctx = mp.spawn(self.worker, nprocs=1, args=(self.inputs, queue, self.control), join=False)
             #self.process = Process(target=self.worker, args=(0, self.inputs, self.queue, self.control))
             #self.process.start()
             while 1:

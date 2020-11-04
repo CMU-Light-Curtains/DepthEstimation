@@ -21,7 +21,7 @@ We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which speci
    %\vspace{-.1in}
 \end{align}
 
-While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we generate an ``Uncertainty Field" (UF), by avergaing the probabilities of the DPV across columns. While computing this field, we only consider those pixels whose corresponding 3D heights are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
+While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we generate an ``Uncertainty Field" (UF) \cite{yang2019inferring}, by avergaing the probabilities of the DPV across columns. While computing this field, we only consider those pixels whose corresponding 3D heights are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
 \begin{align}
    UF(u, q) =\ &\frac{1}{|\mathcal{V}(u)|}\sum_{v \in \mathcal{V}(u)} P(\dd_{u, v} = d_q)\nonumber\\
    \text{where } &\mathcal{V}(u) = \{v\ |\ h_\text{min} \leq h(u, v) \leq h_\text{max}\} 
@@ -40,12 +40,12 @@ We denote the categorical distribution of the uncertainty field on the $u$-th ca
        \includegraphics[width=1.0\textwidth]{figures/bev.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our state space consisting of a Depth Probability Volume (DPV) its corrsp Bird's Eye Uncertainty Field (UF)}
+   \caption{Our state space consisting of a Depth Probability Volume (DPV) and Bird's Eye Uncertainty Field (UF)}
 \end{figure}
 
 \subsection{Curtain Planning}
 
-With the Uncertainty Field (UF) extracted from the state space, we can use this to figure out where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization and Dynamic Programming problem. A single light curtain placement is defined by a set of $T$ control points $\{\X_t\}_{t=1}^T$. We wish to maximize the objective $J(\X_1, \dots, \X_T) = \sum_{t=1}^T UF(\X_t)$ where $UF(\X)$ is the uncertaintiy field probabilies at the anchor location of $\X$.
+With the Uncertainty Field (UF) extracted from the state space, we can use this to figure out where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization and Dynamic Programming problem \cite{Ancha_2020_ECCV}. A single light curtain placement is defined by a set of $T$ control points $\{\X_t\}_{t=1}^T$. We wish to maximize the objective $J(\X_1, \dots, \X_T) = \sum_{t=1}^T UF(\X_t)$ where $UF(\X)$ is the uncertaintiy field probabilies at the anchor location of $\X$.
 
 The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera ray $\R_t$, must be chosen to satisfy the physical constraints of the light curtain device: $|\theta(\X_{t+1}) - \theta(\X_t)| \leq \Delta \theta_\text{max}$ with $\theta_\text{max}$ being the maximum angular velocity of the Galvomirror. The problem is also discretized such that $\X_{t} \in \D\ $ and also lies along $\R_t$
 \begin{align}
@@ -61,7 +61,7 @@ The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera 
        \includegraphics[width=1.0\textwidth]{figures/planner.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Left: Light Curtain constraint graph subject to max angular velocity of Galvomirror. Right: Placing an optimal curtain along the highest probability region per column of rays}
+   \caption{\textbf{Left:} Light Curtain constraint graph subject to max angular velocity of Galvomirror. \textbf{Right:} Placing an optimal curtain along the highest probability region}
    \label{fig:plannerfig}
 \end{figure}
 
@@ -76,11 +76,11 @@ To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:p
        \centering
        \includegraphics[width=0.48\textwidth]{figures/fields.pdf}
    \centering
-   \caption{We look at a depth distribution of one of the rays in UF (yellow line), and figure out where additional curtains (blue points) can be placed such as to maximize information gained. Observe that $\pi_{1}$ is able to handle multimodal distributions}
+   \caption{We look at where additional curtains are planned to be placed, given a depth distribution. \textbf{Left:} $\pi_{0}$ given a unimodal gaussian with small $\sigma$. \textbf{Middle:} $\pi_{0}$ given a multimodal gaussian with larger $\sigma$. \textbf{Right:} $\pi_{1}$ given a multimodal gaussian with larger $\sigma$. Observe that $\pi_{1}$ results in curtains being placed on the second mode.} 
    \label{fig:m0m1} 
 \end{figure}
 
-As seen in Fig. ~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imagable but non-flat curtain placement. We see the effects of both in later experiments.
+As seen in Fig. ~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imagable but non-flat curtain placement. We see the effects of both in later experiments.
 
 \subsection{Observation Model}
 

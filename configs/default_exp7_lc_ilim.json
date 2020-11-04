@@ -31,7 +31,8 @@
     "enabled": false,
     "iterations": 5,
     "planner": "default",
-    "params": {"step": [0.5]}
+    "params": {"step": [0.5]},
+    "use_lc_prob": 0.7
   },
   "loss": {
     "ce_mul": 1.0,

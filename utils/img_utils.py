@@ -327,6 +327,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
         zend = zstart + 0.3
         maxd = 100.
         mind = 3.
+        quash_limit = True
     else:
         if "kitti" in cfg.data.dataset_path:
             pshift = 5
@@ -334,12 +335,14 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
             zend = zstart + 0.3
             maxd = 100.
             mind = 0.
+            quash_limit = False
         elif "ilim" in cfg.data.dataset_path:
             pshift = 0
             zstart = 1.0
             zend = zstart + 0.3
             maxd = 100.
             mind = 3.
+            quash_limit = True
 
     # Generate Shiftmap
     if pshift != 0:
@@ -374,19 +377,14 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
         zero_mask = zero_mask * mask_shifted.squeeze(0)
 
     # Need an algorithm to ensure two highly varied depthms are not in same column?
-    # Need to write in C++ this check
-    """
-    Pass in depthmap_shifted_cleaned
-    Iterate each column
-    column_sets = vector<vector> = [[0,1,2], [10,11,12,13]]
-    mean_depth = vector [[5, 10]]
-    Then iterate each row, once we hit a non zero start a counter and accumate depth, and get mean
-        We store the indices as well?
-    Finally at the end, write to mask the indices that match the depth?
-    """
-    #import cv2
-    #depthmap_shifted_cleaned = depthmap_shifted * zero_mask
-    #cv2.imshow("depthmap_shifted_cleaned", depthmap_shifted_cleaned.squeeze(0).cpu().numpy()/100)
+    if quash_limit:
+        quash_range = 1.
+        depthmap_shifted_cleaned = (depthmap_shifted * zero_mask).squeeze(0) # 256x320
+        depthmap_shifted_cleaned[depthmap_shifted_cleaned == 0] = 1000
+        min_along_column, _ = torch.min(depthmap_shifted_cleaned, axis=0) # 320
+        quash_mask = ((depthmap_shifted_cleaned > min_along_column-quash_range) & (depthmap_shifted_cleaned < min_along_column+quash_range))
+        quash_mask = quash_mask.float()
+        zero_mask = zero_mask * quash_mask
 
     # Shift Mask
     if pshift != 0:
