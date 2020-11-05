@@ -261,7 +261,7 @@ def compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_re
     unc_field_predicted, debugmap = gen_ufield(dpv_refined_predicted, d_candi, intr_refined.squeeze(0), BV_log=True, cfg=cfg)
     return unc_field_truth, unc_field_predicted, debugmap
 
-def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi):
+def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi, plot=False):
     # Get Depth comparison
     unc_field_truth_depth = dpv_to_depthmap(unc_field_truth.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
     unc_field_predicted_depth = dpv_to_depthmap(unc_field_predicted.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
@@ -272,13 +272,14 @@ def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi):
     unc_field_predicted_depth[~unc_field_mask] = 0.
     unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
     unc_field_rmse = torch.sum(torch.abs(unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask))/torch.sum(unc_field_mask)
-    # import matplotlib.pyplot as plt
-    # # Plot
-    # plt.ion()
-    # plt.cla()
-    # plt.plot((unc_field_truth_depth*unc_field_mask).cpu().numpy())
-    # plt.plot((unc_field_predicted_depth*unc_field_mask).cpu().numpy())
-    # plt.pause(0.1)
+    if plot:
+        import matplotlib.pyplot as plt
+        # Plot
+        plt.ion()
+        plt.cla()
+        plt.plot((unc_field_truth_depth*unc_field_mask).cpu().numpy())
+        plt.plot((unc_field_predicted_depth*unc_field_mask).cpu().numpy())
+        plt.pause(0.05)
     return unc_field_rmse
 
 spread_kernel = None
@@ -314,6 +315,8 @@ def spread_dpv_hack(dpv, N=5):
     return tofuse_dpv
 
 def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
+    if dpv_refined_predicted.shape[1] == N:
+        return dpv_refined_predicted
     if BV_log:
         dpv_refined_predicted = torch.exp(dpv_refined_predicted)
     dpv_refined_predicted = dpv_refined_predicted.permute(0,2,1,3)
@@ -352,7 +355,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     if cfgx is not None:
         pshift = cfgx["unc_ang"]
         zstart = cfgx["unc_shift"]
-        zend = zstart + 0.3
+        zend = zstart + cfgx["unc_span"]
         maxd = 100.
         mind = 3.
         quash_limit = True
