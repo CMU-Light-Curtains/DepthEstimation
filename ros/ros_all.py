@@ -96,9 +96,14 @@ class Planner():
         self.counter = 0
         self.just_started = True
 
+        # ROS
+        self.bridge = CvBridge()
+        self.planner_depth_pub = rospy.Publisher('ros_planner/depth', sensor_msgs.msg.Image, queue_size=1)
+        self.planner_visual_pub = rospy.Publisher('ros_planner/visual', sensor_msgs.msg.Image, queue_size=1)
+
         if self.mode == "real":
             lc_wrapper_python.ros_init("lc_wrapper_example")
-            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=100, dev="/dev/ttyACM0")
+            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=60, dev="/dev/ttyACM0")
 
         #  Params
         with open(params_file) as f:
@@ -180,8 +185,9 @@ class Planner():
         curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
         # Spread
-        for i in range(0, 1):
-            curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+        if self.counter < 1000:
+            for i in range(0, 1):
+                curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
         # if self.counter < 20:
         #     for i in range(0, 1):
         #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
@@ -211,7 +217,7 @@ class Planner():
         depth_lc = cv2.resize(depth_lc, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
         return depth_lc
 
-    def run(self, dpv_r_tensor, depth_r_tensor):
+    def run(self, dpv_r_tensor, depth_r_tensor, return_mode=0):
         self.counter+=1
         print(self.counter)
         global_time = time.time()
@@ -249,10 +255,10 @@ class Planner():
         planner = "default"
         start = time.time()
         if planner == "default":
-            params = {"step": [0.5], "std_div": 5.}
+            params = {"step": [0.5], "std_div": 3.}
             plan_func = self.algo_lc.plan_default
         elif planner == "m1":
-            params = {"step": 3, "interval": 5, "std_div": 1.}
+            params = {"step": 3, "interval": 5, "std_div": 3.}
             plan_func = self.algo_lc.plan_m1
         elif planner == "sweep":
             params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
@@ -268,7 +274,10 @@ class Planner():
         if dpv_r_tensor is not None:
             #self.final = img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True)
             dpv_r_tensor = torch.exp(img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True))
-            for i in range(0,3):
+            # Spread it?
+            #for i in range(0,1):
+            #    dpv_r_tensor = img_utils.spread_dpv_hack(dpv_r_tensor, 9)
+            for i in range(0,1):
                 self.integrate([dpv_r_tensor])
         dpv_int_time = time.time() - start
         print("dpv_int_time: " + str(dpv_int_time)) # 30ms
@@ -278,6 +287,10 @@ class Planner():
             iterations = 1
             self.just_started = False
         else:
+            iterations = 1
+
+        # Mode
+        if return_mode == 1:
             iterations = 1
 
         # Iterations
@@ -300,7 +313,6 @@ class Planner():
             unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, False)
             time_score = time.time() - start
             #print("time_score: " + str(time_gen_ufield)) # 30ms
-            print(unc_score)
             self.unc_scores.append(unc_score.item())
             if self.counter % 20 == 0:
                 print(self.unc_scores)
@@ -313,6 +325,7 @@ class Planner():
             
                 # Send Curtains while planning
                 sensed_arr_all = []
+                lc_paths_all = []
                 start = time.time()
                 i=-1
                 for lc_path in plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True):
@@ -330,6 +343,7 @@ class Planner():
 
                     # Send Curtain
                     self.lc_wrapper.sendCurtain(lc_path)
+                    lc_paths_all.append(lc_path)
                     if i==0:
                         continue
 
@@ -350,6 +364,12 @@ class Planner():
                     # curtains.append([output_lc, thickness_lc])
                     # measure_time = time.time() - start
 
+                # Field Visual
+                #field_visual = self.algo_lc.field_visual
+                #field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+                #cv2.imshow("field_visual", field_visual)
+                #cv2.waitKey(1)
+
                 # Receive Curtain
                 output_lc, thickness_lc = self.lc_wrapper.receiveCurtainAndProcess()[1]
                 output_lc[np.isnan(output_lc[:, :, 0])] = 0
@@ -361,6 +381,17 @@ class Planner():
 
                 base_time = time.time() - start
                 print("base_time: " + str(base_time)) # 30ms
+
+                # Return Mode 1
+                if return_mode == 1:
+                    sensed_set = []
+                    for sensed_arr in sensed_arr_all:
+                        sensed_set.append(sensed_arr.cpu().numpy())
+                    sensed_set = np.array(sensed_set)
+                    lc_path_set = np.array(lc_paths_all)
+                    field_visual = self.algo_lc.field_visual
+                    field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+                    return field_visual, None, sensed_set
 
                 # Generate DPV
                 start = time.time()
@@ -377,10 +408,12 @@ class Planner():
             # Plane and Sense
             elif self.mode == "sim":
                 lc_paths = list(plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True))
-                field_visual = self.algo_lc.field_visual
-                field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+                #field_visual = self.algo_lc.field_visual
+                #field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
                 #cv2.imshow("field_visual", field_visual)
                 #cv2.waitKey(1)
+
+                # Publish Field Visual?
 
                 # In Sensing Real
                 lc_DPVs = []
@@ -425,8 +458,20 @@ class Planner():
             # Return
             field_visual = self.algo_lc.field_visual
             field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
-        
-        return field_visual, final_depth
+
+            # Publish The Iteration specific stuff?
+            if self.planner_depth_pub.get_num_connections():
+                maxdepth = np.max(final_depth)
+                maxdepth = 15
+                depthmap = ((final_depth/maxdepth)*255).astype(np.uint8)
+                depthmap = cv2.applyColorMap(depthmap, cv2.COLORMAP_JET)
+                ros_depth = self.bridge.cv2_to_imgmsg(depthmap, encoding="rgb8")
+                self.planner_depth_pub.publish(ros_depth)
+            if self.planner_visual_pub.get_num_connections():
+                visual = self.bridge.cv2_to_imgmsg((field_visual*255).astype(np.uint8), encoding="bgr8")
+                self.planner_visual_pub.publish(visual)
+
+        return field_visual, final_depth, None
 
 class RosAll():
     def __init__(self):
@@ -437,12 +482,13 @@ class RosAll():
         self.prev_seq = None
         self.just_started = True
         self.mode = rospy.get_param('~mode', 'sim')
+        self.params_file = rospy.get_param('~params', 'real_sensor.json')
         self.counter = 0
         self.mutex = Lock()
         self.new_dpv = False
         print(self.mode)
 
-        self.planner = Planner(mode = self.mode, params_file='real_sensor.json')
+        self.planner = Planner(mode = self.mode, params_file=self.params_file)
 
         # Pin Memory
         self.depth_pinned = torch.zeros((int(self.planner.real_param["size_rgb"][1]), int(self.planner.real_param["size_rgb"][0]))).float().pin_memory()
@@ -459,6 +505,7 @@ class RosAll():
         self.dpv_sub.registerCallback(self.dpv_callback)
         self.debug_pub = rospy.Publisher('ros_planner/debug', sensor_msgs.msg.Image, queue_size=self.queue_size)
         self.depth_pub = rospy.Publisher('ros_planner/depth', sensor_msgs.msg.Image, queue_size=self.queue_size)
+        self.depth_colored_pub = rospy.Publisher('ros_planner/depth_colored', sensor_msgs.msg.Image, queue_size=self.queue_size)
 
     def destroy(self):
         self.depth_sub.unregister()
@@ -504,10 +551,12 @@ class RosAll():
 
         # Call Planner
         field_visual, final_depth = self.planner.run(dpv_r_tensor, depth_r_tensor)
+        field_visual = cv2.rotate(field_visual, cv2.ROTATE_180)
 
         # Viz
         if self.debug_pub.get_num_connections():
             start = time.time()
+
             ros_debug = self.bridge.cv2_to_imgmsg((field_visual*255).astype(np.uint8), encoding="bgr8")
             ros_debug.header = msg.header
             self.debug_pub.publish(ros_debug)
@@ -520,6 +569,16 @@ class RosAll():
             ros_depth.header = depth_msg.header
             ros_depth.header.stamp = rospy.Time.now()
             self.depth_pub.publish(ros_depth)
+
+        if self.depth_colored_pub.get_num_connections():
+            shifted_depth = final_depth / 10.
+            shifted_depth = np.clip(shifted_depth * 255, 0, 255).astype(np.uint8)
+            shifted_depth = cv2.applyColorMap(shifted_depth, cv2.COLORMAP_JET)
+
+            shifted_depth = self.bridge.cv2_to_imgmsg(shifted_depth, encoding="bgr8")
+            shifted_depth.header = depth_msg.header
+            shifted_depth.header.stamp = rospy.Time.now()
+            self.depth_colored_pub.publish(shifted_depth)
 
 if __name__ == '__main__':
     rospy.init_node('ros_all', anonymous=False)

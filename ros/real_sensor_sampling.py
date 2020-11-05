@@ -91,6 +91,7 @@ class LC:
         param["r_candi"] = param["d_candi"]
         param["r_candi_up"] = param["d_candi"]
         param['cTr'] = np.linalg.inv(param['rTc'])
+        param["device"] = torch.device(0)
         self.real_param = copy.deepcopy(param)
         self.real_lc = light_curtain.LightCurtain()
         if not self.real_lc.initialized:
@@ -180,8 +181,8 @@ class LC:
         # Viz
         if self.visualize:
             cv2.imshow("debugmap_truth", rgb_temp)
-            cv2.imshow("unc_field_truth_rgb", self.unc_field_truth_r.squeeze(0).cpu().numpy())
-            cv2.imshow("unc_field_truth_lc", self.unc_field_truth_lc.squeeze(0).cpu().numpy())
+            #cv2.imshow("unc_field_truth_rgb", self.unc_field_truth_r.squeeze(0).cpu().numpy())
+            #cv2.imshow("unc_field_truth_lc", self.unc_field_truth_lc.squeeze(0).cpu().numpy())
     
     def init_unc_field(self):
         init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + self.E_RANGE / 2.
@@ -213,9 +214,9 @@ class LC:
         planner = "default"
         params = {"step": [0.5]}
         #planner = "m1"
-        #params = {"step": 3, "interval": 5}
-        #planner = "sweep"
-        #params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
+        #params = {"step": 3, "interval": 10}
+        planner = "sweep"
+        params = {"start": self.S_RANGE + 2, "end": self.E_RANGE - 2, "step": 0.3}
         for i in range(0, iterations):
             print(i)
 

@@ -324,7 +324,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
     if cfgx is not None:
         pshift = cfgx["unc_ang"]
         zstart = cfgx["unc_shift"]
-        zend = zstart + 0.3
+        zend = zstart + cfgx["unc_span"]
         maxd = 100.
         mind = 3.
         quash_limit = True
