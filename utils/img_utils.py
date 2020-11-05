@@ -195,7 +195,14 @@ def lcoutput_to_cloud(output):
     output[np.isnan(output[:, :, 0])] = 0
     output = output.reshape((output.shape[0] * output.shape[1], 4))
     lccloud = np.append(output, np.zeros((output.shape[0], 5)), axis=1)
-    lccloud[:, 4:6] = 50
+    lccloud[:,4] = lccloud[:,3]
+    lccloud[:,3] = 0
+    nonzero = (lccloud[:,4] <= 0)
+
+    lccloud[nonzero, 3:6] += 50
+
+
+
     lccloud = hack(lccloud)
     return lccloud
 
@@ -316,6 +323,30 @@ def upsample_dpv(dpv_refined_predicted, N=64, BV_log=False):
     if BV_log:
         dpv_refined_predicted = torch.log(dpv_refined_predicted)
     return dpv_refined_predicted
+
+def cull_depth(depth, intr_up, pshift=5):
+    depth = depth.unsqueeze(0)
+
+    # Generate Shiftmap
+    flowfield = torch.zeros((1, depth.shape[2], depth.shape[3], 2)).float().to(depth.device)
+    flowfield_inv = torch.zeros((1, depth.shape[2], depth.shape[3], 2)).float().to(depth.device)
+    flowfield[:, :, :, 1] = pshift
+    flowfield_inv[:, :, :, 1] = -pshift
+    convert_flowfield(flowfield)
+    convert_flowfield(flowfield_inv)
+
+    # Shift the DPV
+    depth_shifted = F.grid_sample(depth, flowfield, mode='nearest').squeeze(0)
+
+    pts_shifted = depth_to_pts(depth_shifted, intr_up)
+    zero_mask = (~((pts_shifted[1, :, :] > 1.0) | (pts_shifted[1, :, :] < 0.6) | (pts_shifted[2, :, :] > 100-1) | (pts_shifted[2, :, :] < 3))).float() # THEY ALL SEEM TO BE DIFF HEIGHT? (CHECK CALIB)
+    #zero_mask = zero_mask*0 + 1
+
+    depth_shifted = depth_shifted * zero_mask
+
+    depth_reverted = F.grid_sample(depth_shifted.unsqueeze(0), flowfield_inv, mode='nearest').squeeze(0)
+
+    return depth_reverted
 
 def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_log=True, normalize=False, mask=None, cfg=None, cfgx=None):
     if cfgx is not None:
