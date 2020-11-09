@@ -8,11 +8,11 @@
 
 \subsection{Motivation}
 
-While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow to converge. Furthermore, a Light Curtain only means of depth estimation is extracted primarily along the ruled placement of the curtain, at least based on our above placement policies. We would ideally like to use information from a Monocular RGB camera or Stereo Pair to initialize our prior, with a similar DPV representation. To this end, a Deep Learning based architecture is ideal, and we also reason that such an architecture could potentially learn to fuse/incorporate information from both modalities better.
+While starting from a uniform or gaussian prior with a large uncertainity is a valid option, it is slow to converge. Furthermore, a Light Curtain's only means of depth estimation is extracted primarily along the ruled placement of the curtain, at least based on our above placement policies. We would ideally like to use information from a Monocular RGB camera or Stereo Pair to initialize our prior, with a similar DPV representation. To this end, a Deep Learning based architecture is ideal, and we also reason that such an architecture could potentially learn to fuse/incorporate information from both modalities better.
 
 \subsection{Structure of Network}
 
-The first step is to build a network that can generate DPV's similar to our light curtain only estimation strategy from RGB images. To this end, we build upon the MVSNet/PSMNet architecture. N images, usually 2 $I_{0}, I_{1}$ are fed into encoders that share weights, and the features are then warped into different fronto-parallel planes of the reference image $I_{0}$ using pre-computed $R_{i}^{0}, t_{i}^{0}$. Further convolutions are run to generate a low resolution DPV $dpv_{\mathrm{t}}^{\mathrm{l0}}$ [80, 96] where the log softmax operator is applied and regressed on. The transform between the camera's act as a constraint, forcing the feature maps learnt to respect depth to channel correspondence. The add operator into a common feature map is analagous to adding probabilities in log-space. 
+The first step is to build a network (Fig.~\ref{fig:network}) that can generate DPV's similar to our light curtain only estimation strategy from RGB images. To this end, we build upon the MVSNet/PSMNet \cite{chang2018pyramid} \cite{yao2018mvsnet} architecture. N images, usually 2 $I_{0}, I_{1}$ are fed into encoders that share weights, and the features are then warped into different fronto-parallel planes of the reference image $I_{0}$ using pre-computed $R_{i}^{0}, t_{i}^{0}$. Further convolutions are run to generate a low resolution DPV $dpv_{\mathrm{t}}^{\mathrm{l0}}$ [80, 96] where the log softmax operator is applied and regressed on. The transform between the camera's act as a constraint, forcing the feature maps learnt to respect depth to channel correspondence. The add operator into a common feature map is analagous to adding probabilities in log-space. 
 
 This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incorporate a downsampled version of $dpv_{\mathrm{t-1}}^{\mathrm{L}}$ along with the the light curtain DPV that we had applied recursive bayesian updates on $dpv_{\mathrm{t-1}}^{\mathrm{lc}}$, and a residual is computed and added back to $dpv_{\mathrm{t}}^{\mathrm{l0}}$ to generate $dpv_{\mathrm{t}}^{\mathrm{l1}}$ to be regressed upon similarly. Occasionally, we train without this feedback by inputting a uniform distribution. Finally, this is then passed into a decoder with skip connections to generate a high resolution DPV $dpv_{\mathrm{t}}^{\mathrm{L}}$. This is then used to plan and place light curtains, from which we generate a new $dpv_{\mathrm{t}}^{\mathrm{lc}}$ to be fed in the next stage.
 
@@ -50,9 +50,23 @@ This is then fed into the DPV Fusion Network (Set of 3D Convolutions) that incor
 We train and validate our algorithms on the KITTI dataset. We then trained the same network by initializing on those weights, but using our custom ILIM dataset to evaluate our algorithms on our sensor platform / jeep.
 
 \begin{figure*}[h!]
-   \includegraphics[width=1.0\textwidth]{figures/images.pdf}
-   \caption{Note the improved depthmap when Monocular inputs are fused with Light Curtain measurements. Also note that the same architecture can be used to solve several tasks, including Monocular Depth, Stereo Depth and Lidar Upsampling}  
+   \includegraphics[width=1.0\textwidth]{figures/p1.png}
+   \includegraphics[width=1.0\textwidth]{figures/p2.png}
+   \caption{In KITTI + Simulated Light Curtain, we note the improved depthmap when Monocular inputs are fused with Light Curtain measurements. Also note that the same architecture can be used to solve several tasks, including Monocular Depth, Stereo Depth and Lidar Upsampling}  
    \label{fig:images2} 
+\end{figure*}
+
+\begin{figure*}[h!]
+   \includegraphics[width=1.0\textwidth]{figures/p4.png}
+   \includegraphics[width=1.0\textwidth]{figures/p5.png}
+   \caption{In Real World Experiments, we are able to see the monocular scale ambiguity in domain specific scenarios get corrected by the Light Curtain, and we are able to see correction in any arbitary scene provided to the system as well}  
+   \label{fig:images3} 
+\end{figure*}
+
+\begin{figure*}[h!]
+   \includegraphics[width=1.0\textwidth]{figures/p6.png}
+   \caption{We show the internal state of the bayesian update at Iteration 0 and Iteration 5, showing the convergence of the sensor's laser and curtain profile on an object 15m away}  
+   \label{fig:images4} 
 \end{figure*}
 
 \section{RGB + Light Curtain Experiments} 
@@ -63,7 +77,7 @@ Here we consider the RMSE metric against the entire depthmap as opposed to just 
 \noindent
 \begin{table}[h]
    \centering
-   \resizebox{0.7\linewidth}{!}{
+   \resizebox{0.6\linewidth}{!}{
    \begin{tabular}{|l|l|}
    \hline
     Parameters&  RMSE/m\\ \hline

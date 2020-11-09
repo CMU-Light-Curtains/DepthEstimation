@@ -193,4 +193,8 @@ Gengshan Yang, Peiyun Hu, and Deva Ramanan.
 \newblock In {\em Proceedings of (IROS) IEEE/RSJ International Conference on
   Intelligent Robots and Systems}, November 2019.
 
+\bibitem{yao2018mvsnet}
+Yao Yao, Zixin Luo, Shiwei Li, Tian Fang, and Long Quan.
+\newblock Mvsnet: Depth inference for unstructured multi-view stereo, 2018.
+
 \end{thebibliography}

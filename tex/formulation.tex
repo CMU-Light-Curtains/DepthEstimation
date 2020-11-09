@@ -40,12 +40,12 @@ We denote the categorical distribution of the uncertainty field on the $u$-th ca
        \includegraphics[width=1.0\textwidth]{figures/bev.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our state space consisting of a Depth Probability Volume (DPV) and Bird's Eye Uncertainty Field (UF)}
+   \caption{Our state space consists of a Depth Probability Volume (DPV) storing per-pixel uncertainity distributions, that can be collapsed to a Bird's Eye Uncertainty Field (UF)}
 \end{figure}
 
 \subsection{Curtain Planning}
 
-With the Uncertainty Field (UF) extracted from the state space, we can use this to figure out where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization and Dynamic Programming problem \cite{Ancha_2020_ECCV}. A single light curtain placement is defined by a set of $T$ control points $\{\X_t\}_{t=1}^T$. We wish to maximize the objective $J(\X_1, \dots, \X_T) = \sum_{t=1}^T UF(\X_t)$ where $UF(\X)$ is the uncertaintiy field probabilies at the anchor location of $\X$.
+With the Uncertainty Field (UF) extracted, we can use this to figure out where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization / Dynamic Programming problem \cite{Ancha_2020_ECCV}. A single light curtain placement is defined by a set of $T$ control points $\{\X_t\}_{t=1}^T$. We wish to maximize the objective $J(\X_1, \dots, \X_T) = \sum_{t=1}^T UF(\X_t)$ where $UF(\X)$ is the UF probabilies at the anchor location of $\X$.
 
 The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera ray $\R_t$, must be chosen to satisfy the physical constraints of the light curtain device: $|\theta(\X_{t+1}) - \theta(\X_t)| \leq \Delta \theta_\text{max}$ with $\theta_\text{max}$ being the maximum angular velocity of the Galvomirror. The problem is also discretized such that $\X_{t} \in \D\ $ and also lies along $\R_t$
 \begin{align}
@@ -69,7 +69,7 @@ The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera 
 
 The uncertainty field $UF$ contains the current uncertainty about piexl-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^{c_k}\ |\ UF)$ the placement policy of the $k$-th light curtain, where $d^{c_k} = \{d^{c_k}_{u, v}\ |\ \forall u, v\}$. Our goal is to sample light curtain placements $d^{c_k} \sim \pi(d^{c_k}\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
 
-To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:plannerfig}, we have placed a single curtain along the highest probability region per column of rays, but our goal is to maximize the information gained. To do this, we generate corresponding entropy fields $H(\X)_{i}$ to be fed to the planner from $UF(\X)$ based on two approaches: $\pi_{0}$ attempts to normalize each ray's distribution $UF(u)$ and warp the distribution such that a selected span from the mean is maximized. $\pi_{1}$ attempts to sample a point on the ray given $UF(u)$. The effects are seen in Fig. ~\ref{fig:m0m1}.
+To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:plannerfig}, we have placed a single curtain along the highest probability region per column of rays, but our goal is to maximize the information gained. To do this, we generate corresponding entropy fields $H(\X)_{i}$ to be fed to the planner from $UF(\X)$ based on two approaches: $\pi_{0}$ attempts to normalize each ray's distribution $UF(u)$ and warp the distribution such that a selected span from the mean is maximized. $\pi_{1}$ attempts to sample a point on the ray given $UF(u)$. The effects are seen in Fig.~\ref{fig:m0m1}.
 
 \begin{figure}[h]
    \centering
@@ -80,7 +80,7 @@ To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:p
    \label{fig:m0m1} 
 \end{figure}
 
-As seen in Fig. ~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imagable but non-flat curtain placement. We see the effects of both in later experiments.
+As seen in Fig.~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imagable but non-flat curtain placement. We see effects of both in later.
 
 \subsection{Observation Model}
 
@@ -95,8 +95,8 @@ Note that when $d^c_{u, v} = \dd_{u, v}$, the mean intensity is $1$ (the maximum
 
 \subsection{Recursive Bayesian Update}
 \newcommand{\qb}{q'}
-\newcommand{\before}[1]{{\color{blue} P_\text{prev}(u, v, #1)}}
-\newcommand{\after}[1]{{\color{red} P_\text{next}(u, v, #1)}}
+\newcommand{\before}[1]{{P_\text{prev}(u, v, #1)}}
+\newcommand{\after}[1]{{P_\text{next}(u, v, #1)}}
 
 How do we incorporate the newly acquired information about the scene from the light curtain, to update our current beliefs of object depths? Since we have a probabilistic sensor model, we can use the Bayes' rule to infer the posterior distribution of the ground truth depths given the observations. Let $\before{q}$ denote the probability of the depth at pixel $(u, v)$ being equal to $d_q$ before sensing, and $\after{q}$ the updated probability after sensing. Then by Bayes' rule:
 \begin{align*}
@@ -135,8 +135,8 @@ If we place $K$ light curtains at a given timestep, we can incorporate the infor
        \includegraphics[width=0.31\textwidth]{figures/cc.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our sensor model produces a PDF where a low intensity leads to an inverted gaussian at the region of measurement, with other regions being uniform. Medium intensities mean the curtain isn't placed exactly on the object so is likely to be on either side, and consequently high intensities lead to the peak rising}
+   \caption{Mapping Intensity Distribution ($i$, red) to a Depth Distribution ($z$, blue) \textbf{Left:} Low $i$ return leads to inverted gaussian at the region of measurement, with other regions being uniform. \textbf{Middle:} Medium $i$ mean the curtain isn't placed exactly on the object so is likely to be on either side. \textbf{Right:} High $i$ lead to the peak rising}
    \label{fig:updatemodel}
 \end{figure}
 
-The effects of this model as the placement depth $d^c_{u, v}$, curtain thickness $\sigma(u, v, d^c_{u, v})$ and intensity $i$ change is seen in Fig. ~\ref{fig:updatemodel}. One can observe that low intensities lead to an \textit{inverting gaussian} like PDF $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ with other regions being uniform, indicating that it is somewhat certain that an object doesn't exist at that location, but is uniformly uncertain about the other unmeasured regions. A medium intensity indicates that the curtain may not exactly be on the surface, and so could be on either side of the measured location. Eventually as the intensity rises, so does the value of the peak.
+The effects of this model as the placement depth $d^c_{u, v}$, curtain thickness $\sigma(u, v, d^c_{u, v})$ and intensity $i$ change is seen in Fig.~\ref{fig:updatemodel}. One can observe that low intensities lead to an \textit{inverting gaussian} like PDF $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ with other regions being uniform, indicating that it is somewhat certain that an object doesn't exist at that location, but is uniformly uncertain about the other unmeasured regions. A medium intensity indicates that the curtain may not exactly be on the surface, and so could be on either side of the measured location. Then, as the intensity rises, so does the peak value.
