@@ -28,7 +28,7 @@ The Light Curtain consists of a rolling shutter NIR camera flipped vertically (t
        \includegraphics[width=1.0\textwidth]{figures/sim.png}
    \end{minipage}\hfill
    \centering
-   \caption{Light Curtain Simulator in CARLA environment}
+   \caption{Simulated Light Curtain Sensor}
 \end{figure}
 %\vspace{-.1in}
 We also designed and open sourced a light curtain simulator \cite{raaj2019} to test and evaluate our algorithms, allowing for the Light Curtain paramters such as NIR instrinsics, Laser/NIR extrinsincs, Galvomirror speed etc. to be controlled.
@@ -42,7 +42,7 @@ We also designed and open sourced a light curtain simulator \cite{raaj2019} to t
        \includegraphics[width=1.0\textwidth]{figures/array.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Experimental setup consisting of a Stereo camera pair, the Light Curtain device and a 128 Beam Lidar}
+   \caption{Real Light Curtain Sensor, along with Stereo camera pair and a 128 Beam Lidar}
 \end{figure}
 
 Our sensor array consists of a Stereo Camera Pair with a baseline of 0.7m, the Light Curtain device located close to the main/left camera to minimize depth/volume transformation parallax artifacts, and an Ouster OS2-128 Lidar for algorithm accuracy validation and to assist in training depth estimation networks.
