@@ -4,12 +4,12 @@
 \newcommand{\DD}{\mathbf{D}}
 \newcommand{\dd}{\mathbf{d}}
 
-We begin by looking at a Light Curtain only problem of adaptively discovering the depth of a scene. We wouldn't know the path along the rays/pixels on which an object may lie/intersect, hence we choose to go with a sampling based approach. We treat each ray as initially having either a uniform distribution, or a gaussian with a large variance in the center, and we attempt to formulate our problem with a Recursive Bayesian update approach.
+We begin by looking at the problem of adaptively discovering the depth of a scene using only the light curtain. Initially, we don't know the true depth of the objects along each  camera ray/pixel, hence we use a sampling based approach. At the beginning, we treat the true depth along each ray as being distributed according to either a uniform distribution, or a Gaussian distribution with a large variance in the center, and we attempt to formulate our problem with a Recursive Bayesian update approach.
 
 \subsection{Representation}
 
 \smallskip
-We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some fixed resolution [320x240] with each pixel in image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent uncertainty in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. We quantize depth values into a set $\D = \{d_0, \dots, d_{N-1}\}$ of $N$ discrete, uniformly spaced depth values lying in $(d_\text{min}, d_\text{max})$. All our predictions $\dd_{u, v} \in \D$ belong to this set. The output of our depth estimation method for each pixel is a probability distribution $P(\dd_{u, v})$, modeled as a categorical distribution over $\D$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, 240, 320]
+We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which specifies the depth value $d_{u, v}$ for every camera pixel $(u, v)$. This is represented as a tensor of some resolution [H,W] with each pixel in depth image $\DD$ encoding the depth value $d_{u,v}$. Since there is inherent uncertainty in the depth value at every pixel, we output a \textit{probability distribution} over depths for every pixel. Let us define $\dd_{u,v}$ to be a \textit{random variable} for depth predictions at the pixel $(u, v)$. We quantize depth values into a set $\D = \{d_0, \dots, d_{N-1}\}$ of $N$ discrete, uniformly spaced depth values lying in $(d_\text{min}, d_\text{max})$. All our predictions $\dd_{u, v} \in \D$ belong to this set. The output of our depth estimation method for each pixel is a probability distribution $P(\dd_{u, v})$, modeled as a categorical distribution over $\D$. In this work, we use $N=64$, resulting in a Depth Probability Volume (DPV) tensor of size [64, W, H]
 \begin{align}
    &\D=\{d_0, \dots, d_{N-1}\}; d_{q}=d_\text{min}+(d_\text{max}-d_\text{min}) \cdot q
    \label{eq:d_candi}
@@ -21,7 +21,7 @@ We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which speci
    %\vspace{-.1in}
 \end{align}
 
-While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a collapsed XZ  space. Hence, we generate an ``Uncertainty Field" (UF) \cite{yang2019inferring}, by avergaing the probabilities of the DPV across columns. While computing this field, we only consider those pixels whose corresponding 3D heights are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
+While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a top-down 2D profile. Hence, we generate an ``Uncertainty Field" (UF) \cite{yang2019inferring}, by averaging the probabilities of the DPV across a subset of each column as seen in Fig ~\ref{fig:uf}. This subset considers those pixels $(u, v)$ whose corresponding 3D heights $h(u, v)$ are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
 \begin{align}
    UF(u, q) =\ &\frac{1}{|\mathcal{V}(u)|}\sum_{v \in \mathcal{V}(u)} P(\dd_{u, v} = d_q)\nonumber\\
    \text{where } &\mathcal{V}(u) = \{v\ |\ h_\text{min} \leq h(u, v) \leq h_\text{max}\} 
@@ -31,7 +31,7 @@ While an ideal sensor could choose to plan a path to sample in the full 3D volum
    %\vspace{-.1in}
 \end{align}
 
-We denote the categorical distribution of the uncertainty field on the $u$-th camera ray as \\$UF(u)=\text{Categorical}(d_q \in \D\ |\ P=\{UF(u, q)\}_{q=0}^{N-1}\})$. 
+We denote the categorical distribution of the uncertainty field on the $u$-th camera ray as \\$UF(u)=\text{Categorical}(d_q \in \D\ |\ P(d_q)= UF(u, q))$. 
 
 \begin{figure}[h]
    \centering
@@ -40,17 +40,16 @@ We denote the categorical distribution of the uncertainty field on the $u$-th ca
        \includegraphics[width=1.0\textwidth]{figures/bev.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our state space consists of a Depth Probability Volume (DPV) storing per-pixel uncertainity distributions, that can be collapsed to a Bird's Eye Uncertainty Field (UF)}
+   \caption{Our state space consists of a Depth Probability Volume (DPV) (left) storing per-pixel uncertainty distributions. It can be collapsed to a Bird's Eye Uncertainty Field (UF) by averaging those rays in each camera column that correspond to a slice on the road parallel to the ground plane (right).}
+   \label{fig:uf} 
 \end{figure}
 
 \subsection{Curtain Planning}
 
-With the Uncertainty Field (UF) extracted, we can use this to figure out where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization / Dynamic Programming problem \cite{Ancha_2020_ECCV}. A single light curtain placement is defined by a set of $T$ control points $\{\X_t\}_{t=1}^T$. We wish to maximize the objective $J(\X_1, \dots, \X_T) = \sum_{t=1}^T UF(\X_t)$ where $UF(\X)$ is the UF probabilies at the anchor location of $\X$.
-
-The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera ray $\R_t$, must be chosen to satisfy the physical constraints of the light curtain device: $|\theta(\X_{t+1}) - \theta(\X_t)| \leq \Delta \theta_\text{max}$ with $\theta_\text{max}$ being the maximum angular velocity of the Galvomirror. The problem is also discretized such that $\X_{t} \in \D\ $ and also lies along $\R_t$
+With the Uncertainty Field (UF) extracted, we can use this to plan where to place light curtains. We build upon prior work solving Light Curtain placement as a Constraint Optimization / Dynamic Programming problem \cite{Ancha_2020_ECCV}. A single light curtain placement is defined by a set of control points $\{q(u)\}_{u=1}^W$, where $u$ indexes camera columns of the camera image of width $W$, and $0 \leq q(u) \leq N-1$. This denotes that the curtain intersects the camera rays of the $u$-th column at the discretized depth $d_{q(u)} \in \mathcal{D}$. We wish to maximize the objective $J(\{q(u)\}_{u=1}^W) = \sum_{u=1}^W UF(u, q(u))$. Let $\X_u$ be the 2D point in the top-down view that corresponds to the depth $q(u)$ on camera rays of column $u$. The control points $\{q(u)\}_{u=1}^W$ must be chosen to satisfy the physical constraints of the light curtain device: $|\theta(\X_{u+1}) - \theta(\X_u)| \leq \Delta \theta_\text{max}$ with $\theta_\text{max}$ being the maximum angular velocity of the Galvomirror.
 \begin{align}
-    &\arg \max_{\{\X_t\}_{t=1}^T} \sum_{t=1}^T UF(\X_t) \qquad \text{where}\ \X_t \in \D\ \nonumber\\
-    &\text{subject to}\ |\theta(\X_{t+1}) - \theta(\X_t)| \leq \dtmax,\ \forall 1 \leq t < T
+    &\arg \max_{\{q(u)\}_{u=1}^W} \sum_{u=1}^W UF(u, q(u)) \nonumber\\
+    &\text{subject to}\ |\theta(\X_{u+1}) - \theta(\X_u)| \leq \dtmax,\ \forall 1 \leq u < W
     \label{eq:constraint}
 \end{align}
 
@@ -58,33 +57,33 @@ The control points $\{\X_t\}_{t=1}^T$, where each $\X_t$ lies on the the camera 
    \centering
    \begin{minipage}{0.5\textwidth}
        \centering
-       \includegraphics[width=1.0\textwidth]{figures/planner.pdf}
+       \includegraphics[width=0.8\textwidth]{figures/planner.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{\textbf{Left:} Light Curtain constraint graph subject to max angular velocity of Galvomirror. \textbf{Right:} Placing an optimal curtain along the highest probability region}
+   \caption{\textbf{Left:} Given an Uncertainty Field (UF), our planner can solve for an optimal galvomirror trajectory subject to it's constraints. Here, we show a 3D Ruled surface / Curtain placed on the highest probability region of UF}
    \label{fig:plannerfig}
 \end{figure}
 
 \subsection{Curtain Placement}
 
-The uncertainty field $UF$ contains the current uncertainty about piexl-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^{c_k}\ |\ UF)$ the placement policy of the $k$-th light curtain, where $d^{c_k} = \{d^{c_k}_{u, v}\ |\ \forall u, v\}$. Our goal is to sample light curtain placements $d^{c_k} \sim \pi(d^{c_k}\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
+The uncertainty field $UF$ contains the current uncertainty about pixel-wise object depths $\dd_{u, v}$ in the scene. Let us denote by $\pi(d^{c_k}\ |\ UF)$ the placement policy of the $k$-th light curtain, where $d^{c_k} = \{d^{c_k}_{u, v}\ |\ \forall u, v\}$. Our goal is to sample light curtain placements $d^{c_k} \sim \pi(d^{c_k}\ |\ UF)$ from this policy, and obtain intensities $i_{u, v}$ for every pixel.
 
-To do this, we propose two policies $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:plannerfig}, we have placed a single curtain along the highest probability region per column of rays, but our goal is to maximize the information gained. To do this, we generate corresponding entropy fields $H(\X)_{i}$ to be fed to the planner from $UF(\X)$ based on two approaches: $\pi_{0}$ attempts to normalize each ray's distribution $UF(u)$ and warp the distribution such that a selected span from the mean is maximized. $\pi_{1}$ attempts to sample a point on the ray given $UF(u)$. The effects are seen in Fig.~\ref{fig:m0m1}.
+To do this, we propose two policies: $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:plannerfig}, we have placed a single curtain along the highest probability region per column of rays, but our goal is to maximize the information gained. To do this, we generate corresponding entropy fields $H(u, q)_{i}$ to be fed to the planner instead of $UF(u, q)$, but computed from $UF(u, q)$. We use two approached to generate $H(u, q)$: $\pi_{0}$ finds the mean in each ray's distribution $UF(u)$ and selects a $\sigma_{\pi_{0}}$ determines the neighbouring span selected. $\pi_{1}$ attempts to sample a point on the ray given $UF(u)$. The effects are seen in Fig.~\ref{fig:m0m1}.
 
 \begin{figure}[h]
    \centering
        \centering
        \includegraphics[width=0.48\textwidth]{figures/fields.pdf}
    \centering
-   \caption{We look at where additional curtains are planned to be placed, given a depth distribution. \textbf{Left:} $\pi_{0}$ given a unimodal gaussian with small $\sigma$. \textbf{Middle:} $\pi_{0}$ given a multimodal gaussian with larger $\sigma$. \textbf{Right:} $\pi_{1}$ given a multimodal gaussian with larger $\sigma$. Observe that $\pi_{1}$ results in curtains being placed on the second mode.} 
+   \caption{Sampling the world at the highest probability region is not enough. To converge to the true depth, we show policies that place additional curtains given UF. \textbf{Left:} $\pi_{0}$ given a unimodal gaussian with small $\sigma$. \textbf{Middle:} $\pi_{0}$ given a multimodal gaussian with larger $\sigma$. \textbf{Right:} $\pi_{1}$ given a multimodal gaussian with larger $\sigma$. Observe that $\pi_{1}$ results in curtains being placed on the second mode.} 
    \label{fig:m0m1} 
 \end{figure}
 
-As seen in Fig.~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imagable but non-flat curtain placement. We see effects of both in later.
+As seen in Fig.~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imageable but non-flat curtain placement. We see effects of both in later.
 
 \subsection{Observation Model}
 
-A curtain placement corresponds to specifying the depth for each camera ray indexed by $u$ from the top-down view. After placing the light curtain, intensities $i_{u,v}$ are imaged by the light curtain's camera at every pixel $(u, v)$. The produced intensity at each pixel is a function of the curtain placement depth $d^c_{u, v}$ on that camera ray, the unknown ground truth depth $\dd_{u, v}$ of that pixel, as well as the thickness of the light curtain $\sigma(u, v, d^c_{u, v})$ for a particular pixel and curtain placement. We use an approximate sensor model that describes the distribution of intensities. The intensity roughly decays exponentially as the distance between the light curtain placement $d^c_u$ and ground truth depth $\dd_{u, v}$ increases.  We also simulate sensor noise as a Gaussian distribution with standard deviation $\sigma_\text{noise}$. The overall sensor model $P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v})$ can be described as:
+A curtain placement corresponds to specifying the depth for each camera ray indexed by $u$ from the top-down view. After placing the light curtain, intensities $i_{u,v}$ are imaged by the light curtain's camera at every pixel $(u, v)$. The produced intensity at each pixel is a function of the curtain placement depth $d^c_{u, v}$ on that camera ray, the unknown ground truth depth $\dd_{u, v}$ of that pixel, as well as the thickness of the light curtain $\sigma(u, v, d^c_{u, v})$ for a particular pixel and curtain placement. We use an approximate sensor model that describes the distribution of intensities. The intensity roughly decays exponentially as the distance between the light curtain placement $d^c_{u.v}$ and ground truth depth $\dd_{u, v}$ increases.  We also simulate sensor noise as a Gaussian distribution with standard deviation $\sigma_\text{noise}$. The overall sensor model $P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v})$ can be described as:
 \begin{align}
    &\nonumber P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v}) \equiv\\
    &\quad \mathcal{N} \Big(i_{u, v}\ |\ \exp \Big(-\Bigg(\frac{d^c_{u, v} - \dd_{u, v}}{\sigma(u, v, d^c_{u, v})}\Bigg)^2\Big), \sigma_\text{noise}^2\Big)
@@ -98,7 +97,7 @@ Note that when $d^c_{u, v} = \dd_{u, v}$, the mean intensity is $1$ (the maximum
 \newcommand{\before}[1]{{P_\text{prev}(u, v, #1)}}
 \newcommand{\after}[1]{{P_\text{next}(u, v, #1)}}
 
-How do we incorporate the newly acquired information about the scene from the light curtain, to update our current beliefs of object depths? Since we have a probabilistic sensor model, we can use the Bayes' rule to infer the posterior distribution of the ground truth depths given the observations. Let $\before{q}$ denote the probability of the depth at pixel $(u, v)$ being equal to $d_q$ before sensing, and $\after{q}$ the updated probability after sensing. Then by Bayes' rule:
+How do we incorporate the newly acquired information about the scene from the light curtain, to update our current beliefs of object depths? Since we have a probabilistic sensor model, we use the Bayes' rule to infer the posterior distribution of the ground truth depths given the observations. Let $\before{q}$ denote the probability of the depth at pixel $(u, v)$ being equal to $d_q$ before sensing, and $\after{q}$ the updated probability after sensing. Then by Bayes' rule:
 \begin{align*}
    &\after{q} \\
    &\hspace{5pt}= P(\dd_{u, v} = d_q\ |\ i_{u, v}, d^{c_k}_{u, v}) \\
@@ -135,8 +134,8 @@ If we place $K$ light curtains at a given timestep, we can incorporate the infor
        \includegraphics[width=0.31\textwidth]{figures/cc.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Mapping Intensity Distribution ($i$, red) to a Depth Distribution ($z$, blue) \textbf{Left:} Low $i$ return leads to inverted gaussian at the region of measurement, with other regions being uniform. \textbf{Middle:} Medium $i$ mean the curtain isn't placed exactly on the object so is likely to be on either side. \textbf{Right:} High $i$ lead to the peak rising}
+   \caption{Visualization of the recursive Bayesian update method to refine depth probabilities after observing light curtain intensities. The light curtain is placed at 10m. The red curves denote the expected intensity (Y-axis) as a function of ground truth depth (X-axis). Given an intensity value observed by the light curtain, we can compute a probability distribution of what the ground truth depth might be (blue curves) using our sensor model and the Bayes' rule. \textbf{Left:} Low $i$ return leads to an inverted Gaussian distribution at the light curtain's placement location, with other regions getting a uniform probability. \textbf{Middle:} Medium $i$ means that the curtain isn't placed exactly on the object and the true depth could be on either side of the light curtain. \textbf{Right:} High $i$ leads to a peak at the light curtain's placement location.}
    \label{fig:updatemodel}
 \end{figure}
 
-The effects of this model as the placement depth $d^c_{u, v}$, curtain thickness $\sigma(u, v, d^c_{u, v})$ and intensity $i$ change is seen in Fig.~\ref{fig:updatemodel}. One can observe that low intensities lead to an \textit{inverting gaussian} like PDF $P\left(\mathbf{d}_{u,v}^{c_{k}}\right)$ with other regions being uniform, indicating that it is somewhat certain that an object doesn't exist at that location, but is uniformly uncertain about the other unmeasured regions. A medium intensity indicates that the curtain may not exactly be on the surface, and so could be on either side of the measured location. Then, as the intensity rises, so does the peak value.
+The effects of this model as the placement depth $d^c_{u, v}$, curtain thickness $\sigma(u, v, d^c_{u, v})$ and intensity $i$ change is seen in Fig.~\ref{fig:updatemodel}. One can observe that low intensities lead to an \textit{inverting gaussian} like weight updates, with a low weight at the light curtain's placement location while other regions get uniform weights. This indicates that the method is certain that an object doesn't exist at the light curtain's location, but is uniformly uncertain about the other un-measured regions. A medium intensity indicates that the curtain may not be placed exactly on the surface, and so could be on either side of the light curtain. Finally, as the intensity rises, so does weight assigned to the light curtain's placement location.

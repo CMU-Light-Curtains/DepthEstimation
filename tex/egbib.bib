@@ -483,11 +483,23 @@ year = 2004
 }
 
 @InProceedings{Ancha_2020_ECCV,
-  author = {Ancha and Raaj and Hu and Narasimhan and Held},
-  title = {Active Perception using Light Curtains for Autonomous Driving},
-  booktitle = {Proceedings of the European Conference on Computer Vision (ECCV)},
-  month = {September},
-  year = {2020}
+    author="Ancha, Siddharth
+    and Raaj, Yaadhav
+    and Hu, Peiyun
+    and Narasimhan, Srinivasa G.
+    and Held, David",
+    editor="Vedaldi, Andrea
+    and Bischof, Horst
+    and Brox, Thomas
+    and Frahm, Jan-Michael",
+    title="Active Perception Using Light Curtains for Autonomous Driving",
+    booktitle="Computer Vision -- ECCV 2020",
+    year="2020",
+    publisher="Springer International Publishing",
+    address="Cham",
+    pages="751--766",
+    abstract="Most real-world 3D sensors such as LiDARs perform fixed scans of the entire environment, while being decoupled from the recognition system that processes the sensor data. In this work, we propose a method for 3D object recognition using light curtains, a resource-efficient controllable sensor that measures depth at user-specified locations in the environment. Crucially, we propose using prediction uncertainty of a deep learning based 3D point cloud detector to guide active perception. Given a neural network's uncertainty, we develop a novel optimization algorithm to optimally place light curtains to maximize coverage of uncertain regions. Efficient optimization is achieved by encoding the physical constraints of the device into a constraint graph, which is optimized with dynamic programming. We show how a 3D detector can be trained to detect objects in a scene by sequentially placing uncertainty-guided light curtains to successively improve detection accuracy. Links to code can be found on the project webpage.",
+    isbn="978-3-030-58558-7"    
 }
 
 @conference{Yang-2019-118007,
@@ -790,6 +802,81 @@ url = {https://www.luminartech.com/luminar-launches-perception-engine-with-subsc
       author={Yao Yao and Zixin Luo and Shiwei Li and Tian Fang and Long Quan},
       year={2018},
       eprint={1804.02505},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@ARTICLE{Geiger2013IJRR,
+  author = {Andreas Geiger and Philip Lenz and Christoph Stiller and Raquel Urtasun},
+  title = {Vision meets Robotics: The KITTI Dataset},
+  journal = {International Journal of Robotics Research (IJRR)},
+  year = {2013}
+}
+
+@article{luminar,
+  title={Luminar},
+  url={https://www.luminartech.com/},
+  year={2019}
+}
+
+@article{velodyne,
+  title={Velodyne},
+  url={https://velodynelidar.com/},
+  year={2019}
+}
+
+@article{ouster,
+  title={Ouster},
+  url={https://ouster.com/},
+  year={2019}
+}
+
+@article{quanergy,
+  title={Quanergy},
+  url={https://quanergy.com/},
+  year={2019}
+}
+@misc{chang2019argoverse,
+      title={Argoverse: 3D Tracking and Forecasting with Rich Maps}, 
+      author={Ming-Fang Chang and John Lambert and Patsorn Sangkloy and Jagjeet Singh and Slawomir Bak and Andrew Hartnett and De Wang and Peter Carr and Simon Lucey and Deva Ramanan and James Hays},
+      year={2019},
+      eprint={1911.02620},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@misc{caesar2020nuscenes,
+      title={nuScenes: A multimodal dataset for autonomous driving}, 
+      author={Holger Caesar and Varun Bankiti and Alex H. Lang and Sourabh Vora and Venice Erin Liong and Qiang Xu and Anush Krishnan and Yu Pan and Giancarlo Baldan and Oscar Beijbom},
+      year={2020},
+      eprint={1903.11027},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+
+@misc{kendall2017uncertainties,
+      title={What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?}, 
+      author={Alex Kendall and Yarin Gal},
+      year={2017},
+      eprint={1703.04977},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@misc{ilg2018uncertainty,
+      title={Uncertainty Estimates and Multi-Hypotheses Networks for Optical Flow}, 
+      author={Eddy Ilg and Özgün Çiçek and Silvio Galesso and Aaron Klein and Osama Makansi and Frank Hutter and Thomas Brox},
+      year={2018},
+      eprint={1802.07095},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@misc{xia2019generating,
+      title={Generating and Exploiting Probabilistic Monocular Depth Estimates}, 
+      author={Zhihao Xia and Patrick Sullivan and Ayan Chakrabarti},
+      year={2019},
+      eprint={1906.05739},
       archivePrefix={arXiv},
       primaryClass={cs.CV}
 }

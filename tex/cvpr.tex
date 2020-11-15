@@ -19,6 +19,9 @@
 \newcommand{\R}{\mathbf{R}}
 \newcommand{\D}{\mathcal{D}}
 \newcommand{\dtmax}{\Delta \theta_\text{max}}
+\newcommand{\sid}[1]{{\color{red} \textbf{Sid:} #1}}
+\usepackage{caption}
+\captionsetup{font=footnotesize}
 
 % Include other packages here, before hyperref.
 
@@ -34,7 +37,7 @@
 \begin{document}
 
 %%%%%%%%% TITLE
-\title{ActivFusion: Active Sensing via Exploiting and Refining RGB Depth Distributions using Triangulating Light Curtains}
+\title{Exploiting \& Refining Depth Distributions with Triangulation Light Curtains}
 
 \author{Yaadhav Raaj ~ Siddharth Ancha ~ Robert Tamburo ~ David Held ~ Srinivasa G. Narasimhan\\
 Carnegie Mellon University\\
@@ -46,47 +49,25 @@ Carnegie Mellon University\\
 % To save space, use either the email address or home page, not both
 }
 
+
 \maketitle
 
 %%%%%%%%% ABSTRACT
 \begin{abstract}
-Active sensing through the use of Adaptive LIDAR's is a nascent field, with major potential in areas such as Advanced driver-assistance systems (ADAS). They do however require electronically or physically driving a laser/light-source to a specific location to capture information, with one such class of sensor being the Programmable Triangulating Light Curtain. In this work, we introduce a novel approach we call (ActivFusion), that exploits prior depth distributions from RGB camera's to drive a Light Curtain's laser such that depth uncertainity and errors get corrected recursively. We also present real-world experiments that validate our approach in outdoor and driving settings.
+Active sensing through the use of Adaptive Depth Sensors is a nascent field, with major potential in areas such as Advanced driver-assistance systems (ADAS). They do however require electronically or physically driving a laser/light-source to a specific location to capture information, with one such class of sensor being the Triangulation Light Curtain. In this work, we introduce a novel approach  that exploits prior depth distributions from RGB cameras to drive a Light Curtain's laser such that depth uncertainty and errors get corrected and refined recursively. We also present real-world experiments that validate our approach in outdoor and driving settings.
 \end{abstract}
 
-\iffalse
-seperately put the lidar pointcloud
-monocular depth image
-then lidar
-then light curtain
-teaser
-
-Figure 2 from the Agile Depth Sensing   
-
-mu + sigma - sigma * N
-
-Fig 13 - Spread 1st 2nd and 3rd std
-
-Fig 17 - Integers Numerical
-
-Experiments - Put graph of Train from scratch in (its running)
-Yes but this is because of the 0.7 thing?
-
-Train defailt_expy_lc_ilim with prob mode 0.7
-Experinment for Stereo Version
-Experiment for Train with prob mode 1.0?
-Experiment for Reducing the Itertaions or using diff policy
-
-\fi
-
-
 %%%%%%%%% BODY TEXT
+\vspace{-.1in}
 \section{Introduction}
 
-Spinning LIDAR's have been the de-facto sensor of choice in safety critical systems such as Advanced driver-assistance systems (ADAS), due to their reliability in depth estimation. However, their sparse data and cost prohibitive nature has made adoption en-masse rare. Conversely, depth estimation through RGB cameras have been heavily researched, but have not met the same level of reliability. 
+Spinning Fixed Scan LIDARs have been the de-facto sensor of choice in safety critical systems such as Advanced driver-assistance systems (ADAS), due to their reliability in depth estimation. However, their reduced spatial-resolution, multi-path interference and their cost prohibitive nature has made en-masse adoption in personal vehicles rare. To counter these issues, depth estimation through RGB cameras has been heavily researched. However, issues such as oversaturation and feature correspondence errors in specular objects, scale ambiguity and unreliability in contrast with LIDARs has made relying on these sensors unsafe.
 
-We propose to solve the limitation's of RGB only depth estimation through actively sensing areas that are uncertain. One such sensor is the Programmable Triangulating Light Curtain \cite{bartels2019Agile}, which has demonstrated viability in being a low cost (1k\$ vs lidar's~25k\$), high spatial angular resolution (0.02$\degree$ vs lidar's  0.4$\degree$), and high frame-rate (~60fps vs lidar's~20fps) sensor. But as with any active sensor, we must specifiy the region to be sensed via a 3D ruled surface.
+To capture the error and uncertainty in RGB-only depth estimation, previous work had formulated that task as a probabilistic regression problem, by predicting per-pixel depth distributions via a Depth Probability Volume (DPV) \cite{liu2019neural} \cite{chang2018pyramid} \cite{yang2019inferring}. It provides both a Maximum Likelihood-Estimate (MLE) of the depth map, as well as the corresponding per-pixel uncertainty measure. However, these works do not adaptively or physically correct for this uncertainty, instead relying purely on Multi-View-Camera constraints for passive correction.
 
-We have devised an approach we call \textit{ActivFusion}, which is designed for fusing the modalities of RGB and Active Sensor's such as Light Curtains. We begin by formulating an iterative Bayesian inference approach to depth sensing using the Light Curtain, via Depth Probability Volume (DPV) and it's 2D Uncertainty Field (UF) representations. We then build upon existing planning frameworks based on Dynamic Programming using the sensor's Galvanometer velocity constraints. Lastly, we expand upon Generating and Exploiting Probabilistic Depth Estimates using Deep Learning based approaches, and use that as a prior to drive Light Curtain placement for further refinement.
+In this work, we have devised the first known framework that \textit{adaptively} exploits the depth uncertainty in a DPV (generated from RGB cameras) and refines it via a class of Adaptive Depth Sensors called a Triangulating Light Curtain \cite{bartels2019Agile}. It has a steerable Laser Line that can be driven in tandem with a Rolling Shutter camera to generate a 3D ruled surface to sample the world. We have chosen this sensor due to its low cost (\$1k vs lidar~$\sim$\$25k), high spatial angular resolution (0.02$\degree$ vs lidar 0.4$\degree$), and high frame-rate (~60fps vs lidar 20fps).
+
+We begin by formulating an iterative Bayesian inference approach to depth sensing using the Light Curtain only, build upon planning and sensing frameworks based on Dynamic Programming using the it's Galvomirror constraints and lastly, expand upon generating and exploiting probabilistic depth estimates using Deep Learning based approaches combining both modalities of RGB and Light Curtain. We perform extensive experiments both in Simulation (using KITTI \cite{Geiger2013IJRR} dataset) and in the real-world using our sensor setup, and demonstrate better depth estimation results when both modalities are combined.
 
 \input{prior_work}
 \input{sensor_setup}

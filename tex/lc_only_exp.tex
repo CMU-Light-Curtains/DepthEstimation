@@ -23,7 +23,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
        \includegraphics[width=1.0\textwidth]{figures/sweep.png}
    \end{minipage}\hfill
    \centering
-   \caption{Doing a simple planar sweep of the Light Curtain (LC) across a scene. Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. \textbf{Left:} LC simulated from the Lidar Depth. \textbf{Right:} Using the real LC}
+   \caption{We demonstrate corroboration between simulated and real Light Curtain by sweeping several planes across the scene (b). Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. \textbf{Left:} LC simulated from the Lidar Depth. \textbf{Right:} Using the real LC}
    \label{fig:planarsweep}
 \end{figure}
 
@@ -41,7 +41,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
     Sweep 12 $\mathbf{C}$ Step 1.0m (Real) &0.5  &1.927  \\ \hline
    \end{tabular}}
 
-   \caption{We demonstrate corroboration between simulated and real Light Curtain, and we show that sampling the scene further by placing more curtains results in better depth}
+   \caption{We show that sampling the scene by placing more curtains results in better depth accuracy}
    \label{table:t1}
    %\vspace{.1in}
    
@@ -88,8 +88,8 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
     \centering
     \begin{minipage}{0.5\textwidth}
         \centering
-        \includegraphics[width=0.49\textwidth]{figures/Figure_1.pdf}
         \includegraphics[width=0.49\textwidth]{figures/Figure_0.pdf}
+        \includegraphics[width=0.49\textwidth]{figures/Figure_1.pdf}
     \end{minipage}\hfill
     \centering
     \caption{We get better depth estimate over increased sampling iterations, when low intensity values sampled by the light curtain generate an Inverted Gaussian Depth Distribution, as opposed to a uniform one in both simulation and real world experiments}
@@ -100,8 +100,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
     \centering
     \begin{minipage}{0.5\textwidth}
         \centering
-        \includegraphics[width=0.49\textwidth]{figures/InvGau.png}
-        \includegraphics[width=0.49\textwidth]{figures/Uniform.png}
+        \includegraphics[width=0.95\textwidth]{figures/combined2.png}
     \end{minipage}\hfill
     \centering
     \caption{Looking at the top-down Uncertainty Field (UF), we see per pixel distributions in Blue and the GT in Red. We start with a gaussian prior with a large $\sigma$, take measurements and apply the bayesian update. \textbf{Left:} Policies $\pi_{0}$ and $\pi_{1}$ where low intensities result in no information (Uniform Distribution). \textbf{Right:} Where low intensities result in an Inverted Gaussian based on our Sensor Model}
@@ -118,7 +117,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
         \includegraphics[width=0.49\textwidth]{figures/Figure_4.pdf}
     \end{minipage}\hfill
     \centering
-    \caption{Placing more curtains results in faster convergence to the ground truth at the cost of runtime per iteration}
+    \caption{Placing more curtains results in faster convergence to the true depth at the cost of runtime per iteration}
     \label{fig:figure34}
 \end{figure}
 

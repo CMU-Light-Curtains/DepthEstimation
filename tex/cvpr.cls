@@ -468,7 +468,7 @@
       \end{tabular}
 
       \includegraphics[width=1.0\textwidth]{figures/banner.pdf}
-      \captionof{figure}{\textbf{(a)} We show how errors in Monocular Depth Estimation are corrected when used in tandem with an Active Sensor such as a Programmable Triangulating Light Curtain (Yellow Points are Ground Truth). \textbf{(b)} We predict a per-pixel Depth Probability Volume from Monocular RGB and we observe large per-pixel uncertainties ($\sigma=3m$) as seen in the Bird's Eye View /  Top-Down Uncertaintiy Field slice. \textbf{(c)} We actively drive the Light Curtain sensor's Laser to sense multiple regions along a curve that maximize information gained. \textbf{(d)} We feed these measurements back recursively to get a corrected depth estimate, along with a reduction in uncertainity ($\sigma=1m$)\label{fig:teaser}}
+      \captionof{figure}{\textbf{(a)} We show how errors in Monocular Depth Estimation are corrected when used in tandem with an Adaptive Sensor such as a Triangulating Light Curtain (Yellow Points are Ground Truth). \textbf{(b)} We predict a per-pixel Depth Probability Volume from Monocular RGB and we observe large per-pixel uncertainties ($\sigma=3m$) as seen in the Bird's Eye View /  Top-Down Uncertainty Field slice. \textbf{(c)} We actively drive the Light Curtain sensor's Laser to exploit and sense multiple regions along a curve that maximize information gained. \textbf{(d)} We feed these measurements back recursively to get a refined depth estimate, along with a reduction in uncertainty ($\sigma=1m$)\label{fig:teaser}}
       
       \par
       }

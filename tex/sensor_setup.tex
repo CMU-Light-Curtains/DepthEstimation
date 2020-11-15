@@ -14,26 +14,11 @@
    %     \includegraphics[width=0.9\textwidth]{light_curtain_iso.png} % second figure itself
    % \end{minipage}
    \centering
-   \caption{\textbf{Above:} The user provides a top-down 2D curve, which results in a 3D ruled surface being sensed (a form of gated depth imaging). Surfaces that fall within the \textit{thickness} of the curtain, shows up with higher intensity. \textbf{Below:}  The Programmable Light Curtain device (Image taken from \cite{bartels2019Agile}), consisting of a steerable laser, galvo and NIR camera.}
+   \caption{ \textbf{Below:}  The Programmable Light Curtain (LC) device (Image taken from \cite{bartels2019Agile}), consists of a laser, galvomirror and NIR camera. \textbf{Above:} The light curtain senses a ruled 3D surface extruding from a given top-down 2D curve. Surfaces that fall within the \textit{thickness} of the curtain, result in higher intensity.}
+   \label{fig:lcdevice} 
 \end{figure}
 
-The Light Curtain consists of a rolling shutter NIR camera flipped vertically (that images a plane in the world per pixel row), a Line Laser module and a Galvomirror (that generates a plane of light in the world depending on the angle). These planes have some divergence, so their intersection results in a volume in space (bounded by purple points) with some \textit{thickness}, where any objects that intersect it show up with higher intensity returns. Sweeping this Laser across, results in a 3D Ruled surface, analogous to gated depth imaging.
-
-\subsection{Simulator}
-
-\begin{figure}[h]
-   \centering
-   \begin{minipage}{0.4\textwidth}
-       \centering
-       \includegraphics[width=1.0\textwidth]{figures/sim.png}
-   \end{minipage}\hfill
-   \centering
-   \caption{Simulated Light Curtain Sensor}
-\end{figure}
-%\vspace{-.1in}
-We also designed and open sourced a light curtain simulator \cite{raaj2019} to test and evaluate our algorithms, allowing for the Light Curtain paramters such as NIR instrinsics, Laser/NIR extrinsincs, Galvomirror speed etc. to be controlled.
-
-\subsection{Sensor Array}
+The Light Curtain device consists of a rolling shutter NIR (Near-Infrared) camera flipped vertically (that images planes in the world per pixel row), a Line Laser module and a Galvomirror (that generates planes of light in the world depending on the angle). The exact sensing location is obtained by intersecting (triangulating) these two planes, and sweeping this laser line creates a 3D ruled surface called a light curtain. Do note that the image and light planes have some divergence, so their intersection results in a volume in space (bounded by purple points in Fig~\ref{fig:lcdevice})  with some \textit{thickness}, where any objects that intersect it result in higher intensities in the NIR image.
 
 \begin{figure}[h]
    \centering
@@ -42,7 +27,21 @@ We also designed and open sourced a light curtain simulator \cite{raaj2019} to t
        \includegraphics[width=1.0\textwidth]{figures/array.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Real Light Curtain Sensor, along with Stereo camera pair and a 128 Beam Lidar}
+   \caption{Setup for real-world experiments: FLIR Stereo camera pair, Light Curtain (LC) and OS2-128 Beam Lidar used for ground truth mounted on a Jeep.}
 \end{figure}
 
-Our sensor array consists of a Stereo Camera Pair with a baseline of 0.7m, the Light Curtain device located close to the main/left camera to minimize depth/volume transformation parallax artifacts, and an Ouster OS2-128 Lidar for algorithm accuracy validation and to assist in training depth estimation networks.
+To conduct real-world experiments for our algorithms, we setup an array of sensors consisting of a FLIR Stereo Camera Pair with a baseline of 0.7m, Light Curtain device, and an Ouster OS2-128 Lidar for accuracy validation and to assist in training RGB depth estimation networks.
+
+\begin{figure}[h]
+   \centering
+   \begin{minipage}{0.5\textwidth}
+       \centering
+       \includegraphics[width=1.0\textwidth]{figures/sim.png}
+   \end{minipage}\hfill
+   \centering
+   \caption{Light Curtain Simulator}
+   \label{fig:lcsimkitti} 
+\end{figure}
+%\vspace{-.1in}
+We also designed a Light Curtain Simulator that uses ground truth depth maps to simulate parameters such as NIR instrinsics, Laser extrinsincs, Galvomirror speed, Laser Divergence/Thickness and Laser Angle. This is used in conjunction with the KITTI dataset as seen in Fig~\ref{fig:lcsimkitti}. 
+

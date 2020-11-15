@@ -1,37 +1,33 @@
 \begin{thebibliography}{10}\itemsep=-1pt
 
-\bibitem{raaj2019}
-Light curtain simulator.
+\bibitem{luminar}
+Luminar.
+\newblock 2019.
+
+\bibitem{ouster}
+Ouster.
+\newblock 2019.
+
+\bibitem{quanergy}
+Quanergy.
+\newblock 2019.
+
+\bibitem{velodyne}
+Velodyne.
 \newblock 2019.
 
 \bibitem{Ancha_2020_ECCV}
-Ancha, Raaj, Hu, Narasimhan, and Held.
+Siddharth Ancha, Yaadhav Raaj, Peiyun Hu, Srinivasa~G. Narasimhan, and David
+  Held.
 \newblock Active perception using light curtains for autonomous driving.
-\newblock In {\em Proceedings of the European Conference on Computer Vision
-  (ECCV)}, September 2020.
+\newblock In Andrea Vedaldi, Horst Bischof, Thomas Brox, and Jan-Michael Frahm,
+  editors, {\em Computer Vision -- ECCV 2020}, pages 751--766, Cham, 2020.
+  Springer International Publishing.
 
-\bibitem{7759446}
-E. {Arruda}, J. {Wyatt}, and M. {Kopicki}.
-\newblock Active vision for dexterous grasping of novel objects.
-\newblock In {\em 2016 IEEE/RSJ International Conference on Intelligent Robots
-  and Systems (IROS)}, pages 2881--2888, 2016.
-
-\bibitem{bajcsy1988active}
-Ruzena Bajcsy.
-\newblock Active perception.
-\newblock {\em Proceedings of the IEEE}, 76(8):966--1005, 1988.
-
-\bibitem{DBLP:journals/corr/BajcsyAT16}
-Ruzena Bajcsy, Yiannis Aloimonos, and John~K. Tsotsos.
-\newblock Revisiting active perception.
-\newblock {\em CoRR}, abs/1603.02729, 2016.
-
-\bibitem{9105252}
-A.~W. {Bergman}, D.~B. {Lindell}, and G. {Wetzstein}.
-\newblock Deep adaptive lidar: End-to-end optimization of sampling and depth
-  completion at low sampling rates.
-\newblock In {\em 2020 IEEE International Conference on Computational
-  Photography (ICCP)}, pages 1--11, 2020.
+\bibitem{caesar2020nuscenes}
+Holger Caesar, Varun Bankiti, Alex~H. Lang, Sourabh Vora, Venice~Erin Liong,
+  Qiang Xu, Anush Krishnan, Yu Pan, Giancarlo Baldan, and Oscar Beijbom.
+\newblock nuscenes: A multimodal dataset for autonomous driving, 2020.
 
 \bibitem{chang2018pyramid}
 Jia-Ren Chang and Yong-Sheng Chen.
@@ -39,36 +35,22 @@ Jia-Ren Chang and Yong-Sheng Chen.
 \newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
   Pattern Recognition}, pages 5410--5418, 2018.
 
-\bibitem{DBLP:journals/corr/abs-1811-08067}
-Ricson Cheng, Arpit Agarwal, and Katerina Fragkiadaki.
-\newblock Reinforcement learning of active vision formanipulating objects under
-  occlusions.
-\newblock {\em CoRR}, abs/1811.08067, 2018.
-
-\bibitem{coslam2012}
-Zou Danping and Ping Tan.
-\newblock Coslam: collaborative visual slam in dynamic environments.
-\newblock {\em IEEE transactions on pattern analysis and machine intelligence},
-  04 2012.
-
-\bibitem{daudelin2017adaptable}
-Jonathan Daudelin and Mark Campbell.
-\newblock An adaptable, probabilistic, next-best view algorithm for
-  reconstruction of unknown 3-d objects.
-\newblock {\em IEEE Robotics and Automation Letters}, 2(3):1540--1547, 2017.
-
-\bibitem{7989679}
-D. {Falanga}, E. {Mueggler}, M. {Faessler}, and D. {Scaramuzza}.
-\newblock Aggressive quadrotor flight through narrow gaps with onboard sensing
-  and computing using active vision.
-\newblock In {\em 2017 IEEE International Conference on Robotics and Automation
-  (ICRA)}, pages 5774--5781, 2017.
+\bibitem{chang2019argoverse}
+Ming-Fang Chang, John Lambert, Patsorn Sangkloy, Jagjeet Singh, Slawomir Bak,
+  Andrew Hartnett, De Wang, Peter Carr, Simon Lucey, Deva Ramanan, and James
+  Hays.
+\newblock Argoverse: 3d tracking and forecasting with rich maps, 2019.
 
 \bibitem{4587671}
 D. {Gallup}, J. {Frahm}, P. {Mordohai}, and M. {Pollefeys}.
 \newblock Variable baseline/resolution stereo.
 \newblock In {\em 2008 IEEE Conference on Computer Vision and Pattern
   Recognition}, pages 1--8, 2008.
+
+\bibitem{Geiger2013IJRR}
+Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel Urtasun.
+\newblock Vision meets robotics: The kitti dataset.
+\newblock {\em International Journal of Robotics Research (IJRR)}, 2013.
 
 \bibitem{godard2017unsupervised}
 Clément Godard, Oisin~Mac Aodha, and Gabriel~J. Brostow.
@@ -87,31 +69,17 @@ Tobias Gruber, Frank Julca-Aguilar, Mario Bijelic, Werner Ritter, Klaus
   Dietmayer, and Felix Heide.
 \newblock Gated2depth: Real-time dense lidar from gated images, 2019.
 
-\bibitem{isler2016information}
-Stefan Isler, Reza Sabzevari, Jeffrey Delmerico, and Davide Scaramuzza.
-\newblock An information gain formulation for active volumetric 3d
-  reconstruction.
-\newblock In {\em 2016 IEEE International Conference on Robotics and Automation
-  (ICRA)}, pages 3477--3484. IEEE, 2016.
+\bibitem{ilg2018uncertainty}
+Eddy Ilg, Özgün Çiçek, Silvio Galesso, Aaron Klein, Osama Makansi, Frank
+  Hutter, and Thomas Brox.
+\newblock Uncertainty estimates and multi-hypotheses networks for optical flow,
+  2018.
 
 \bibitem{bartels2019Agile}
 Whittaker Joe~Bartels, Jian~Wang and Srinivasa G.
 \newblock Agile depth sensing using triangulating light curtains.
 \newblock In {\em 2019 IEEE International Conference on Computer Vision
   (ICCV)}, 2019.
-
-\bibitem{kriegel2015efficient}
-Simon Kriegel, Christian Rink, Tim Bodenm{\"u}ller, and Michael Suppa.
-\newblock Efficient next-best-scan planning for autonomous 3d surface
-  reconstruction of unknown objects.
-\newblock {\em Journal of Real-Time Image Processing}, 10(4):611--631, 2015.
-
-\bibitem{sergey2017}
-Sergey Levine, Peter Pastor, Alex Krizhevsky, Julian Ibarz, and Deirdre
-  Quillen.
-\newblock Learning hand-eye coordination for robotic grasping with deep
-  learning and large-scale data collection.
-\newblock 2017.
 
 \bibitem{liu2019neural}
 Chao Liu, Jinwei Gu, Kihwan Kim, Srinivasa Narasimhan, and Jan Kautz.
@@ -153,12 +121,6 @@ B. {Tilmon}, E. {Jain}, S. {Ferrari}, and S. {Koppal}.
 \newblock In {\em 2020 IEEE International Conference on Computational
   Photography (ICCP)}, pages 1--11, 2020.
 
-\bibitem{8098709}
-L. {von Stumberg}, V. {Usenko}, J. {Engel}, J. {Stückler}, and D. {Cremers}.
-\newblock From monocular slam to autonomous drone exploration.
-\newblock In {\em 2017 European Conference on Mobile Robots (ECMR)}, pages
-  1--8, 2017.
-
 \bibitem{walz2020uncertainty}
 Stefanie Walz, Tobias Gruber, Werner Ritter, and Klaus Dietmayer.
 \newblock Uncertainty depth estimation with gated images for 3d reconstruction,
@@ -171,10 +133,10 @@ Jian Wang, Joseph Bartels, William Whittaker, Aswin~C Sankaranarayanan, and
 \newblock In {\em Proceedings of the European Conference on Computer Vision
   (ECCV)}, pages 19--34, 2018.
 
-\bibitem{wilkes1994active}
-David Wilkes.
-\newblock {\em Active object recognition}.
-\newblock 1994.
+\bibitem{xia2019generating}
+Zhihao Xia, Patrick Sullivan, and Ayan Chakrabarti.
+\newblock Generating and exploiting probabilistic monocular depth estimates,
+  2019.
 
 \bibitem{8369664}
 T. {Yamamoto}, Y. {Kawanishi}, I. {Ide}, H. {Murase}, F. {Shinmura}, and D.
