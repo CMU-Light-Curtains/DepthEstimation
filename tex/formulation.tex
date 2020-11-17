@@ -1,10 +1,10 @@
 
-\section{Formulation}
+\section{Depth from Light Curtains only}
 
 \newcommand{\DD}{\mathbf{D}}
 \newcommand{\dd}{\mathbf{d}}
 
-We begin by looking at the problem of adaptively discovering the depth of a scene using only the light curtain. Initially, we don't know the true depth of the objects along each  camera ray/pixel, hence we use a sampling based approach. At the beginning, we treat the true depth along each ray as being distributed according to either a uniform distribution, or a Gaussian distribution with a large variance in the center, and we attempt to formulate our problem with a Recursive Bayesian update approach.
+We begin by looking at the problem of adaptively discovering the depth of a scene using only the light curtain.
 
 \subsection{Representation}
 
@@ -20,8 +20,9 @@ We wish to estimate the depth map $\DD = \{d_{u, v}\}$ of the scene, which speci
    &\text{Depth estimate } = \mathbb{E} [ \dd_{u,v}] = \sum_{q=0}^{N-1} P(\dd_{u,v}=d_q)\cdot d_q
    %\vspace{-.1in}
 \end{align}
+This DPV can be initialized by another sensor such as an RGB camera, or can be initialized with a Uniform or Gaussian distribution with a large $\sigma$ for each pixel.
 
-While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a top-down 2D profile. Hence, we generate an ``Uncertainty Field" (UF) \cite{yang2019inferring}, by averaging the probabilities of the DPV across a subset of each column as seen in Fig ~\ref{fig:uf}. This subset considers those pixels $(u, v)$ whose corresponding 3D heights $h(u, v)$ are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
+While an ideal sensor could choose to plan a path to sample in the full 3D volume, our Light Curtain device only has control over a top-down 2D profile. Hence, we compress our DPV into a top-down an ``Uncertainty Field" (UF) \cite{yang2019inferring}, by averaging the probabilities of the DPV across a subset of each column (Fig.~\ref{fig:uf}). This subset considers those pixels $(u, v)$ whose corresponding 3D heights $h(u, v)$ are between $(h_\text{min}, h_\text{max})$. The UF is defined for the camera column $u$ and quantized depth location $q$ as:
 \begin{align}
    UF(u, q) =\ &\frac{1}{|\mathcal{V}(u)|}\sum_{v \in \mathcal{V}(u)} P(\dd_{u, v} = d_q)\nonumber\\
    \text{where } &\mathcal{V}(u) = \{v\ |\ h_\text{min} \leq h(u, v) \leq h_\text{max}\} 
@@ -40,7 +41,7 @@ We denote the categorical distribution of the uncertainty field on the $u$-th ca
        \includegraphics[width=1.0\textwidth]{figures/bev.pdf}
    \end{minipage}\hfill
    \centering
-   \caption{Our state space consists of a Depth Probability Volume (DPV) (left) storing per-pixel uncertainty distributions. It can be collapsed to a Bird's Eye Uncertainty Field (UF) by averaging those rays in each camera column that correspond to a slice on the road parallel to the ground plane (right).}
+   \caption{Our state space consists of a Depth Probability Volume (DPV) (left) storing per-pixel uncertainty distributions. It can be collapsed to a Bird's Eye Uncertainty Field (UF) (right) by averaging those rays in each column (blue pixels) of the DPV that correspond to a slice on the road parallel to the ground plane (right) (cyan pixels).}
    \label{fig:uf} 
 \end{figure}
 
@@ -79,11 +80,11 @@ To do this, we propose two policies: $\pi_{0}$ and $\pi_{1}$. In Fig. ~\ref{fig:
    \label{fig:m0m1} 
 \end{figure}
 
-As seen in Fig.~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. The inconsistency from ray to ray in $\pi_{1}$ however, may be impossible to image due to it exceeding the acceleration bounds, hence a spline fit is used with control points every 5 to 10 rays, resulting in an imageable but non-flat curtain placement. We see effects of both in later.
+As seen in Fig.~\ref{fig:m0m1}, strategy $\pi_{0}$ is able to generate fields that adaptively place additional curtains around a consistent span around the mean with some $\sigma_{\pi_{0}}$, but is unable to do so in cases of multimodal distributions. $\pi_{1}$ on the other hand is able to place a curtain around the 2nd modality, albeit with a lower probability. We see effects of both in later.
 
 \subsection{Observation Model}
 
-A curtain placement corresponds to specifying the depth for each camera ray indexed by $u$ from the top-down view. After placing the light curtain, intensities $i_{u,v}$ are imaged by the light curtain's camera at every pixel $(u, v)$. The produced intensity at each pixel is a function of the curtain placement depth $d^c_{u, v}$ on that camera ray, the unknown ground truth depth $\dd_{u, v}$ of that pixel, as well as the thickness of the light curtain $\sigma(u, v, d^c_{u, v})$ for a particular pixel and curtain placement. We use an approximate sensor model that describes the distribution of intensities. The intensity roughly decays exponentially as the distance between the light curtain placement $d^c_{u.v}$ and ground truth depth $\dd_{u, v}$ increases.  We also simulate sensor noise as a Gaussian distribution with standard deviation $\sigma_\text{noise}$. The overall sensor model $P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v})$ can be described as:
+A curtain placement corresponds to specifying the depth for each camera ray indexed by $u$ from the top-down view. After placing the light curtain, intensities $i_{u,v}$ are imaged by the light curtain's camera at every pixel $(u, v)$. The produced intensity at each pixel is a function of the curtain placement depth $d^c_{u, v}$ on that camera ray, the unknown ground truth depth $\dd_{u, v}$ of that pixel, as well as the thickness of the light curtain $\sigma(u, v, d^c_{u, v})$ for a particular pixel and curtain placement. We use an approximate sensor model that describes the distribution of intensities. The intensity roughly decays exponentially as the distance between the light curtain placement $d^c_{u.v}$ and ground truth depth $\dd_{u, v}$ increases.  We also simulate sensor noise as a Gaussian distribution with standard deviation $\sigma_\text{noise}$. The overall sensor model $P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v})$ can be described:
 \begin{align}
    &\nonumber P(i_{u, v}\ |\ \dd_{u, v}, d^c_{u, v}) \equiv\\
    &\quad \mathcal{N} \Big(i_{u, v}\ |\ \exp \Big(-\Bigg(\frac{d^c_{u, v} - \dd_{u, v}}{\sigma(u, v, d^c_{u, v})}\Bigg)^2\Big), \sigma_\text{noise}^2\Big)
@@ -133,6 +134,10 @@ If we place $K$ light curtains at a given timestep, we can incorporate the infor
        \includegraphics[width=0.31\textwidth]{figures/bb.pdf}
        \includegraphics[width=0.31\textwidth]{figures/cc.pdf}
    \end{minipage}\hfill
+   \begin{minipage}{0.5\textwidth}
+      \centering
+      \includegraphics[width=0.95\textwidth]{figures/planesweep2.png}
+  \end{minipage}\hfill
    \centering
    \caption{Visualization of the recursive Bayesian update method to refine depth probabilities after observing light curtain intensities. The light curtain is placed at 10m. The red curves denote the expected intensity (Y-axis) as a function of ground truth depth (X-axis). Given an intensity value observed by the light curtain, we can compute a probability distribution of what the ground truth depth might be (blue curves) using our sensor model and the Bayes' rule. \textbf{Left:} Low $i$ return leads to an inverted Gaussian distribution at the light curtain's placement location, with other regions getting a uniform probability. \textbf{Middle:} Medium $i$ means that the curtain isn't placed exactly on the object and the true depth could be on either side of the light curtain. \textbf{Right:} High $i$ leads to a peak at the light curtain's placement location.}
    \label{fig:updatemodel}

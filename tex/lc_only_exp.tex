@@ -3,18 +3,18 @@
 
 Can we estimate depth using just the Light Curtain? In this initial baseline, we attempt to track the Uncertainty Field (UF) depth error by computing the RMSE error metric $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(UF\left(u,q\right)\right)-\mathbf{d_{gt}}(u)_{i}\right)^{2}}{n}}$ against the ground truth. We use 3 scenarios: One in a KITTI driving scene using the LC simulator (a), one indoors in the basement using the both a simulated and real Light Curtain (b), and lastly in various outdoor driving scenes with the real device (c0/c1/c2). 
 
-\begin{figure}[h]
-   \centering
-   \begin{minipage}{0.5\textwidth}
-       \centering
-       \includegraphics[width=1.0\textwidth]{figures/exp.png}
-   \end{minipage}\hfill
-   \centering
-   \caption{Scenarios (a), (b), (c) from left to right}
-   \label{fig:exp}
-\end{figure}
+% \begin{figure}[h]
+%    \centering
+%    \begin{minipage}{0.5\textwidth}
+%        \centering
+%        \includegraphics[width=1.0\textwidth]{figures/exp.png}
+%    \end{minipage}\hfill
+%    \centering
+%    \caption{Scenarios (a), (b), (c) from left to right}
+%    \label{fig:exp}
+% \end{figure}
 
-\textbf{Planar Sweep:} A simple sanity check between simulation and the real sensor involves involves performing a uniform sweep across the scene in (b). As seen in Fig.~\ref{fig:planarsweep}, our simulated Light Curtain (LC) is able to reasonably match the real device. We also demonstrate how decreasing the steps the curtain takes reduces runtime but increases RMSE. Results seen in Tab.~\ref{table:t1}
+\textbf{Planar Sweep:} A simple fixed policy not adapted to the UF helps to validate our sensor model, and corroboration between the simulated and real light curtain device. and  involves performing a uniform sweep across the scene in (b) (Fig.~\ref{fig:planarsweep}). Our simulated device is able to reasonably match the real device. We also show how sweeping more curtains increases accuracy at increased runtime (Table.~\ref{table:t1})
  
 \begin{figure}
    \centering
@@ -23,7 +23,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
        \includegraphics[width=1.0\textwidth]{figures/sweep.png}
    \end{minipage}\hfill
    \centering
-   \caption{We demonstrate corroboration between simulated and real Light Curtain by sweeping several planes across the scene (b). Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. \textbf{Left:} LC simulated from the Lidar Depth. \textbf{Right:} Using the real LC}
+   \caption{We demonstrate corroboration between simulated and real Light Curtain device by sweeping several planes across the scene (b). Colored pointcloud is the estimated depth, and Lidar ground truth in yellow. \textbf{Left:} LC simulated from the lidar Depth. \textbf{Right:} Using the real device}
    \label{fig:planarsweep}
 \end{figure}
 
@@ -33,12 +33,12 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
    \resizebox{0.7\linewidth}{!}{
    \begin{tabular}{|l|l|l|}
    \hline
-    Policy&  Runtime/s&  RMSE/m\\ \hline
-    Sweep 50 $\mathbf{C}$ Step 0.25m (Sim) &-  &1.156  \\ \hline
-    Sweep 25 $\mathbf{C}$ Step 0.5m  (Sim) &-  &1.374  \\ \hline
-    Sweep 50 $\mathbf{C}$ Step 0.25m (Real) &2  &1.284  \\ \hline
-    Sweep 25 $\mathbf{C}$ Step 0.5m  (Real) &1  &1.574  \\ \hline
-    Sweep 12 $\mathbf{C}$ Step 1.0m (Real) &0.5  &1.927  \\ \hline
+    Policy&  Runtime / s&  RMSE / m\\ \hline
+    Sweep 50 curtains every 0.25m (Sim) &-  &1.156  \\ \hline
+    Sweep 25 curtains every 0.5m  (Sim) &-  &1.374  \\ \hline
+    Sweep 50 curtains every 0.25m (Real) &2  &1.284  \\ \hline
+    Sweep 25 curtains every 0.5m  (Real) &1  &1.574  \\ \hline
+    Sweep 12 curtains every 1.0m (Real) &0.5  &1.927  \\ \hline
    \end{tabular}}
 
    \caption{We show that sampling the scene by placing more curtains results in better depth accuracy}
@@ -82,7 +82,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
 %    \label{table:t2}
 % \end{table}
 
-\textbf{Effect of Inverting Gaussian Model:} Our Observation Model ensures that the sensor distribution tends to an Inverted Gaussian when intensities are low, instead of a Uniform distribution. We see significantly improved performance when low intensities tend to an Inverted Gaussian instead. Results seen in Fig.~\ref{fig:figure01} ~\ref{fig:invgau}
+\textbf{Effect of Inverting Gaussian Model:} Our Observation Model ensures that the sensor distribution tends to an Inverted Gaussian when intensities are low, instead of a Uniform distribution. We see significantly improved performance when low intensities tend to an Inverted Gaussian instead (Fig.~\ref{fig:figure01}, Fig.~\ref{fig:invgau}).
 
 \begin{figure}[h]
     \centering
@@ -107,7 +107,7 @@ Can we estimate depth using just the Light Curtain? In this initial baseline, we
     \label{fig:invgau} 
 \end{figure}
 
- \textbf{Effect of Placing more Curtains:} In both policies, placing more light curtains results in much faster convergence, at the cost of increased runtime. Results seen in Fig.~\ref{fig:figure34}
+ \textbf{Effect of Placing more Curtains:} In both policies, placing more light curtains results in much faster convergence, at the cost of increased runtime (Fig.~\ref{fig:figure34}).
 
 \begin{figure}[h]
     \centering

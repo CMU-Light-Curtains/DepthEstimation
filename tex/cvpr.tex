@@ -60,12 +60,14 @@ Active sensing through the use of Adaptive Depth Sensors is a nascent field, wit
 %%%%%%%%% BODY TEXT
 \vspace{-.1in}
 \section{Introduction}
+% \setlength{\belowdisplayskip}{5pt} 
+% \setlength{\abovedisplayskip}{5pt} 
 
 Spinning Fixed Scan LIDARs have been the de-facto sensor of choice in safety critical systems such as Advanced driver-assistance systems (ADAS), due to their reliability in depth estimation. However, their reduced spatial-resolution, multi-path interference and their cost prohibitive nature has made en-masse adoption in personal vehicles rare. To counter these issues, depth estimation through RGB cameras has been heavily researched. However, issues such as oversaturation and feature correspondence errors in specular objects, scale ambiguity and unreliability in contrast with LIDARs has made relying on these sensors unsafe.
 
 To capture the error and uncertainty in RGB-only depth estimation, previous work had formulated that task as a probabilistic regression problem, by predicting per-pixel depth distributions via a Depth Probability Volume (DPV) \cite{liu2019neural} \cite{chang2018pyramid} \cite{yang2019inferring}. It provides both a Maximum Likelihood-Estimate (MLE) of the depth map, as well as the corresponding per-pixel uncertainty measure. However, these works do not adaptively or physically correct for this uncertainty, instead relying purely on Multi-View-Camera constraints for passive correction.
 
-In this work, we have devised the first known framework that \textit{adaptively} exploits the depth uncertainty in a DPV (generated from RGB cameras) and refines it via a class of Adaptive Depth Sensors called a Triangulating Light Curtain \cite{bartels2019Agile}. It has a steerable Laser Line that can be driven in tandem with a Rolling Shutter camera to generate a 3D ruled surface to sample the world. We have chosen this sensor due to its low cost (\$1k vs lidar~$\sim$\$25k), high spatial angular resolution (0.02$\degree$ vs lidar 0.4$\degree$), and high frame-rate (~60fps vs lidar 20fps).
+In this work, we have devised the first known framework that \textit{adaptively} exploits the depth uncertainty in a per-pixel DPV from RGB images and refined it via a class of Adaptive Depth Sensors called a Triangulating Light Curtain \cite{bartels2019Agile}. It has a steerable Laser Line that can be driven in tandem with a Rolling Shutter camera to generate a 3D ruled surface to sample the world. We have chosen this sensor due to its low cost (\$1k vs lidar~$\sim$\$25k), high spatial angular resolution (0.02$\degree$ vs lidar 0.4$\degree$), and high frame-rate (~60fps vs lidar 20fps).
 
 We begin by formulating an iterative Bayesian inference approach to depth sensing using the Light Curtain only, build upon planning and sensing frameworks based on Dynamic Programming using the it's Galvomirror constraints and lastly, expand upon generating and exploiting probabilistic depth estimates using Deep Learning based approaches combining both modalities of RGB and Light Curtain. We perform extensive experiments both in Simulation (using KITTI \cite{Geiger2013IJRR} dataset) and in the real-world using our sensor setup, and demonstrate better depth estimation results when both modalities are combined.
 
@@ -74,6 +76,8 @@ We begin by formulating an iterative Bayesian inference approach to depth sensin
 \input{formulation}
 \input{lc_only_exp}
 \input{network_arch}  
+
+\clearpage 
 
 {\small
 \bibliographystyle{ieee_fullname}

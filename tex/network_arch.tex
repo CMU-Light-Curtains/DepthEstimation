@@ -1,10 +1,10 @@
 \begin{figure*}[t!]
    \includegraphics[width=1.0\textwidth]{figures/network.pdf}
-   \caption{Our network takes in RGB images to generate a Depth Probability Volume, plans and places Light Curtains based on this DPV, and recursively refines it. This is then fed back on the next timestep to get much more refined DPV estimate. }
+   \caption{Our network takes in RGB images to generate a Depth Probability Volume (DPV). We then drive our Triangulation Light Curtain's laser to plan and place curtains on regions that are uncertain and refine it. This is then fed back on the next timestep to get much more refined DPV estimate.}
    \label{fig:network}
 \end{figure*}
    
-\section{Network Architecture}
+\section{Depth from Light Curtain + RGB Fusion}
 
 \subsection{Motivation}
 
@@ -65,11 +65,23 @@ We train and validate our algorithms on the KITTI dataset. We then trained the s
 
 \begin{figure*}[h!]
   \includegraphics[width=1.0\textwidth]{figures/p6.png}
-  \caption{We show the internal state of the bayesian update at Iteration 0 and Iteration 5, showing the convergence of the sensor's laser and curtain profile on an object 15m away}  
+  \caption{We show the internal state of the bayesian update at Iteration 0 and Iteration 5. Starting with a prior DPV from Monocular Depth estimation, we show the convergence of the sensor's laser and curtain profile on an object 15m away}  
   \label{fig:images4} 
 \end{figure*}
 
-\section{RGB + Light Curtain Experiments} 
+\begin{figure*}[h!]
+   \includegraphics[width=1.0\textwidth]{figures/lastone4.png}
+   \caption{Monocular RGB alone suffers from scale ambiguity but does give an inital uncertain depth estimate on a car 15m away. Iterating on Light Curtain measurements from a mean-centered gaussian prior alone gives a more accurate depth but with a noisy profile, but starting with the RGB DPV results in a more accurate and smoother profile.}  
+   \label{fig:images5} 
+ \end{figure*}
+
+% \begin{figure}[h]
+%    \includegraphics[width=0.46\textwidth]{figures/lastone.png}
+%    \caption{We show the internal state of the bayesian update at Iteration 0 and Iteration 5}  
+%    \label{fig:images5} 
+%  \end{figure}
+
+\section{Light Curtain + RGB Fusion Experiments} 
 
 Here we consider the RMSE metric against the entire depthmap as opposed to just the Uncertainity Field (UF) as $\sqrt{\stackrel[i=1]{n}{\sum}\frac{\left(\mathbb{E}\left(\mathbf{d}_{u,v}\right)-\mathbf{d_{gt}}(u,v)_{i}\right)^{2}}{n}}$ against our ground truth.
 
@@ -77,7 +89,7 @@ Here we consider the RMSE metric against the entire depthmap as opposed to just 
 \noindent
 \begin{table}[h]
   \centering
-  \resizebox{0.6\linewidth}{!}{
+  \resizebox{0.5\linewidth}{!}{
   \begin{tabular}{|l|l|}
   \hline
    Parameters&  RMSE/m\\ \hline
@@ -87,13 +99,14 @@ Here we consider the RMSE metric against the entire depthmap as opposed to just 
    $\sigma_{gt}=0.3$ with $l_{dcl}, l_{rcl}$  &2.93  \\ \hline
    $\sigma_{gt}=0.3$ with $l_{dcl}, l_{rcl}, l_{s}$  &2.90  \\ \hline
   \end{tabular}}
-  \caption{Effects of Soft Cross Entropy ($\sigma_{gt}$), Left/Right Consistency ($l_{dcl}, l_{rcl}$), Smoothness losses ()$l_{s}$) for the baseline of Monocular Depth Estimation only}
+  \caption{Effects of Soft Cross Entropy ($\sigma_{gt}$), Left/Right Consistency ($l_{dcl}, l_{rcl}$), Smoothness losses ($l_{s}$) on Monocular Depth Estimation}
   \label{table:xx}
 \end{table}
 
+\vspace{-.1in}
 We note succesively improving performance as we increase $\sigma_{gt}$, with poorer performance when the depth is effectively encoded as a one-hot vector (eg. $\sigma_{gt}=0.05$), since the depth was more likely to be forced into one of the categories in $\D$. Adding in $l_{dcl}, l_{rcl}$ and $l_{s}$ improved performance further, but we did not see any major performance improvement in varying $q^{pow}$ with $\sigma_{gt}$ was increased.
 
-\textbf{Effect of Stereo Inputs:} We experiment with passing in a Monocular Pair at $t, t-1$, or a Stereo Pair at $t$, with $R,t$ known in both cases. We note significantly better performance with Stereo input. Note that our method can generalize to any N camera setup. Results seen in Fig.~\ref{fig:stereodpv}
+\textbf{Effect of Stereo Inputs:} We experiment with passing in a Monocular Pair at $t, t-1$, or a Stereo Pair at $t$, with $R,t$ known in both cases. We note significantly better performance with Stereo input. Note that our method can generalize to any N camera setup (Fig.~\ref{fig:stereodpv}).
 
 \textbf{Effect of DPV Fusion Network:} We consider the task of Lidar Upsampling. The Velodyne Lidar in the KITTI dataset, can be converted into a low resolution depthmap, and consequently a low res DPV we call $dpv_{t}^{gt}$ . We could then fuse both $dpv_{t}^{l0}$ and $dpv_{t}^{gt}$ to generate $dpv_{t}^{l1}$ using Bayesian Inference. Alternatively, we could feed both of those inputs into our DPV Fusion Network above. We note improved performance in this upsampling task when using this approach as seen in Fig.~\ref{fig:stereodpv}. 
 
@@ -109,21 +122,20 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
   \label{fig:stereodpv} 
 \end{figure}
 
-\textbf{Effect of a Stronger Prior:} Here, we show that a prior generated from a monocular RGB camera yields higher accuracy and faster convergence. Results seen in ~\ref{fig:prior} 
+\textbf{Effect of a Stronger Prior:} Here, we show that a prior DPV generated from a monocular RGB camera as opposed to a mean-centered gaussian with a large $\sigma$ yields higher accuracy and faster convergence (Fig.~\ref{fig:images5}, Fig.~\ref{fig:prior}).
 
 \begin{figure}[h]
   \centering
   \begin{minipage}{0.5\textwidth}
       \centering
       \includegraphics[width=0.49\textwidth]{figures/figure_X.pdf}
-      \includegraphics[width=0.25\textwidth]{figures/placement3.png}
   \end{minipage}\hfill
   \centering
-  \caption{ \textbf{Left:} Starting from a Prior distribution from a Monocular Depth Network leads to faster discovery and convergence of true depth. \textbf{Right:} Policy $\pi_{0}$ placing curtains along 3 Locations of a prior distribution from a Monocular Depth Network as seen in the Light Curtain's NIR image.}
+  \caption{Starting from a Prior distribution from a Monocular Depth Network as opposed to a mean-centered gaussian with a large $\sigma$ leads to faster discovery and convergence of true depth}
   \label{fig:prior} 
 \end{figure}
 
-\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative Fig.~\ref{fig:images3} and qualitative Fig.~\ref{fig:lfusion} performance improvement of depth when using this approach with Monocular, and minor improvement with Stereo.
+\textbf{Effect of a Light Curtain Fusion:} Here, we train regular Monocular Depth Estimation without Light Curtain Feedback, and one where we enable $dpv_{t}^{lc}$ to be planned and fed-back on the next stage, on the KITTI dataset with our Light Curtain Simulator. We observed quantitative Fig.~\ref{fig:images3} and qualitative Fig.~\ref{fig:lfusion} performance improvement of depth with Monocular input, and minor improvement with Stereo.
 
 \begin{figure}[h]
   \centering
@@ -133,15 +145,15 @@ We note succesively improving performance as we increase $\sigma_{gt}$, with poo
       \includegraphics[width=0.49\textwidth]{figures/Figure_11.pdf}
   \end{minipage}\hfill
   \centering
-  \caption{Monocular (Left) and Stereo (Right) Depth Estimation show improvement when we enabled feedback of the sensed Light Curtain DPV at epoch 16}
+  \caption{Monocular (Left) and Stereo (Right) Depth Estimation show improvement when we enabled feedback of the sensed Light Curtain DPV at epoch 16 when training on KITTI dataset with light curtain simulator}
   \label{fig:lfusion} 
 \end{figure}
 
-\subsection{Limitations and Future Work}
+\subsection{Future Work}
 
-Our method has demonstrated the first known work that has leveraged uncertainity in RGB cameras to drive an Adaptive Sensor such as a Light Curtain, in the context and large range operations of ADAS. Our approach \textit{can generalize} to any sensor that uses the principle of driving a laser or light source to specific pixels that are uncertain, and can benefit from depth uncertainity information of a pixel. 
+We have demonstrated the first known work that has leveraged uncertainity in RGB cameras to drive an Adaptive Sensor such as a Light Curtain, in the context and large range operations of ADAS. Our approach \textit{can generalize} to any sensor that uses the principle of driving a laser or light source to specific pixels that are uncertain, and can benefit from depth uncertainity information of a pixel. 
 
-While our current prototype device shows promise, the current laser power limits range to about 20m, and struggles in cases where objects are not normally incident and have high reflectivity. Hence, we also hope to build a better observation model to make use of the albedo and surface normal information to better inform the generated depth distribution. Also, future work can be extended to temporaly inconsistent scenes (fast moving vehicle) by modelling scene flow as well.
+Normally unincident and high reflectivity surfaces show poor intensity returns, so we hope to build a better sensor model that utilizes albedo and normal information. We could also extend this to temporaly inconsistent scenes (fast moving vehicle) by modelling scene flow.
 
 \iffalse
 Fig 15 maybe use the first image thing
