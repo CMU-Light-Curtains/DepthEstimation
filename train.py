@@ -28,11 +28,16 @@ def main():
     parser.add_argument('--resume', action='store_true', help='viz', default=False)
     parser.add_argument('--lc', action='store_true', help='lc', default=False)
     parser.add_argument('--init_model', default='')
+    parser.add_argument('--write_video', default='')
+    parser.add_argument('--lc_debug', action='store_true', help='lc_debug', default=False)
 
     args = parser.parse_args()
 
     with open(args.config) as f:
-        cfg = EasyDict(json.load(f))
+        config = json.load(f)
+        config["write_video"] = args.write_video
+        config["lc_debug"] = args.lc_debug
+        cfg = EasyDict(config)
 
     if args.viz:
         cfg.var.viz = True

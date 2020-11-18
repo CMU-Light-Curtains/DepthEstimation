@@ -13,6 +13,7 @@ from kittiloader import batch_scheduler
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
+import sys
 
 class DefaultTrainer(BaseTrainer):
     def __init__(self, id, model, loss_func, _log, save_root, config, shared):
@@ -83,6 +84,9 @@ class DefaultTrainer(BaseTrainer):
             from lc import light_curtain
             self.lc = light_curtain.LightCurtain()
             self.lc_results = dict()
+            # if self.cfg.lc.sensor_params:
+            #     param = json.load(open(self.cfg.lc.sensor_params))
+            #     self.lc.init(img_utils.update_for_algo(img_utils.process_lc_json(param)))
 
         # Viz
         self.model.module.set_viz(self.viz)
@@ -253,10 +257,6 @@ class DefaultTrainer(BaseTrainer):
             #output_right = self.model(model_input_right)
             print("Forward: " + str(time.time() - start))
 
-            # Light Curtain
-            if self.lc is not None:
-                self.lc_process(model_input_left, gt_input_left, output_left)
-
             # Set Prev
             output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
             self.prev_output = {"left": output_left_intp, "right": None}
@@ -269,6 +269,10 @@ class DefaultTrainer(BaseTrainer):
             # Visualization
             if self.cfg.var.viz:
                 self.visualize(model_input_left, gt_input_left, output_left)
+
+            # Light Curtain Simulator Debugging
+            if self.lc is not None and self.cfg.var.viz:
+                self.lc_process(model_input_left, gt_input_left, output_left)
 
             # Eval
             for b in range(0, output_left["output"][-1].shape[0]):
@@ -366,8 +370,8 @@ class DefaultTrainer(BaseTrainer):
         return error_list, error_keys
 
     def lc_process(self, model_input, gt_input, output):
-        print("Enable here to do exp")
-        return
+        if not self.cfg.lc_debug:
+            return
 
         import matplotlib.pyplot as plt
 
@@ -381,25 +385,16 @@ class DefaultTrainer(BaseTrainer):
                 self.lc_results[exp_name].extend(unc_scores_all_default)
             else:
                 self.lc_results[exp_name] = unc_scores_all_default
-            if len(self.lc_results[exp_name]) > 3:
+            if len(self.lc_results[exp_name]) > 500:
                 print(np.array(self.lc_results[exp_name]).shape)
                 results = np.mean(np.array(self.lc_results[exp_name]), axis=0)
                 plots[exp_name] = results
 
         # Exp
-        exp_name = "default_high_all"
+        exp_name = "experiment"
         final, unc_scores_all_default = self.model.module.lc_process(
-            BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=True, score=True, planner="default", params={"step": [0.25, 0.5, 0.75]}
+            BV_cur_refined, model_input, self.lc, mode="high", iterations=self.cfg.lc.iterations, viz=True, score=True, planner=self.cfg.lc.planner, params=self.cfg.lc.params
         )
-        handle_results(unc_scores_all_default, exp_name)
-        # Exp
-        for i in range(1,6):
-            print(i)
-            exp_name = "default_m1_" + str(i)
-            final, unc_scores_all_default = self.model.module.lc_process(
-                BV_cur_refined, model_input, self.lc, mode="high", iterations=10, viz=False, score=True, planner="m1", params={"step": i, "interval": 10}
-            )
-            handle_results(unc_scores_all_default, exp_name)
 
         # Plot
         if len(plots):
@@ -411,42 +406,6 @@ class DefaultTrainer(BaseTrainer):
             plt.legend()
             plt.pause(10)
         
-
-        # final, unc_scores_all_m1 = self.model.module.lc_process(
-        #     BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="m1", params={"step": 5}
-        # )
-        # final, unc_scores_all_sweep = self.model.module.lc_process(
-        #     BV_cur_refined, model_input, self.lc, mode="high", iterations=2, viz=False, score=True, planner="sweep", params={"start": 5, "end": 35, "step": 0.5}
-        # )
-
-        # plt.ion()
-        # plt.cla()
-        # exps = [[0.25], [0.5], [0.75]]
-        # for exp in exps:
-        #     final, unc_scores_all_default = self.model.module.lc_process(
-        #         BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="default", params={"step": exp}
-        #     )
-        #     plt.plot(unc_scores_all_default[0], '--bo')
-        # for i in range(0, 5):
-        #     final, unc_scores_all_m1 = self.model.module.lc_process(
-        #         BV_cur_refined, model_input, self.lc, mode="high", iterations=20, viz=False, score=True, planner="m1", params={"step": i}
-        #     )
-        #     plt.plot(unc_scores_all_m1[0])
-        # plt.pause(0.1)
-
-        # # # Save to Disk
-        # # todisk = copy.copy(lc_params)
-        # # todisk["dpv_refined_predicted"] = dpv_refined_predicted
-        # # todisk["img_refined"] = img_refined
-        # # todisk["depth_refined_truth_eval"] = depth_refined_truth_eval
-        # # todisk["depth_refined_predicted"] = depth_refined_predicted
-        # # todisk["depthmap_truth_np"] = depthmap_truth_np
-        # # todisk["depthmap_truth_refined_np"] = depthmap_truth_refined_np
-        # # todisk["d_candi"] = d_candi
-        # # todisk["intr_refined"] = intr_refined
-        # # np.save("test.npy", todisk)
-        # # stop
-
     def visualize(self, model_input, gt_input, output):
         import cv2
 
@@ -456,11 +415,11 @@ class DefaultTrainer(BaseTrainer):
             dpv_refined_predicted = output["output_refined"][-1][b, :, :, :].unsqueeze(0)
             d_candi = model_input["d_candi"]
 
-            # # Stuff?
-            # z = torch.exp(dpv_refined_predicted.squeeze(0))
-            # d_candi_expanded = torch.tensor(d_candi).unsqueeze(1).unsqueeze(1).cuda()
-            # mean = torch.sum(d_candi_expanded * z, dim=0)
-            # variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
+            # Variance
+            z = torch.exp(dpv_refined_predicted.squeeze(0))
+            d_candi_expanded = torch.tensor(d_candi).unsqueeze(1).unsqueeze(1).cuda()
+            mean = torch.sum(d_candi_expanded * z, dim=0)
+            variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
             # mask_var = (variance < 8.0).float()
             # dpv_refined_predicted = dpv_refined_predicted * mask_var.unsqueeze(0)
 
@@ -479,7 +438,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Eval
             tophalf_refined = torch.ones(depth_refined_predicted.shape).bool().to(depth_refined_predicted.device)
-            tophalf_refined[:, 0:int(tophalf_refined.shape[1] / 2), :] = False
+            tophalf_refined[:, 0:int(tophalf_refined.shape[1] / 3), :] = False
             depth_truth_eval = depth_truth.clone()
             depth_truth_eval[depth_truth_eval >= self.d_candi[-1]] = self.d_candi[-1]
             depth_refined_truth_eval = depth_refined_truth.clone()
@@ -490,14 +449,36 @@ class DefaultTrainer(BaseTrainer):
             img_color = img_utils.torchrgb_to_cv2(img_refined)
             img_color_low = img_utils.torchrgb_to_cv2(img)
 
-            # UField Display
-            unc_field_truth, unc_field_predicted, debugmap = img_utils.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined, self.cfg)
-
-            # Display
+            # UField
+            _, unc_field_predicted, debugmap = img_utils.compute_unc_field(dpv_refined_predicted, dpv_refined_truth, d_candi, intr_refined, mask_refined, self.cfg)
+            dmap_temp = F.interpolate(gt_input["dmaps"][b,:,:].unsqueeze(0).unsqueeze(0), scale_factor=4, mode='nearest').squeeze(0)
+            true_dpv = img_utils.gen_dpv_withmask(dmap_temp, mask_refined.unsqueeze(0)*0+1, d_candi, 0.3)
+            unc_field_truth, _ = img_utils.gen_ufield(true_dpv, d_candi, intr_refined.squeeze(0), BV_log=False, cfg=self.cfg)
+            field_visual = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
+            field_visual[:,:,0] = unc_field_predicted[0,:,:].cpu().numpy()*3
+            field_visual[:,:,1] = unc_field_predicted[0,:,:].cpu().numpy()*3
+            field_visual[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
+            field_visual = cv2.resize(field_visual, None, fx=1, fy=2, interpolation = cv2.INTER_CUBIC)
             img_color[:, :, 0] += debugmap.squeeze(0).cpu().numpy()
-            unc_field_overlay = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
-            unc_field_overlay[:,:,1] = unc_field_predicted[0,:,:].cpu().numpy()*3
-            unc_field_overlay[:,:,2] = unc_field_truth[0,:,:].cpu().numpy()*3
+            img_color = np.clip(img_color, 0, 1)
+
+            # # Draw Planner output
+            # dmap_temp = F.interpolate(gt_input["dmaps"][b,:,:].unsqueeze(0).unsqueeze(0), scale_factor=4, mode='nearest').squeeze(0)
+            # true_dpv = img_utils.gen_dpv_withmask(dmap_temp, mask_refined.unsqueeze(0)*0+1, d_candi, 0.3)
+            # unc_field_truth, _ = img_utils.gen_ufield(true_dpv, d_candi, intr_refined.squeeze(0), BV_log=False, cfg=self.cfg)
+            # # Generate Field Visual
+            # #lc_paths, field_visual = self.model.module.lc.plan_default_high(unc_field_predicted.squeeze(0), {"step": [0.5]})
+            # #lc_paths, field_visual = self.model.module.lc.plan_m1_high(unc_field_predicted.squeeze(0), self.cfg.lc.params)
+            # unc_field_truth_image = unc_field_truth[0,:,:].cpu().numpy()
+            # unc_field_truth_image = cv2.resize(unc_field_truth_image, (field_visual[:,:,2].shape[1],field_visual[:,:,2].shape[0]))
+            # field_visual[:,:,2] = unc_field_truth_image*3
+
+            # Expand it for Display
+            field_visual = cv2.flip(field_visual, 0 )
+            field_visual_expanded = np.zeros(img_color.shape)
+            field_visual_expanded[field_visual_expanded.shape[0]-field_visual.shape[0]:field_visual_expanded.shape[0], :, :] = field_visual
+            field_visual_expanded = np.clip(field_visual_expanded, 0, 1)
+            field_visual_expanded[np.isnan(field_visual_expanded)] = 0
 
             # Display Image/Depth
             img_depth = cv2.cvtColor(depth_refined_predicted_eval[0, :, :].cpu().numpy() / 100., cv2.COLOR_GRAY2BGR)
@@ -508,20 +489,86 @@ class DefaultTrainer(BaseTrainer):
             combined = np.hstack([img_color, img_depth, truth_depth])
             #combined = np.hstack([img_color, truth_depth])
             #combined_low = np.hstack([img_color_low, truth_depth_low])
+            #cv2.imshow("combined", combined)
+            #cv2.imshow("combined_low", combined_low)
+
+            # Field
+            if self.i_iter == 0:
+                cv2.imshow("field_visual", field_visual)
+            # Field Visual
+            field_visual_expanded = (field_visual_expanded - np.min(field_visual_expanded))/(np.max(field_visual_expanded) - np.min(field_visual_expanded))
+            field_visual_expanded = (field_visual_expanded * 255).astype(np.uint8)
+            #cv2.imshow("field_visual_expanded", field_visual_expanded)
+            # RGB
+            img_color = (img_color - np.min(img_color))/(np.max(img_color) - np.min(img_color))
+            img_color = (img_color * 255).astype(np.uint8)
+            #cv2.imshow("imR", img_color)
+            # Depth Heatmap
+            dmap = depth_refined_predicted_eval[0, :, :].cpu().numpy()
+            dmap = ((dmap/np.max(dmap))*255).astype(np.uint8)
+            imC = cv2.applyColorMap(dmap, cv2.COLORMAP_JET)
+            #imC = (imC/255).astype(np.float32)
+            #cv2.imshow("imC", imC)
+            # Depth errormap
+            error_map = depth_refined_truth_eval[0,:,:] - depth_refined_predicted_eval[0, :, :]*mask_refined
+            error_map = F.interpolate(error_map.unsqueeze(0), scale_factor=0.25, mode='bilinear')
+            error_map = F.interpolate(error_map, scale_factor=4, mode='bicubic').squeeze(0)
+            error_map = error_map.squeeze(0).cpu().numpy()
+            error_map = np.clip(((error_map/1)*255),0,255).astype(np.uint8)
+            error_map = cv2.cvtColor(error_map, cv2.COLOR_GRAY2BGR)
+            #error_map = (error_map/255).astype(np.float32)
+            #cv2.imshow("error_map", error_map)
+            # Variance map
+            variance_numpy = variance.cpu().numpy()
+            variance_maxval = np.max(variance_numpy)
+            variance_map = np.clip(((variance_numpy/50)*255),0,255).astype(np.uint8)
+            imV = cv2.applyColorMap(variance_map, cv2.COLORMAP_JET)
+            #imV = (imV/255).astype(np.float32)
+            #cv2.imshow("imV", imV)
+            # Combined
+            combined = np.hstack([img_color, imC, imV, error_map, field_visual_expanded])
             cv2.imshow("combined", combined)
-            cv2.imshow("combined_low", combined_low)
-            cv2.imshow("unc_field_overlay", unc_field_overlay)
+
+            # Shift
+            depth_refined_truth_eval = img_utils.cull_depth(depth_refined_truth_eval, intr_refined)
+            #depth_refined_predicted_eval = img_utils.cull_depth(depth_refined_predicted_eval, intr_refined)
+            depth_truth_eval = img_utils.cull_depth(depth_truth_eval, intr, 3)
 
             # Cloud
             cloud_truth = img_utils.tocloud(depth_truth_eval, img_utils.demean(img), intr, None, [255,255,0])
             cloud_predicted = img_utils.tocloud(depth_predicted_eval, img_utils.demean(img), intr)
-            cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined)
+            cloud_refined_truth = img_utils.tocloud(depth_refined_truth_eval, img_utils.demean(img_refined), intr_refined, None, [255,255,0])
             cloud_refined_predicted = img_utils.tocloud(depth_refined_predicted_eval, img_utils.demean(img_refined), intr_refined)
-            self.viz.addCloud(cloud_refined_predicted, 1)
-            self.viz.addCloud(cloud_truth, 1)
+            self.viz.addCloud(cloud_refined_predicted, 3)
+            self.viz.addCloud(cloud_truth, 5)
 
             # Swap
             self.viz.swapBuffer()
-            cv2.waitKey(15)
+            key = -1
+            if self.i_iter == 0:
+                cv2.waitKey(0)
+            else:
+                key = cv2.waitKey(5)
+
+            # Render Viz
+            rendered_img = self.viz.getRenderedImage()
+
+            # Write Video
+            write_video = self.cfg.write_video
+            if len(write_video):
+                if self.i_iter == 0:
+                    self.images_out = cv2.VideoWriter(write_video + "/" + "images" + '.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10, (combined.shape[1],combined.shape[0]))
+                    self.rendered_out = cv2.VideoWriter(write_video + "/" + "rendered" + '.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 10, (rendered_img.shape[1],rendered_img.shape[0]))
+                self.images_out.write(combined)
+                self.rendered_out.write(rendered_img)
+                if key == 113:
+                    self.images_out.release()
+                    self.rendered_out.release()
+                    sys.exit(0)
+
+            """
+            Command to pass in for lc experimentation
+            Command to pass in for saving video
+            """
 
         pass

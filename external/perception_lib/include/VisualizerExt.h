@@ -21,6 +21,8 @@
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/visualization/point_cloud_color_handlers.h>
 #include <pcl/visualization/point_cloud_geometry_handlers.h>
+#include <vtkRenderWindow.h>
+#include <vtkWindowToImageFilter.h>
 
 #include "PointCloudExt.h"
 #include "MatExt.h"
@@ -89,6 +91,7 @@ public:
     static void loop();
     static void start();
     static void stop();
+    static void saveScreenshot(std::string file);
     static void addPointCloud(PointCloudExt<pcl::PointXYZ> cloud, int size);
     static void addPointCloud(PointCloudExt<pcl::PointXYZRGB> cloud, int size);
     static void addPointCloud(PointCloudExt<pcl::PointXYZRGBNormal> cloud, int size);
@@ -103,6 +106,7 @@ public:
     static void addLine(VisualizerExtBuffer::LineData line);
     static void addMesh(pcl::PolygonMesh mesh);
     static void addTextureMesh(pcl::TextureMesh mesh);
+    static cv::Mat getRenderedImage();
 
     static void swapBuffer();
     static void addImage(MatExt img, float resize);

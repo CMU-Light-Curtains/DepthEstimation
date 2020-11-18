@@ -1053,11 +1053,14 @@ class BaseModel(nn.Module):
                 # 3D
                 if viz:
                     if self.viz is not None:
+                        dmap_truth = model_input["dmaps"][b,:,:].unsqueeze(0)
+                        dmap_truth = img_utils.cull_depth(dmap_truth, model_input["intrinsics"][b,:,:], 3)
                         for pts in lc_pts:
                             self.viz.addCloud(img_utils.lcoutput_to_cloud(pts), 2)
-                            break
-                        self.viz.addCloud(img_utils.tocloud(model_input["dmaps"][b,:,:].unsqueeze(0), img_utils.demean(F.interpolate(model_input["rgb"][b, -1, :, :, :].unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)), model_input["intrinsics"][b,:,:], rgbr=[255,255,0]), 2)
-                        #self.viz.addCloud(img_utils.tocloud(img_utils.dpv_to_depthmap(final, lc.d_candi, BV_log=True), img_utils.demean(img), intr), 1)
+                            self.viz.addCloud(img_utils.tocloud(dmap_truth, img_utils.demean(F.interpolate(model_input["rgb"][b, -1, :, :, :].unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)), model_input["intrinsics"][b,:,:], rgbr=[255,255,0]), 4)
+                            self.viz.swapBuffer()
+                        self.viz.addCloud(img_utils.lcoutput_to_cloud(lc_pts[0]), 2)
+                        self.viz.addCloud(img_utils.tocloud(dmap_truth, img_utils.demean(F.interpolate(model_input["rgb"][b, -1, :, :, :].unsqueeze(0), scale_factor=0.25, mode='bilinear').squeeze(0)), model_input["intrinsics"][b,:,:], rgbr=[255,255,0]), 4)
                         self.viz.swapBuffer()
 
                 # # Viz
@@ -1066,9 +1069,10 @@ class BaseModel(nn.Module):
                     unc_field_truth_image = unc_field_truth[0,:,:].cpu().numpy()
                     unc_field_truth_image = cv2.resize(unc_field_truth_image, (field_visual[:,:,2].shape[1],field_visual[:,:,2].shape[0]))
                     field_visual[:,:,2] = unc_field_truth_image*3
+                    field_visual = cv2.flip(field_visual, 0)
                     cv2.imshow("field_visual", field_visual)
                     #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                    cv2.waitKey(0)
+                    cv2.waitKey(5)
 
                 # Keep Renormalize
                 curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
@@ -1087,13 +1091,6 @@ class BaseModel(nn.Module):
                     lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
                     curr_dist = curr_dist * lcdpv
                     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
-
-                # #curr_dist = torch.exp(curr_dist_log)
-                # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
-                # unc_field_lcdpv, _ = img_utils.gen_ufield(curr_dist, lc.d_candi, intr.squeeze(0), BV_log=False, cfg=self.cfg)
-                # _, unc_field_lcdpv = lc.plan_empty_high(unc_field_lcdpv.squeeze(0), {})
-                # cv2.imshow("faggot2", unc_field_lcdpv)
-                # cv2.waitKey(0)
 
                 # Spread
                 for i in range(0, 2):

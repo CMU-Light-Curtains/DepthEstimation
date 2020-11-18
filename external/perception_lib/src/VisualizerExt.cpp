@@ -166,6 +166,20 @@ void VisualizerExt::stop(){
     viewer->close();
 }
 
+void VisualizerExt::saveScreenshot(std::string file){
+    viewer->saveScreenshot(file);
+}
+
+cv::Mat VisualizerExt::getRenderedImage(){
+    vtkSmartPointer<vtkRenderWindow> render = viewer->getRenderWindow();
+    unsigned char* pixels = render->GetRGBACharPixelData(0, 0, render->GetSize()[0] - 1, render->GetSize()[1] - 1, 1);
+    cv::Mat image = cv::Mat(render->GetSize()[1], render->GetSize()[0], CV_8UC4, pixels).clone();
+    //cv::cvtColor(image, image, cv::COLOR_RGBA2BGRA);
+    cv::cvtColor(image, image, cv::COLOR_RGBA2BGR);
+    cv::flip(image, image, 0);
+    return image;
+}
+
 void VisualizerExt::start(){
 
     // Set signal handler
