@@ -866,18 +866,26 @@ class LightCurtain:
         # cv2.imshow("depth_lc_x", depth_lc_x/100.)
 
         # Transfer to CUDA (How to know device?)
+        d_candi_cuda = torch.tensor(self.d_candi).to(self.device).float()
         mask_sense = torch.tensor(depth_rgb > 0).float().to(self.device)
         depth_sensed = torch.tensor(depth_sensed).to(self.device) * mask_sense
         thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
         int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
-        # Compute DPV
+        # Compute DPV (Paper Implementation)
+        z_img = depth_sensed.unsqueeze(-1)
+        int_img = (int_sensed / 255.).unsqueeze(-1)
+        unc_img = (thickness_sensed / 5.).unsqueeze(-1)
+        DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
+        DPV = DPV.permute(2,0,1)
+        #stop
+
+        # Compute DPV (Approximated Implementation)
         z_img = depth_sensed
         int_img = int_sensed / 255.
         unc_img = (thickness_sensed / 10.) ** 2
         A = mapping(int_img)
-        # Try fucking with 1 in the 1-A value
-        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+        #DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
 
         # Save information at pixel wanted
         pixel_wanted = [150, 66]

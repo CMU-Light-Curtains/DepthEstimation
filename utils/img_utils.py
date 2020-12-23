@@ -53,6 +53,21 @@ def update_for_algo(param):
     param['intr_lc'][1,2] -=  (TOP_CUT/2 + BOT_CUT/2)
     return param
 
+def lc_intensities_to_dist(d_candi, placement, intensity, inten_sigma, noise_sigma, mean_scaling):
+    def logpdf(x, mean, sd):
+        var = sd**2
+        denom = (2*math.pi*var)**.5
+        num = torch.exp(-(x-mean)**2/(2*var))
+        return torch.log(num/denom)
+
+    error = torch.abs(d_candi - placement)
+    mean_intensities = torch.exp(- (error / inten_sigma) ** 2)
+    mean_intensities = mean_intensities*mean_scaling
+    llhoods = logpdf(intensity, mean_intensities, noise_sigma)
+    lse = torch.logsumexp(llhoods, dim=-1).unsqueeze(-1)
+    norm_lhoods = torch.exp(llhoods - lse)
+    return norm_lhoods
+
 def eval_errors(errors):
     return dlib.evaluateErrors(errors)
 
