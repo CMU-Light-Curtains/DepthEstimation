@@ -37,6 +37,83 @@ import random
 __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
         'std': [0.229, 0.224, 0.225]}
 
+class sweep_module:
+    """Load and parse raw data into a usable format."""
+
+    def __init__(self, base_path, date, drive, **kwargs):
+        """Set the path and pre-load calibration data and timestamps."""
+        self.dataset = kwargs.get('dataset', 'sweep')
+        self.drive = date + '_drive_' + drive + '_' + self.dataset
+        self.calib_path = os.path.join(base_path, date)
+        self.data_path = os.path.join(base_path, date, self.drive)
+        self.leftcam_files = os.listdir(self.data_path + "/left_img")
+        self.rightcam_files = os.listdir(self.data_path + "/right_img")
+        self.lidar_files = os.listdir(self.data_path + "/lidar")
+        self.N = len(self.leftcam_files)
+        self.calib = json.load(open(self.data_path + "/calib.json"))
+
+        self.lidar_2_left = np.linalg.inv(np.array(self.calib["left_2_lidar"]))
+        self.left_2_right = np.array(self.calib["left_2_right"])
+        self.lidar_2_right = np.dot(self.left_2_right, self.lidar_2_left)
+        self.left_K = np.array(self.calib["left_P"])[0:3, 0:3]
+        self.right_K = np.array(self.calib["right_P"])[0:3, 0:3]
+
+    def __len__(self):
+        """Return the number of frames loaded."""
+        return self.N
+
+    def get_lidar_files(self):
+        return self.lidar_files
+
+    def get_leftcam_files(self):
+        return self.leftcam_files
+
+    def get_rightcam_files(self):
+        return self.rightcam_files
+
+    def get_lidar_2_leftcam(self):
+        return self.lidar_2_left
+
+    def get_lidar_2_rightcam(self):
+        return self.lidar_2_right
+
+    def get_leftcam_2_rightcam(self):
+        return self.left_2_right
+
+    def get_imu_2_leftcam(self):
+        return np.eye(4)
+
+    def get_imu_2_rightcam(self):
+        return np.eye(4)
+
+    def get_left_img(self, indx):
+        index_str = "%06d" % (indx,)
+        return PIL.Image.open(self.data_path + "/left_img/" + index_str + ".png")
+
+    def get_right_img(self, indx):
+        index_str = "%06d" % (indx,)
+        return PIL.Image.open(self.data_path + "/right_img/" + index_str + ".png")
+
+    def get_lidar(self, indx):
+        index_str = "%06d" % (indx,)
+        lidarpoints = np.fromfile(self.data_path + "/lidar/" + index_str + ".bin", dtype=np.float32).reshape((-1, 4))
+        return lidarpoints
+
+    def get_left_K(self):
+        return self.left_K
+
+    def get_right_K(self):
+        return self.right_K
+
+    def get_left_size(self):
+        return self.get_left_img(0).size
+
+    def get_right_size(self):
+        return self.get_right_img(0).size
+
+    def get_pose(self, indx):
+        return np.eye(4)
+
 class ilim_module:
     """Load and parse raw data into a usable format."""
 
@@ -293,7 +370,7 @@ def _read_IntM_from_pdata( p_data,  out_size = None,   mode = "left",   crop_amt
             IntM = camera_intrinsics
             focal_length = pixel_width / width * focal_length
             width, height = pixel_width, pixel_height
-    elif p_data.mode == "ilim":
+    elif p_data.mode == "ilim" or p_data.mode == "sweep":
         if out_size is not None:
             pixel_width, pixel_height = out_size[0], out_size[1]
             xscale = float(pixel_width)/float(width)
@@ -368,6 +445,9 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
     elif dataset == "ilim":
         p_data_full = ilim_module(basedir, date, drive)
         mode = "ilim"
+    elif dataset == "sweep":
+        p_data_full = sweep_module(basedir, date, drive)
+        mode = "sweep"
 
     # Kitti
     if mode == "kitti":
@@ -396,6 +476,13 @@ def get_paths(traj_indx, database_path_base = '/datasets/kitti', scene_names = N
         setattr(p_data, 'scene_name', sceneName)
         return n_traj, p_data, [], [], ''
         
+    # Sweep
+    elif mode == "sweep":
+        p_data = p_data_full
+        setattr(p_data, 'mode', 'sweep')
+        setattr(p_data, 'scene_name', sceneName)
+        return n_traj, p_data, [], [], ''
+
 def _read_left_img(p_data, indx, img_size = None, no_process= False, only_resize = False):
     '''
     Read image and process
