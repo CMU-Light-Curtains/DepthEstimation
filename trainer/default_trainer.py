@@ -475,6 +475,7 @@ class DefaultTrainer(BaseTrainer):
 
             # Expand it for Display
             field_visual = cv2.flip(field_visual, 0 )
+            field_visual[0:5,:,:] = 0
             field_visual_expanded = np.zeros(img_color.shape)
             field_visual_expanded[field_visual_expanded.shape[0]-field_visual.shape[0]:field_visual_expanded.shape[0], :, :] = field_visual
             field_visual_expanded = np.clip(field_visual_expanded, 0, 1)
@@ -565,10 +566,5 @@ class DefaultTrainer(BaseTrainer):
                     self.images_out.release()
                     self.rendered_out.release()
                     sys.exit(0)
-
-            """
-            Command to pass in for lc experimentation
-            Command to pass in for saving video
-            """
 
         pass

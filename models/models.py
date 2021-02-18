@@ -1002,10 +1002,11 @@ class BaseModel(nn.Module):
             if final.shape[1] != lc.expand_A:
                 final = img_utils.upsample_dpv(final, N=lc.expand_A, BV_log=True)
 
-            # Simulate a mid point spread start
-            #final = torch.log(img_utils.gen_dpv_withmask(model_input["dmaps"]*0+20, model_input["masks"]*0+1, lc.d_candi, 6.0))
-
-            # Fake the mean dist with some initial dist to see performance
+            # Simulate a mid point spread start            
+            # iterations = 20
+            # final = torch.log(img_utils.gen_dpv_withmask(final[:,0,:,:]*0+20, final[:,0,:,:].unsqueeze(0)*0+1, lc.d_candi, 6.0))
+            # if final.shape[1] != lc.expand_A:
+            #     final = img_utils.upsample_dpv(final, N=lc.expand_A, BV_log=True)
 
             # Bayesian Iterations
             unc_scores = []
@@ -1072,7 +1073,7 @@ class BaseModel(nn.Module):
                     field_visual = cv2.flip(field_visual, 0)
                     cv2.imshow("field_visual", field_visual)
                     #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
-                    cv2.waitKey(5)
+                    cv2.waitKey(0)
 
                 # Keep Renormalize
                 curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
