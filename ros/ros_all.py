@@ -103,7 +103,7 @@ class Planner():
 
         if self.mode == "real":
             lc_wrapper_python.ros_init("lc_wrapper_example")
-            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=60, dev="/dev/ttyACM0")
+            self.lc_wrapper = lc_wrapper_python.LightCurtainWrapper(laser_power=50, dev="/dev/ttyACM0")
 
         #  Params
         with open(params_file) as f:
@@ -163,37 +163,38 @@ class Planner():
         self.unc_scores = []
 
     def init_unc_field(self):
-        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 5.
+        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 4.
         self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 10.0))
 
     def integrate(self, DPVs):
         # Keep Renormalize
         curr_dist = torch.clamp(torch.exp(self.final), img_utils.epsilon, 1.)
 
-        # # Update
-        # for dpv in DPVs:
-        #     dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
-        #     curr_dist = curr_dist * dpv
-        #     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
-
         # Update
-        curr_dist_log = torch.log(curr_dist)
         for dpv in DPVs:
             dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
-            curr_dist_log += torch.log(dpv)
-        curr_dist = torch.exp(curr_dist_log)
-        curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+            curr_dist = curr_dist * dpv
+            curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
+        # # Update
+        # curr_dist_log = torch.log(curr_dist)
+        # for dpv in DPVs:
+        #     dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
+        #     curr_dist_log += torch.log(dpv)
+        # curr_dist = torch.exp(curr_dist_log)
+        # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
         # Spread
-        if self.counter < 1000:
+        if self.counter < 100:
             for i in range(0, 1):
-                curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
-        # if self.counter < 20:
-        #     for i in range(0, 1):
-        #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
-        # else:
-        #     for i in range(0, 3):
-        #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 3)
+                #continue
+                curr_dist = img_utils.spread_dpv_hack(curr_dist, 3)
+        # # if self.counter < 20:
+        # #     for i in range(0, 1):
+        # #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+        # # else:
+        # #     for i in range(0, 3):
+        # #         curr_dist = img_utils.spread_dpv_hack(curr_dist, 3)
         
         # Keep Renormalize
         curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)
@@ -255,10 +256,10 @@ class Planner():
         planner = "default"
         start = time.time()
         if planner == "default":
-            params = {"step": [0.5], "std_div": 3.}
+            params = {"step": [0.75], "std_div": 5.}
             plan_func = self.algo_lc.plan_default
         elif planner == "m1":
-            params = {"step": 3, "interval": 5, "std_div": 3.}
+            params = {"step": 3, "interval": 15, "std_div": 3.}
             plan_func = self.algo_lc.plan_m1
         elif planner == "sweep":
             params = {"start": self.S_RANGE + 1, "end": self.E_RANGE - 1, "step": 0.25}
@@ -310,7 +311,7 @@ class Planner():
             start = time.time()
             unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
             unc_field_predicted_lc = self.algo_lc.fw_large.transformZTheta(unc_field_predicted_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
-            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, False)
+            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True)
             time_score = time.time() - start
             #print("time_score: " + str(time_gen_ufield)) # 30ms
             self.unc_scores.append(unc_score.item())
@@ -365,10 +366,10 @@ class Planner():
                     # measure_time = time.time() - start
 
                 # Field Visual
-                #field_visual = self.algo_lc.field_visual
-                #field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
-                #cv2.imshow("field_visual", field_visual)
-                #cv2.waitKey(1)
+                field_visual = self.algo_lc.field_visual
+                field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+                cv2.imshow("field_visual", field_visual)
+                cv2.waitKey(1)
 
                 # Receive Curtain
                 output_lc, thickness_lc = self.lc_wrapper.receiveCurtainAndProcess()[1]
@@ -458,11 +459,13 @@ class Planner():
             # Return
             field_visual = self.algo_lc.field_visual
             field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+            cv2.imshow("field_visual", field_visual)
+            cv2.waitKey(1)
 
             # Publish The Iteration specific stuff?
             if self.planner_depth_pub.get_num_connections():
                 maxdepth = np.max(final_depth)
-                maxdepth = 15
+                maxdepth = 40
                 depthmap = ((final_depth/maxdepth)*255).astype(np.uint8)
                 depthmap = cv2.applyColorMap(depthmap, cv2.COLORMAP_JET)
                 ros_depth = self.bridge.cv2_to_imgmsg(depthmap, encoding="rgb8")
@@ -486,7 +489,10 @@ class RosAll():
         self.counter = 0
         self.mutex = Lock()
         self.new_dpv = False
+        #self.params_file = 'real_sensor.json'
         print(self.mode)
+        print(self.params_file)
+        #python ros/ros_all.py _mode:=real _params:=basement_sensor.json
 
         self.planner = Planner(mode = self.mode, params_file=self.params_file)
 
@@ -550,7 +556,7 @@ class RosAll():
         depth_r_tensor = self.depth_pinned.cuda(non_blocking=True).unsqueeze(0)
 
         # Call Planner
-        field_visual, final_depth = self.planner.run(dpv_r_tensor, depth_r_tensor)
+        field_visual, final_depth,_ = self.planner.run(dpv_r_tensor, depth_r_tensor)
         field_visual = cv2.rotate(field_visual, cv2.ROTATE_180)
 
         # Viz
