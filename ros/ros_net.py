@@ -331,7 +331,7 @@ class RosNet():
 
         if self.depth_color_pub.get_num_connections():
             depthmap = self.pred_depth_pinned[:].squeeze(0).numpy()
-            depthmap = ((depthmap/np.max(depthmap))*255).astype(np.uint8)
+            depthmap = ((depthmap/40)*255).astype(np.uint8)
             depthmap = cv2.applyColorMap(depthmap, cv2.COLORMAP_JET)
             ros_depth = self.bridge.cv2_to_imgmsg(depthmap, encoding="rgb8")
             self.depth_color_pub.publish(ros_depth)
