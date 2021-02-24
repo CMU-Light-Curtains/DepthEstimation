@@ -11,6 +11,63 @@ import cv2
 import external.deval_lib.pyevaluatedepth_lib as dlib
 epsilon = torch.finfo(float).eps
 
+def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_large, rgb_intr, rgb_size, lc_intr, lc_size, M_left2LC):
+    # Convert to Torch
+    sweep_arr_int = torch.tensor(sweep_arr[:,:,:,1]) # [128,640,512]
+    sweep_arr_z = torch.tensor(sweep_arr[:,:,:,0]) # [128,640,512]
+    lc_width, lc_height = lc_size
+    dmap_width, dmap_height = rgb_size
+
+    # Viz
+    combined_image_temp = np.max(sweep_arr_int.numpy(), axis=0) # 640, 512, 4
+    combined_image_temp = combined_image_temp[:,:].astype(np.uint8)
+    combined_image = cv2.cvtColor(combined_image_temp,cv2.COLOR_GRAY2RGB)
+
+    # Points
+    pts_img = depth_to_pts(dmap_large.unsqueeze(0), rgb_intr) # [3, 256, 320]
+    pts_img = torch.cat([
+        pts_img, torch.ones(1, pts_img.shape[1], pts_img.shape[2])
+        ])
+    pts_img = pts_img.reshape(4, pts_img.shape[1]*pts_img.shape[2]) # [4, 81920]
+    pts_img = torch.matmul(torch.tensor(M_left2LC), pts_img) # Now in LC frame
+
+    # Lousy Projection
+    K_lc = torch.tensor(lc_intr)
+    K_lc = torch.cat([K_lc, torch.zeros(3,1)], dim=1)
+    proj_points = torch.matmul(K_lc, pts_img)
+    proj_points[0,:] /= proj_points[2,:]
+    proj_points[1,:] /= proj_points[2,:]
+    proj_points[2,:] = pts_img[2, :] # Copy the Z values
+    proj_points = proj_points[:,:].T
+
+    # Copy Feats
+    feat_int_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
+    feat_z_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
+    mask_tensor = torch.zeros((1, proj_points.shape[0])) # 81920, 2
+
+    # Remove Invalid pixels?
+    for i in range(0, proj_points.shape[0]):
+        lc_pix_pos = (int(proj_points[i,0]+0.5), int(proj_points[i,1]+0.5)) # ADD 0.5 HERE?
+        z_val = proj_points[i,2]
+        if lc_pix_pos[0] < 0 or lc_pix_pos[1] < 0 or lc_pix_pos[0] >= lc_width or lc_pix_pos[1] >= lc_height:
+            continue
+        if z_val > 18:
+            continue
+        feature_int = sweep_arr_int[:, lc_pix_pos[1], lc_pix_pos[0]]
+        feature_z = sweep_arr_z[:, lc_pix_pos[1], lc_pix_pos[0]]
+        if torch.isnan(feature_z[0]):
+            continue
+        feat_int_tensor[:, i] = feature_int
+        feat_z_tensor[:, i] = feature_z
+        mask_tensor[:, i] = 1
+
+    # Resize
+    feat_int_tensor = feat_int_tensor.reshape(128, dmap_height, dmap_width)
+    feat_z_tensor = feat_z_tensor.reshape(128, dmap_height, dmap_width)
+    mask_tensor = mask_tensor.reshape(1, dmap_height, dmap_width)
+
+    return feat_int_tensor, feat_z_tensor, mask_tensor, combined_image
+
 def sim_lc_ptcloud(pts):
     zval = torch.tensor(pts[:,:,2]).unsqueeze(0)
     iimg = torch.zeros((3, pts.shape[0], pts.shape[1]))
