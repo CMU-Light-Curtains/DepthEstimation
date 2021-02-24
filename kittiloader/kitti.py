@@ -695,6 +695,11 @@ class KITTI_dataset(data.Dataset):
             dmap_raw = _read_dimg(dmap_path, no_process=True)[0] #[1226, 370]
             scale_factor = 256.
 
+        # Other
+        if self.p_data.mode == "sweep":
+            #stop
+            pass
+
         # Read RGB
         if mode == "left":
             img = _read_left_img(self.p_data, indx, no_process=True)[0]
@@ -901,7 +906,8 @@ class KITTI_dataset(data.Dataset):
                 'img_gray': img_gray.unsqueeze_(0),
                 'extM': extM,
                 'scene_path': scene_path,
-                'img_path': img_path, }
+                'img_path': img_path, 
+                'mode': self.p_data.mode}
 
     def __getitem__(self, indx):
         '''
