@@ -9,9 +9,10 @@ import torch.nn.functional as F
 import torchvision
 import cv2
 import external.deval_lib.pyevaluatedepth_lib as dlib
+import external.utils_lib.utils_lib as kittiutils
 epsilon = torch.finfo(float).eps
 
-def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_large, rgb_intr, rgb_size, lc_intr, lc_size, M_left2LC):
+def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_size, M_left2LC):
     # Convert to Torch
     sweep_arr_int = torch.tensor(sweep_arr[:,:,:,1]) # [128,640,512]
     sweep_arr_z = torch.tensor(sweep_arr[:,:,:,0]) # [128,640,512]
@@ -40,33 +41,54 @@ def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_large, rgb_intr, rgb_size, lc
     proj_points[2,:] = pts_img[2, :] # Copy the Z values
     proj_points = proj_points[:,:].T
 
-    # Copy Feats
-    feat_int_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
-    feat_z_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
-    mask_tensor = torch.zeros((1, proj_points.shape[0])) # 81920, 2
-
     # Remove Invalid pixels?
-    for i in range(0, proj_points.shape[0]):
-        lc_pix_pos = (int(proj_points[i,0]+0.5), int(proj_points[i,1]+0.5)) # ADD 0.5 HERE?
-        z_val = proj_points[i,2]
-        if lc_pix_pos[0] < 0 or lc_pix_pos[1] < 0 or lc_pix_pos[0] >= lc_width or lc_pix_pos[1] >= lc_height:
-            continue
-        if z_val > 18:
-            continue
-        feature_int = sweep_arr_int[:, lc_pix_pos[1], lc_pix_pos[0]]
-        feature_z = sweep_arr_z[:, lc_pix_pos[1], lc_pix_pos[0]]
-        if torch.isnan(feature_z[0]):
-            continue
-        feat_int_tensor[:, i] = feature_int
-        feat_z_tensor[:, i] = feature_z
-        mask_tensor[:, i] = 1
+    feat_int_tensor, feat_z_tensor, mask_tensor = kittiutils.lc_generate(proj_points.numpy(), sweep_arr_int.view(128, -1).numpy(), sweep_arr_z.view(128, -1).numpy(),
+                                                  lc_width, lc_height)
+    feat_int_tensor = torch.tensor(feat_int_tensor)
+    feat_z_tensor = torch.tensor(feat_z_tensor)
+    mask_tensor = torch.tensor(mask_tensor)
+
+    # # Remove Invalid pixels?
+    # feat_int_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
+    # feat_z_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
+    # mask_tensor = torch.zeros((1, proj_points.shape[0])).numpy() # 81920, 2
+    # for i in range(0, proj_points.shape[0]):
+    #     lc_pix_pos = (int(proj_points[i,0]+0.5), int(proj_points[i,1]+0.5)) # ADD 0.5 HERE?
+    #     z_val = proj_points[i,2]
+    #     if lc_pix_pos[0] < 0 or lc_pix_pos[1] < 0 or lc_pix_pos[0] >= lc_width or lc_pix_pos[1] >= lc_height:
+    #         continue
+    #     if z_val > 18:
+    #         continue
+    #     feature_int = sweep_arr_int[:, lc_pix_pos[1], lc_pix_pos[0]]
+    #     feature_z = sweep_arr_z[:, lc_pix_pos[1], lc_pix_pos[0]]
+    #     if torch.isnan(feature_z[0]):
+    #         continue
+    #     feat_int_tensor[:, i] = feature_int
+    #     feat_z_tensor[:, i] = feature_z
+    #     mask_tensor[:, i] = 1
+
+    # # Visualize
+    # for i in range(0, proj_points.shape[0]):
+    #     lc_pix_pos = (int(proj_points[i,0]+0.5), int(proj_points[i,1]+0.5)) # ADD 0.5 HERE?
+    #     z_val = proj_points[i,2]
+    #     if lc_pix_pos[0] < 0 or lc_pix_pos[1] < 0 or lc_pix_pos[0] >= lc_width or lc_pix_pos[1] >= lc_height:
+    #         continue
+    #     if z_val > 18:
+    #         continue
+    #     combined_image[lc_pix_pos[1], lc_pix_pos[0], :] = (0,255,0)
+    #     #cv2.circle(combined_image,lc_pix_pos, 1, (0,255,0), -1)
+    # cv2.imshow("fag", combined_image)
+    # cv2.waitKey(0)
 
     # Resize
     feat_int_tensor = feat_int_tensor.reshape(128, dmap_height, dmap_width)
     feat_z_tensor = feat_z_tensor.reshape(128, dmap_height, dmap_width)
     mask_tensor = mask_tensor.reshape(1, dmap_height, dmap_width)
 
-    return feat_int_tensor, feat_z_tensor, mask_tensor, combined_image
+    # Generate Train Mask
+    train_mask_tensor = mask_tensor.repeat(128, 1, 1, 1).squeeze(1) * torch.isnan(feat_z_tensor).float()
+
+    return feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image
 
 def sim_lc_ptcloud(pts):
     zval = torch.tensor(pts[:,:,2]).unsqueeze(0)

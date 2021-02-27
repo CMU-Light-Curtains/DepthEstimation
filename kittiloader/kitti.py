@@ -11,6 +11,7 @@ author: Chao Liu <chaoliu1@cs.cmu.edu>
 import pykitti
 import sys
 import os
+import cv2
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/../")
 
 import numpy as np
@@ -30,6 +31,7 @@ import utils.img_utils as util
 import json
 
 import warping.view as View
+import utils.img_utils as img_utils
 
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -113,6 +115,10 @@ class sweep_module:
 
     def get_pose(self, indx):
         return np.eye(4)
+
+    def get_sweep_arr(self, indx):
+        index_str = "%06d" % (indx,)
+        return np.load(self.data_path + "/sweep/" + index_str + ".npy").astype(np.float32)
 
 class ilim_module:
     """Load and parse raw data into a usable format."""
@@ -695,11 +701,6 @@ class KITTI_dataset(data.Dataset):
             dmap_raw = _read_dimg(dmap_path, no_process=True)[0] #[1226, 370]
             scale_factor = 256.
 
-        # Other
-        if self.p_data.mode == "sweep":
-            #stop
-            pass
-
         # Read RGB
         if mode == "left":
             img = _read_left_img(self.p_data, indx, no_process=True)[0]
@@ -891,6 +892,46 @@ class KITTI_dataset(data.Dataset):
             img_path = self.p_data.get_leftcam_files()[indx]
         elif mode == "right":
             img_path = self.p_data.get_rightcam_files()[indx]
+
+        # Other
+        if self.p_data.mode == "sweep":
+            # Load Sweep Arr
+            sweep_arr = self.p_data.get_sweep_arr(indx)
+            # LC Params
+            K_lc = np.array([
+                [893.074542/2, 0.000000, 524.145998/2],
+                [0.000000, 893.177518/2, 646.766885/2],
+                [0.000000, 0.000000, 1.000000]
+            ]).astype(np.float32)
+            D_lc = np.array([-0.033918, 0.027494, -0.001691, -0.001078, 0.000000]).astype(np.float32)
+            # Half the LC Int
+            K_lc /= 2
+            K_lc[2,2] = 1.
+            lc_size = [256, 320]
+
+            # Param
+            M_left2LC = np.array([[0.9985846877098083, 0.0018874829402193427, 0.0531516931951046, 0.07084044814109802], 
+            [-0.0029097397346049547, 0.9998121857643127, 0.019162006676197052, 0.0055979466997087], 
+            [-0.053105540573596954, -0.019289543852210045, 0.9984025955200195, 0.10840931534767151], 
+            [0.0, 0.0, 0.0, 1.0]]).astype(np.float32)
+            M_left2Right = self.p_data.get_leftcam_2_rightcam()
+            M_right2Left = np.linalg.inv(M_left2Right)
+            M_right2LC = np.matmul(M_right2Left, M_left2LC).astype(np.float32)
+
+            # Unwarp
+            for i in range(0, sweep_arr.shape[0]):
+                sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
+                sweep_arr[i, :,:, 1] = cv2.undistort(sweep_arr[i, :,:, 1], K_lc, D_lc)
+            # Generate Feature Tensor
+            if mode == "left":
+                feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
+                sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_left2LC))
+            elif mode == "right":
+                feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
+                sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_right2LC))
+
+            print(feat_int_tensor.shape)
+            print(train_mask_tensor.shape)
 
         return {'img': img.unsqueeze_(0),
                 'img_dw': img_dw.unsqueeze_(0),

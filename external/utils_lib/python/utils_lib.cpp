@@ -17,6 +17,34 @@ using namespace Eigen;
 
 namespace py = pybind11;
 
+std::vector<Eigen::MatrixXf> lc_generate(const Eigen::MatrixXf& proj_points, const Eigen::MatrixXf& sweep_arr_int, const Eigen::MatrixXf& sweep_arr_z,
+                int lc_width, int lc_height){
+    // Gen
+    Eigen::MatrixXf feat_int_tensor = Eigen::MatrixXf::Zero(128, proj_points.rows());
+    Eigen::MatrixXf feat_z_tensor = Eigen::MatrixXf::Zero(128, proj_points.rows());
+    Eigen::MatrixXf mask_tensor = Eigen::MatrixXf::Zero(1, proj_points.rows());
+
+    // Gen
+    for(auto i=0; i<proj_points.rows(); i++){
+        std::vector<int> lc_pix_pos = {(int)(proj_points(i,0)+0.5), (int)(proj_points(i,1)+0.5)};
+        auto z_val = proj_points(i,2);
+        if(lc_pix_pos[0] < 0 | lc_pix_pos[1] < 0 | lc_pix_pos[0] >= lc_width | lc_pix_pos[1] >= lc_height)
+            continue;
+        if(z_val > 18)
+            continue;
+        int index = lc_pix_pos[1]*lc_width + lc_pix_pos[0];
+        Eigen::VectorXf feature_int = sweep_arr_int.col(index);
+        Eigen::VectorXf feature_z = sweep_arr_z.col(index);
+        if(std::isnan(feature_z(0)))
+            continue;
+        feat_int_tensor.col(i) = feature_int;
+        feat_z_tensor.col(i) = feature_z;
+        mask_tensor(0,i) = 1;
+    }
+
+    return {feat_int_tensor, feat_z_tensor, mask_tensor};
+}
+
 Eigen::MatrixXf upsample_velodyne(const Eigen::MatrixXf& velodata_cam, py::dict& params){
     int total_vbeams = 128;
     int total_hbeams = 1500;
@@ -161,6 +189,7 @@ Eigen::MatrixXf generate_depth(const Eigen::MatrixXf& velodata, const Eigen::Mat
 
 PYBIND11_MODULE(utils_lib, m) {
     m.def("generate_depth", &generate_depth, "generate_depth");
+    m.def("lc_generate", &lc_generate, "lc_generate");
 
     #ifdef VERSION_INFO
         m.attr("__version__") = VERSION_INFO;
