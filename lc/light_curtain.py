@@ -878,14 +878,13 @@ class LightCurtain:
         unc_img = (thickness_sensed / 5.).unsqueeze(-1)
         DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
         DPV = DPV.permute(2,0,1)
-        #stop
 
-        # Compute DPV (Approximated Implementation)
-        z_img = depth_sensed
-        int_img = int_sensed / 255.
-        unc_img = (thickness_sensed / 10.) ** 2
-        A = mapping(int_img)
-        #DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+        # # Compute DPV (Approximated Implementation)
+        # z_img = depth_sensed
+        # int_img = int_sensed / 255.
+        # unc_img = (thickness_sensed / 10.) ** 2
+        # A = mapping(int_img)
+        # DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
 
         # Save information at pixel wanted
         pixel_wanted = [150, 66]

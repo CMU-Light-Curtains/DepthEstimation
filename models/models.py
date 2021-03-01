@@ -1045,7 +1045,6 @@ class BaseModel(nn.Module):
                 for lc_path in lc_paths:
                     if mode == "high":
                         lc_DPV, lc_pt, _ = lc.sense_high(true_depth, lc_path, viz)
-
                     elif mode == "low":
                         lc_DPV, _ = lc.sense_low(true_depth, lc_path)
                     lc_DPVs.append(lc_DPV)
