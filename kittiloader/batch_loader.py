@@ -331,6 +331,8 @@ class Batch_Loader():
         right_cam_intrins = []
         left_src_cam_poses = []
         right_src_cam_poses = []
+        left_cam_sweep = []
+        right_cam_sweep = []
         T_left2right = None
 
         for ibatch in range(self.batch_size):
@@ -362,5 +364,9 @@ class Batch_Loader():
             left_src_cam_poses.append(left_src_cam_pose_)
             right_src_cam_poses.append(right_src_cam_pose_)
 
+            left_cam_sweep.append(ref_dat_["left_camera"]["sweep_data"])
+            right_cam_sweep.append(ref_dat_["right_camera"]["sweep_data"])
+
         return {'is_valid': is_valid, 'left_cam_intrins': left_cam_intrins, 'right_cam_intrins': right_cam_intrins, 'ref_dats': ref_dats,
-                 'src_dats': src_dats, 'left_src_cam_poses': left_src_cam_poses, 'right_src_cam_poses': right_src_cam_poses, "T_left2right": T_left2right}
+                 'src_dats': src_dats, 'left_src_cam_poses': left_src_cam_poses, 'right_src_cam_poses': right_src_cam_poses, "T_left2right": T_left2right,
+                 'left_cam_sweep': left_cam_sweep, 'right_cam_sweep': right_cam_sweep}

@@ -120,6 +120,11 @@ class sweep_module:
         index_str = "%06d" % (indx,)
         return np.load(self.data_path + "/sweep/" + index_str + ".npy").astype(np.float32)
 
+    def get_nir(self, indx):
+        index_str = "%06d" % (indx,)
+        nirimg = cv2.imread(self.data_path + "/nir_img/" + index_str + ".png")
+        return nirimg
+
 class ilim_module:
     """Load and parse raw data into a usable format."""
 
@@ -894,6 +899,7 @@ class KITTI_dataset(data.Dataset):
             img_path = self.p_data.get_rightcam_files()[indx]
 
         # Other
+        sweep_data = dict()
         if self.p_data.mode == "sweep":
             # Load Sweep Arr
             sweep_arr = self.p_data.get_sweep_arr(indx)
@@ -918,6 +924,16 @@ class KITTI_dataset(data.Dataset):
             M_right2Left = np.linalg.inv(M_left2Right)
             M_right2LC = np.matmul(M_right2Left, M_left2LC).astype(np.float32)
 
+            # Load NIR
+            nir_img = self.p_data.get_nir(indx)
+            nir_img = cv2.resize(nir_img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+            nir_img = cv2.cvtColor(nir_img, cv2.COLOR_BGR2GRAY)
+            nir_img = cv2.undistort(nir_img, K_lc, D_lc)
+            nir_img = nir_img.astype(np.float32)
+            nir_img = nir_img/255
+            nir_img = nir_img - 0.5
+            nir_img = torch.tensor(nir_img).unsqueeze(0)
+
             # Unwarp
             for i in range(0, sweep_arr.shape[0]):
                 sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
@@ -926,12 +942,18 @@ class KITTI_dataset(data.Dataset):
             if mode == "left":
                 feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
                 sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_left2LC))
+                M_cam2LC = M_left2LC
             elif mode == "right":
                 feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
                 sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_right2LC))
+                M_cam2LC = M_right2LC
 
-            print(feat_int_tensor.shape)
-            print(train_mask_tensor.shape)
+            # Store
+            sweep_data["feat_int_tensor"] = feat_int_tensor
+            sweep_data["train_mask_tensor"] = train_mask_tensor
+            sweep_data["M_cam2LC"] = M_left2LC
+            sweep_data["K_lc"] = K_lc
+            sweep_data["nir_img"] = nir_img
 
         return {'img': img.unsqueeze_(0),
                 'img_dw': img_dw.unsqueeze_(0),
@@ -948,7 +970,8 @@ class KITTI_dataset(data.Dataset):
                 'extM': extM,
                 'scene_path': scene_path,
                 'img_path': img_path, 
-                'mode': self.p_data.mode}
+                'mode': self.p_data.mode,
+                'sweep_data': sweep_data}
 
     def __getitem__(self, indx):
         '''

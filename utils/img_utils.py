@@ -86,7 +86,7 @@ def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_s
     mask_tensor = mask_tensor.reshape(1, dmap_height, dmap_width)
 
     # Generate Train Mask
-    train_mask_tensor = mask_tensor.repeat(128, 1, 1, 1).squeeze(1) * torch.isnan(feat_z_tensor).float()
+    train_mask_tensor = mask_tensor.repeat(128, 1, 1, 1).squeeze(1) * torch.isnan(feat_z_tensor).bool()
 
     return feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image
 

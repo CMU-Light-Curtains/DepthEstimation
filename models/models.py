@@ -1134,6 +1134,9 @@ class DefaultModel(nn.Module):
                                       #nn.BatchNorm2d(64)
                                       )
 
+    def set_viz(self, viz):
+        self.viz = viz
+
     def num_parameters(self):
         return sum(
             [p.data.nelement() if p.requires_grad else 0 for p in self.parameters()])

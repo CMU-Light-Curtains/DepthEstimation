@@ -247,6 +247,25 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         soft_labels_imgsize = []
         soft_labels = []
 
+    # Build the sweep tensor needed
+    K_lc = None
+    M_cam2LC = None
+    feat_int_tensor = []
+    feat_mask_tensor = []
+    nir_img_tensor = []
+    if len(local_info_valid[camside + "_cam_sweep"][0]):
+        for i in range(0, len(local_info_valid["src_dats"])):
+            cam_sweep = local_info_valid[camside + "_cam_sweep"][i]
+            print(cam_sweep.keys())
+            K_lc = cam_sweep["K_lc"]
+            M_cam2LC = cam_sweep["M_cam2LC"]
+            feat_int_tensor.append(cam_sweep["feat_int_tensor"].unsqueeze(0))
+            feat_mask_tensor.append(cam_sweep["train_mask_tensor"].unsqueeze(0))
+            nir_img_tensor.append(cam_sweep["nir_img"].unsqueeze(0))
+        feat_int_tensor = torch.cat(feat_int_tensor).to(device)
+        feat_mask_tensor = torch.cat(feat_mask_tensor).to(device)
+        nir_img_tensor = torch.cat(nir_img_tensor).to(device)
+
     model_input = {
         "intrinsics": intrinsics,
         "intrinsics_up": intrinsics_up,
@@ -259,7 +278,10 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "masks": masks,
         "d_candi": d_candi,
         "d_candi_up": d_candi_up,
-        "dmaps_up": dmap_imgsizes
+        "dmaps_up": dmap_imgsizes,
+        "K_lc": K_lc,
+        "M_cam2LC": M_cam2LC,
+        "nir_img_tensor": nir_img_tensor,
     }
 
     gt_input = {
@@ -278,6 +300,8 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "rgb": rgb,
         "intrinsics": intrinsics,
         "intrinsics_up": intrinsics_up,
+        "feat_int_tensor": feat_int_tensor,
+        "feat_mask_tensor": feat_mask_tensor,
     }
 
     return model_input, gt_input
@@ -475,8 +499,10 @@ if __name__ == "__main__":
         #"split_path": "./kittiloader/k1/",
         #"dataset_path": "/home/raaj/adapfusion/kittiloader/kitti/",
         #"split_path": "./kittiloader/k2/",
-        "dataset_path": "/media/raaj/Storage/ilim/",
-        "split_path": "./kittiloader/ilim/",
+        # "dataset_path": "/media/raaj/Storage/ilim/",
+        # "split_path": "./kittiloader/ilim/",
+        "dataset_path": "/media/raaj/Storage/sweep_data/",
+        "split_path": "./kittiloader/sweep/",
         "total_processes": 1,
         "process_num": 0,
         "t_win_r": 1,
@@ -490,7 +516,7 @@ if __name__ == "__main__":
         "n_epoch": 1,
         "qmax": 1,
         "mode": "train",
-        "cfg": cfg
+        "cfg": cfg,
     }
 
     # Viz
@@ -533,7 +559,7 @@ if __name__ == "__main__":
             import time
             start = time.time()
 
-            model_input, gt_input = generate_stereo_input(0, local_info, cfg)
+            # model_input, gt_input = generate_stereo_input(0, local_info, cfg)
 
             end = time.time()
             print(end-start)
@@ -549,9 +575,9 @@ if __name__ == "__main__":
             right_model_input, right_gt_input = generate_model_input(0, local_info, cfg, camside="right")
             data = dict()
             data["left_img_prev"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][0]["left_camera"]["img"].squeeze(0))
-            data["left_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["left_camera"]["img"].squeeze(0))
+            #data["left_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["left_camera"]["img"].squeeze(0))
             data["right_img_prev"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][0]["right_camera"]["img"].squeeze(0))
-            data["right_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["right_camera"]["img"].squeeze(0))
+            #data["right_img_curr"] = img_utils.torchrgb_to_cv2(local_info["src_dats"][b][1]["right_camera"]["img"].squeeze(0))
             data["left2right"] = local_info["src_dats"][b][0]["T_left2right"]
             data["left_pose"] = local_info["left_src_cam_poses"][b][0,0,:,:]
             intrins = local_info["left_cam_intrins"][b]["intrinsic_M_cuda"]*4
@@ -590,26 +616,28 @@ if __name__ == "__main__":
                     cv2.waitKey(1)
                     cloud_refined_truth = img_utils.tocloud(depth_refined_truth, img_utils.demean(img_refined), intr_refined)
                     viz.addCloud(cloud_refined_truth, 1)
-                    
-            # # Visualize
-            global_item = []
-            for b in range(0, len(local_info["src_dats"])):
-                batch_item = []
-                for i in range(0, len(local_info["src_dats"][b])):
-                    if i > 1: continue
-                    batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
-                    break
-                for i in range(0, len(local_info["src_dats"][b])):
-                    if i > 1: continue
-                    batch_item.append(local_info["src_dats"][b][i]["right_camera"]["img"])
-                    break
-                batch_item = torch.cat(batch_item, dim = 3)
-                global_item.append(batch_item)
-            global_item = torch.cat(global_item, dim=2)
-            cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
-            cv2.waitKey(1)
+
             
+                    
+            # # # Visualize
+            # global_item = []
+            # for b in range(0, len(local_info["src_dats"])):
+            #     batch_item = []
+            #     for i in range(0, len(local_info["src_dats"][b])):
+            #         #if i > 1: continue
+            #         batch_item.append(local_info["src_dats"][b][i]["left_camera"]["img"])
+            #         break
+            #     for i in range(0, len(local_info["src_dats"][b])):
+            #         #if i > 1: continue
+            #         batch_item.append(local_info["src_dats"][b][i]["right_camera"]["img"])
+            #         break
+            #     batch_item = torch.cat(batch_item, dim = 3)
+            #     global_item.append(batch_item)
+            # global_item = torch.cat(global_item, dim=2)
+            # cv2.imshow("win", img_utils.torchrgb_to_cv2(global_item.squeeze(0)))
+
             viz.swapBuffer()
+            cv2.waitKey(0)
 
     print("Ended")
 
