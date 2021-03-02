@@ -21,14 +21,12 @@ import external.utils_lib.utils_lib as kittiutils
 import torch.nn.functional as F
 
 # Load
-sweep_arr = np.load("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/sweep/000014.npy").astype(np.float32)
-velodata = np.fromfile("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/lidar/000014.bin", dtype=np.float32).reshape((-1, 4))
-rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/left_img/000014.png")
-#rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/right_img/000014.png")
+sweep_arr = np.load("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/sweep/000055.npy").astype(np.float32)
+velodata = np.fromfile("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/lidar/000055.bin", dtype=np.float32).reshape((-1, 4))
+rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/left_img/000055.png")
+nirimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/nir_img/000055.png")
 rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-
-# print(rgbimg.shape)
-# stop
+nirimg = cv2.resize(nirimg, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
 
 """
 Speed up
@@ -62,34 +60,27 @@ K_lc /= 2
 K_lc[2,2] = 1.
 lc_size = [256, 320]
 
-# Right
-rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/right_img/000014.png")
-rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-M_velo2cam = np.array([[-0.08417412, -0.99644539, -0.00336614, -0.75311549],
- [ 0.18816988, -0.01257801, -0.98205594, -0.14401643],
- [ 0.97852276, -0.08329711,  0.18855976, -0.19474508],
- [ 0. ,         0.   ,       0.     ,     1.  ,      ]]).astype(np.float32)
-M_left2LC = np.array([[0.9985846877098083, 0.0018874829402193427, 0.0531516931951046, 0.07084044814109802], 
-[-0.0029097397346049547, 0.9998121857643127, 0.019162006676197052, 0.0055979466997087], 
-[-0.053105540573596954, -0.019289543852210045, 0.9984025955200195, 0.10840931534767151], 
-[0.0, 0.0, 0.0, 1.0]]).astype(np.float32)
-
-M_left2Right = np.array([[ 1.   ,       0.   ,       0.      ,   -0.74548137],
- [ 0.   ,       1.        ,  0.    ,      0.        ],
- [ 0.     ,     0.     ,     1.   ,       0.        ],
- [ 0.    ,      0.       ,   0.      ,    1.        ]]).astype(np.float32)
-M_right2Left = np.linalg.inv(M_left2Right)
-
-M_left2LC = np.matmul(M_right2Left, M_left2LC)
-
-# M_LC2left = np.linalg.inv(M_left2LC)
-# M_left2LC = np.matmul(M_right2Left, M_LC2left)
-
-# print(M_left2LC)
-# stop
+# # Right
+# rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/right_img/000014.png")
+# rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+# M_velo2cam = np.array([[-0.08417412, -0.99644539, -0.00336614, -0.75311549],
+#  [ 0.18816988, -0.01257801, -0.98205594, -0.14401643],
+#  [ 0.97852276, -0.08329711,  0.18855976, -0.19474508],
+#  [ 0. ,         0.   ,       0.     ,     1.  ,      ]]).astype(np.float32)
+# M_left2LC = np.array([[0.9985846877098083, 0.0018874829402193427, 0.0531516931951046, 0.07084044814109802], 
+# [-0.0029097397346049547, 0.9998121857643127, 0.019162006676197052, 0.0055979466997087], 
+# [-0.053105540573596954, -0.019289543852210045, 0.9984025955200195, 0.10840931534767151], 
+# [0.0, 0.0, 0.0, 1.0]]).astype(np.float32)
+# M_left2Right = np.array([[ 1.   ,       0.   ,       0.      ,   -0.74548137],
+#  [ 0.   ,       1.        ,  0.    ,      0.        ],
+#  [ 0.     ,     0.     ,     1.   ,       0.        ],
+#  [ 0.    ,      0.       ,   0.      ,    1.        ]]).astype(np.float32)
+# M_right2Left = np.linalg.inv(M_left2Right)
+# M_left2LC = np.matmul(M_right2Left, M_left2LC)
 
 # Undistort LC
 start = time.time()
+nirimg = cv2.undistort(nirimg, K_lc, D_lc)
 for i in range(0, sweep_arr.shape[0]):
     sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
     sweep_arr[i, :,:, 1] = cv2.undistort(sweep_arr[i, :,:, 1], K_lc, D_lc)
@@ -109,6 +100,13 @@ feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image =
     sweep_arr=sweep_arr, dmap_large=dmap_large, rgb_intr=large_intr, rgb_size=large_size, lc_intr=K_lc, lc_size=lc_size, M_left2LC=M_left2LC)
 end = time.time()
 print(end-start)
+
+# Reduce Tensor Size here itself?
+print(mask_tensor.shape)
+feat_int_tensor = F.interpolate(feat_int_tensor.unsqueeze(0), size=[64, 80], mode='nearest').squeeze(0)
+feat_z_tensor = F.interpolate(feat_z_tensor.unsqueeze(0), size=[64, 80], mode='nearest').squeeze(0)
+mask_tensor = F.interpolate(mask_tensor.unsqueeze(0), size=[64, 80], mode='nearest').squeeze(0)
+rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
 
 # During training we need to generate a mask to handle the nans. Basically we mask out those.
 # Create a mask volume for those nans?
