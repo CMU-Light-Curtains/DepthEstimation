@@ -876,7 +876,7 @@ class LightCurtain:
         z_img = depth_sensed.unsqueeze(-1)
         int_img = (int_sensed / 255.).unsqueeze(-1)
         unc_img = (thickness_sensed / 5.).unsqueeze(-1)
-        DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
+        mean_intensities, DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
         DPV = DPV.permute(2,0,1)
 
         # # Compute DPV (Approximated Implementation)
@@ -1103,7 +1103,7 @@ class LightCurtain:
         z_img = torch.tensor(depth_sensed).float().to(self.device).unsqueeze(-1)
         int_img = torch.tensor(int_sensed / 255.).float().to(self.device).unsqueeze(-1)
         unc_img = torch.tensor((thickness_sensed / 5) ** 2).float().to(self.device).unsqueeze(-1)
-        DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img*0+0.3, 0.1, 0.6)
+        mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img*0+0.3, 0.1, 0.6)
         DPV = DPV.permute(2,0,1)
 
         return DPV

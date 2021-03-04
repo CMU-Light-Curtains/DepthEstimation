@@ -145,7 +145,7 @@ def lc_intensities_to_dist(d_candi, placement, intensity, inten_sigma, noise_sig
     llhoods = logpdf(intensity, mean_intensities, noise_sigma)
     lse = torch.logsumexp(llhoods, dim=-1).unsqueeze(-1)
     norm_lhoods = torch.exp(llhoods - lse)
-    return norm_lhoods
+    return mean_intensities, norm_lhoods
 
 def eval_errors(errors):
     return dlib.evaluateErrors(errors)
