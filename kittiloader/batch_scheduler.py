@@ -256,7 +256,6 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
     if len(local_info_valid[camside + "_cam_sweep"][0]):
         for i in range(0, len(local_info_valid["src_dats"])):
             cam_sweep = local_info_valid[camside + "_cam_sweep"][i]
-            print(cam_sweep.keys())
             K_lc = cam_sweep["K_lc"]
             M_cam2LC = cam_sweep["M_cam2LC"]
             feat_int_tensor.append(cam_sweep["feat_int_tensor"].unsqueeze(0))

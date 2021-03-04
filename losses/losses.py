@@ -237,3 +237,50 @@ class DefaultLoss(nn.modules.Module):
         loss = left_loss + right_loss
 
         return loss
+
+class SweepLoss(nn.modules.Module):
+    def __init__(self, cfg, id):
+        super(SweepLoss, self).__init__()
+        self.cfg = cfg
+        self.id = id
+
+    def loss_function(self, output, target):
+
+        # print(output_left.keys()) # dict_keys(['output_refined', 'output'])
+        # print(target_left.keys()) # dict_keys(['d_candi', 'dmap_imgsizes', 'soft_labels_imgsize', 'T_left2right', 'rgb', 'feat_int_tensor', 'dmap_imgsize_digits', 'feat_mask_tensor', 'masks', 'dmaps_prev', 'dmap_digits', 'dmap_imgsizes_prev', 'dmaps', 'intrinsics', 'soft_labels', 'intrinsics_up', 'masks_imgsizes'])
+        
+
+        output_refined = output["output_refined"][0] # 1, 2, 256, 320
+        depth_map = target["dmap_imgsizes"] # 1, 256, 320
+        feat_int_tensor = target["feat_int_tensor"] # 1, 128, 256, 320
+        feat_mask_tensor = target["feat_mask_tensor"] # 1, 128, 256, 320
+        d_candi = target["d_candi"] # Double check that this is correct
+
+        """
+        
+        """
+
+        stop
+
+
+    def forward(self, output, target):
+        output_left, output_right = output
+        target_left, target_right = target
+
+
+        self.loss_function(output_left, target_left)
+        
+        stop
+
+        left_loss = 0.
+        right_loss = 0.
+        for b in range(0, len(target_left["soft_labels"])):
+            label_left = target_left["soft_labels"][b].unsqueeze(0)
+            label_right = target_right["soft_labels"][b].unsqueeze(0)
+
+            left_loss += torch.sum(torch.abs(output_left["output"][-1] - 0))
+            right_loss += torch.sum(torch.abs(output_right["output"][-1] - 0))
+
+        loss = left_loss + right_loss
+
+        return loss
