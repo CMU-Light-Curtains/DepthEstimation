@@ -3,7 +3,7 @@
     "exp_name": "default_sweep",
     "model_name": "sweep",
     "loss_name": "sweep",
-    "trainer_name": "default",
+    "trainer_name": "sweep",
     "dataset_path": "/media/raaj/Storage/sweep_data/",
     "dataset_split": "./kittiloader/sweep/"
   },

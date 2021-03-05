@@ -244,43 +244,62 @@ class SweepLoss(nn.modules.Module):
         self.cfg = cfg
         self.id = id
 
+    def loss(self, output, depth, feat_int, feat_mask, d_candi):
+        # Iterate Batch
+        loss = 0.
+        for i in range(0, output.shape[0]):
+
+            # Run Model
+            mean_intensities, DPV = img_utils.lc_intensities_to_dist(
+                d_candi = d_candi, 
+                placement = depth[i,:,:].unsqueeze(-1), 
+                intensity = 0, 
+                inten_sigma = output[i, 1, :, :].unsqueeze(-1), # Change
+                noise_sigma = 0.1, 
+                mean_scaling = output[i, 0, :, :].unsqueeze(-1)) # Change
+            mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
+
+            # Compute Error
+            gt = feat_int[i,:,:,:]/255.
+            pred = mean_intensities
+            mask = feat_mask[i,:,:,:].float()
+            loss += torch.sum(((gt-pred)**2)*mask)
+
+        return loss
+
     def loss_function(self, output, target):
 
-        # print(output_left.keys()) # dict_keys(['output_refined', 'output'])
-        # print(target_left.keys()) # dict_keys(['d_candi', 'dmap_imgsizes', 'soft_labels_imgsize', 'T_left2right', 'rgb', 'feat_int_tensor', 'dmap_imgsize_digits', 'feat_mask_tensor', 'masks', 'dmaps_prev', 'dmap_digits', 'dmap_imgsizes_prev', 'dmaps', 'intrinsics', 'soft_labels', 'intrinsics_up', 'masks_imgsizes'])
-        
+        # Get Large Params
+        output_large = output["output_refined"][0] # 1, 2, 256, 320
+        depth_map_large = target["dmap_imgsizes"] # 1, 256, 320
+        feat_int_tensor_large = target["feat_int_tensor"] # 1, 128, 256, 320
+        feat_mask_tensor_large = target["feat_mask_tensor"] # 1, 128, 256, 320
+        d_candi = torch.tensor(target["d_candi"]).float().to(output_large.device) # Double check that this is correct
 
-        output_refined = output["output_refined"][0] # 1, 2, 256, 320
-        depth_map = target["dmap_imgsizes"] # 1, 256, 320
-        feat_int_tensor = target["feat_int_tensor"] # 1, 128, 256, 320
-        feat_mask_tensor = target["feat_mask_tensor"] # 1, 128, 256, 320
-        d_candi = target["d_candi"] # Double check that this is correct
+        # Loss
+        large_loss = self.loss(output_large, depth_map_large, feat_int_tensor_large, feat_mask_tensor_large, d_candi)
 
-        """
-        
-        """
+        # Generate Small Params
+        output_small = output["output"][0] # 1, 2, 64, 80
+        depth_map_small = target["dmaps"] # 1, 64, 80
+        feat_int_tensor_small = F.interpolate(feat_int_tensor_large, size=[int(feat_int_tensor_large.shape[2]/4), int(feat_int_tensor_large.shape[3]/4)], mode='nearest')
+        feat_mask_tensor_small = F.interpolate(feat_mask_tensor_large, size=[int(feat_int_tensor_large.shape[2]/4), int(feat_int_tensor_large.shape[3]/4)], mode='nearest')
 
-        stop
+        # Loss
+        small_loss = self.loss(output_small, depth_map_small, feat_int_tensor_small, feat_mask_tensor_small, d_candi)
 
+        # Bsize
+        bsize = torch.tensor(float(output_large.shape[0] * 2)).to(output_large.device)
+
+        return (large_loss + small_loss) / bsize
 
     def forward(self, output, target):
         output_left, output_right = output
         target_left, target_right = target
 
-
-        self.loss_function(output_left, target_left)
+        left_loss = self.loss_function(output_left, target_left)
+        right_loss = self.loss_function(output_right, target_right)
         
-        stop
-
-        left_loss = 0.
-        right_loss = 0.
-        for b in range(0, len(target_left["soft_labels"])):
-            label_left = target_left["soft_labels"][b].unsqueeze(0)
-            label_right = target_right["soft_labels"][b].unsqueeze(0)
-
-            left_loss += torch.sum(torch.abs(output_left["output"][-1] - 0))
-            right_loss += torch.sum(torch.abs(output_right["output"][-1] - 0))
-
-        loss = left_loss + right_loss
+        loss = (left_loss + right_loss)
 
         return loss
