@@ -111,6 +111,25 @@ def edge_aware_smoothness_loss(pred_disp, img, max_scales):
 
     return loss
 
+def lc_stereo_consistency_loss(src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr):
+    # Warp
+    target_warped_rgb_img, valid_points = iv.inverse_warp(src_rgb_img, target_depth_map, pose_target2src, intr)
+
+    # Mask (Should just be doing top half and valid_points)
+    tophalf = torch.ones(valid_points.shape).bool().to(src_rgb_img.device);
+    tophalf[:, 0:int(tophalf.shape[1] / 2), :] = False
+    depth_mask = (target_depth_map > 0)
+    full_mask = valid_points & tophalf & depth_mask
+    full_mask = full_mask.float()
+    target_rgb_img = target_rgb_img * full_mask
+    target_warped_rgb_img = target_warped_rgb_img * full_mask
+
+    # Integrate loss here too and visualize for changing pose
+    diff_img = (target_rgb_img - target_warped_rgb_img).abs()  # [1, 3, 256, 384]
+    photo_error = mean_on_mask(diff_img, full_mask)
+
+    return photo_error
+
 def rgb_stereo_consistency_loss(src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr, viz=False):
     # Warp
     target_warped_rgb_img, valid_points = iv.inverse_warp(src_rgb_img, target_depth_map, pose_target2src, intr)

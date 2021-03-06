@@ -263,7 +263,7 @@ class SweepLoss(nn.modules.Module):
             gt = feat_int[i,:,:,:]/255.
             pred = mean_intensities
             mask = feat_mask[i,:,:,:].float()
-            loss += torch.sum(((gt-pred)**2)*mask)
+            loss += (torch.sum(((gt-pred)**2)*mask) / torch.sum(mask))*255
 
         return loss
 
@@ -288,18 +288,45 @@ class SweepLoss(nn.modules.Module):
         # Loss
         small_loss = self.loss(output_small, depth_map_small, feat_int_tensor_small, feat_mask_tensor_small, d_candi)
 
-        # Bsize
-        bsize = torch.tensor(float(output_large.shape[0] * 2)).to(output_large.device)
+        #print(large_loss, small_loss)
 
-        return (large_loss + small_loss) / bsize
+        return (large_loss + small_loss)
 
     def forward(self, output, target):
         output_left, output_right = output
         target_left, target_right = target
+        device = output_left["output_refined"][0].device
+        bsize = torch.tensor(float(output_left["output_refined"][0].shape[0] * 2)).to(device)
+        T_left2right = target_left["T_left2right"]
 
         left_loss = self.loss_function(output_left, target_left)
         right_loss = self.loss_function(output_right, target_right)
         
-        loss = (left_loss + right_loss)
+        # Consistency Loss (Just on high res)
+        rsc_loss = 0
+        pose_target2src = T_left2right
+        pose_target2src = torch.unsqueeze(pose_target2src, 0).to(device)
+        pose_src2target = torch.inverse(T_left2right)
+        pose_src2target = torch.unsqueeze(pose_src2target, 0).to(device)
+        c_loss = 0
+        for ibatch in range(int(bsize.item()/2)):
+            #if self.cfg.loss.rsc_mul == 0: break
+            intr_up_left = target_left["intrinsics_up"][ibatch, :, :].unsqueeze(0)
+            intr_up_right = target_right["intrinsics_up"][ibatch, :, :].unsqueeze(0)
+            depth_up_left = target_left["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
+            depth_up_right = target_right["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
+            rgb_up_left = output_left["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
+            rgb_up_right = output_right["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
+            # Right to Left
+            # src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr
+            c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_right, rgb_up_left, depth_up_left,
+                                                              pose_target2src,
+                                                              intr_up_left)
+            # Left to Right
+            c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_left, rgb_up_right, depth_up_right,
+                                                              pose_src2target,
+                                                              intr_up_right)
+        
+        loss = (left_loss + right_loss + c_loss)
 
-        return loss
+        return (loss / bsize)
