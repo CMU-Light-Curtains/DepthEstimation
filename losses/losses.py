@@ -303,7 +303,6 @@ class SweepLoss(nn.modules.Module):
         right_loss = self.loss_function(output_right, target_right)
         
         # Consistency Loss (Just on high res)
-        rsc_loss = 0
         pose_target2src = T_left2right
         pose_target2src = torch.unsqueeze(pose_target2src, 0).to(device)
         pose_src2target = torch.inverse(T_left2right)
@@ -327,6 +326,6 @@ class SweepLoss(nn.modules.Module):
                                                               pose_src2target,
                                                               intr_up_right)
         
-        loss = (left_loss + right_loss + c_loss)
+        loss = (left_loss + right_loss)
 
         return (loss / bsize)
