@@ -263,7 +263,8 @@ class SweepLoss(nn.modules.Module):
             gt = feat_int[i,:,:,:]/255.
             pred = mean_intensities
             mask = feat_mask[i,:,:,:].float()
-            loss += (torch.sum(((gt-pred)**2)*mask) / torch.sum(mask))*255
+            count = torch.sum(mask) + 1
+            loss += (torch.sum(((gt-pred)**2)*mask) / count)*255
 
         return loss
 
