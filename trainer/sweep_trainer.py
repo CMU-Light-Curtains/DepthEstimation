@@ -59,7 +59,7 @@ class SweepTrainer(BaseTrainer):
             "hack_num": 0,
             "batch_size": batch_size,
             "n_epoch": 1,
-            "qmax": 1,
+            "qmax": 3,
             "mode": "train",
             "cfg": self.cfg
         }

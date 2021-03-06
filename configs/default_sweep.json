@@ -44,7 +44,7 @@
     "epoch_num": 60,
     "lr": 1e-5,
     "momentum": 0.9,
-    "n_gpu": 4,
+    "n_gpu": 1,
     "optim": "adam",
     "bias_decay": 0,
     "weight_decay": 1e-06,
@@ -56,7 +56,7 @@
     "val_epoch_size": 1
   },
   "mp": {
-    "enabled": true,
+    "enabled": false,
     "master_addr": "localhost",
     "master_port": 8080,
     "workers": 4
