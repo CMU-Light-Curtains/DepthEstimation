@@ -238,7 +238,7 @@ class SweepTrainer(BaseTrainer):
                 pred = mean_intensities
                 mask = mask_large[:,:,:].float()
                 count = torch.sum(mask) + 1
-                loss += (torch.sum(((gt-pred)**2)*mask) / count)*255
+                loss = (torch.sum(((gt-pred)**2)*mask) / count)*255
 
                 errors.append(loss)
 
