@@ -16,6 +16,7 @@ def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_s
     # Convert to Torch
     sweep_arr_int = torch.tensor(sweep_arr[:,:,:,1]) # [128,640,512]
     sweep_arr_z = torch.tensor(sweep_arr[:,:,:,0]) # [128,640,512]
+    dmap_large = torch.tensor(dmap_large)
     lc_width, lc_height = lc_size
     dmap_width, dmap_height = rgb_size
 
