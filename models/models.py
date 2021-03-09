@@ -448,7 +448,10 @@ class BaseModel(nn.Module):
         self.D = self.cfg.var.ndepth
         self.bn_avg = self.cfg.var.bn_avg
         self.id = id
-
+        self.diffhomo = True
+        try: self.diffhomo = self.cfg.var.diffhomo
+        except: pass
+        
         # Encoder
         self.base_encoder = BaseEncoder(feature_dim = self.feature_dim, multi_scale = True, bn_running_avg = self.bn_avg)
         self.base_decoder = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
@@ -540,32 +543,37 @@ class BaseModel(nn.Module):
         # [4,2, 67,64,96]
 
         # Warp Cost Volume for each video batch
-        cost_volumes = []
-        for i in range(0, bsize):
+        if self.diffhomo:
+            cost_volumes = []
+            for i in range(0, bsize):
 
-            Rs_src = model_input["src_cam_poses"][i,:-1, :3,:3]
-            ts_src = model_input["src_cam_poses"][i,:-1, :3,3]
+                Rs_src = model_input["src_cam_poses"][i,:-1, :3,:3]
+                ts_src = model_input["src_cam_poses"][i,:-1, :3,3]
 
-            # [1,67,64,96]
-            feat_img_ref = feat_imgs_all[i,-1,:,:,:].unsqueeze(0)
-            feat_imgs_src = feat_imgs_all[i,:-1,:,:,:].unsqueeze(0)
+                # [1,67,64,96]
+                feat_img_ref = feat_imgs_all[i,-1,:,:,:].unsqueeze(0)
+                feat_imgs_src = feat_imgs_all[i,:-1,:,:,:].unsqueeze(0)
 
-            cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
-                              "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
-                              "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
+                cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
+                                "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
+                                "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
 
-            costV = warp_homo.est_swp_volume_v4( \
-                    feat_img_ref,
-                    feat_imgs_src,
-                    d_candi, Rs_src, ts_src,
-                    cam_intrinsics,
-                    self.sigma_soft_max,
-                    feat_dist = 'L2')
-            # [1,128,64,96]
+                costV = warp_homo.est_swp_volume_v4( \
+                        feat_img_ref,
+                        feat_imgs_src,
+                        d_candi, Rs_src, ts_src,
+                        cam_intrinsics,
+                        self.sigma_soft_max,
+                        feat_dist = 'L2')
+                # [1,128,64,96]
 
-            cost_volumes.append(costV)
+                cost_volumes.append(costV)
 
-        cost_volumes = torch.cat(cost_volumes, dim=0) # [4 128 64 96]
+            cost_volumes = torch.cat(cost_volumes, dim=0) # [4 128 64 96]
+        
+        # No Warp
+        else:
+            cost_volumes = feat_imgs_all[:,-1,:-3,:,:]
 
         # Refinement (3D Conv here or not)
         costv_out0 = self.conv0( cost_volumes )
@@ -598,32 +606,36 @@ class BaseModel(nn.Module):
         feat_raw_all = feat_raw.view(rgb.shape[0], rgb.shape[1], feat_raw.shape[1], feat_raw.shape[2], feat_raw.shape[3])
 
         # Warp Cost Volume for each video batch
-        cost_volumes = []
-        for i in range(0, bsize):
+        if self.diffhomo:
+            cost_volumes = []
+            for i in range(0, bsize):
 
-            Rs_src = model_input["src_cam_poses"][i,:-1, :3,:3]
-            ts_src = model_input["src_cam_poses"][i,:-1, :3,3]
+                Rs_src = model_input["src_cam_poses"][i,:-1, :3,:3]
+                ts_src = model_input["src_cam_poses"][i,:-1, :3,3]
 
-            # [1,67,64,96]
-            feat_img_ref = feat_imgs_all[i,-1,:,:,:].unsqueeze(0)
-            feat_imgs_src = feat_imgs_all[i,:-1,:,:,:].unsqueeze(0)
+                # [1,67,64,96]
+                feat_img_ref = feat_imgs_all[i,-1,:,:,:].unsqueeze(0)
+                feat_imgs_src = feat_imgs_all[i,:-1,:,:,:].unsqueeze(0)
 
-            cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
-                              "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
-                              "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
+                cam_intrinsics = {"intrinsic_M_cuda": model_input["intrinsics"][i,:,:],
+                                "intrinsic_M": model_input["intrinsics"][i,:,:].cpu().numpy(),
+                                "unit_ray_array_2D": model_input["unit_ray"][i,:,:]}
 
-            costV = warp_homo.est_swp_volume_v4( \
-                    feat_img_ref,
-                    feat_imgs_src,
-                    d_candi, Rs_src, ts_src,
-                    cam_intrinsics,
-                    self.sigma_soft_max,
-                    feat_dist = 'L2')
-            # [1,128,64,96]
+                costV = warp_homo.est_swp_volume_v4( \
+                        feat_img_ref,
+                        feat_imgs_src,
+                        d_candi, Rs_src, ts_src,
+                        cam_intrinsics,
+                        self.sigma_soft_max,
+                        feat_dist = 'L2')
+                # [1,128,64,96]
 
-            cost_volumes.append(costV)
+                cost_volumes.append(costV)
 
-        cost_volumes = torch.cat(cost_volumes, dim=0)  # [4 128 64 96]
+            cost_volumes = torch.cat(cost_volumes, dim=0)  # [4 128 64 96]
+        # No warp
+        else:
+            cost_volumes = feat_imgs_all[:,-1,:-3,:,:]
 
         # Warp raw feature?
         warped_features = []
