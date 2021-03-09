@@ -277,7 +277,7 @@ class SweepLoss(nn.modules.Module):
             peak_pred = output[i, 0, :, :] * 255
             img_loss = torch.sum(torch.abs(peak_gt - peak_pred)*mask.squeeze(0)) / img_count
 
-            #print(model_count, model_loss, img_loss)
+            # print(model_count, model_loss, img_loss)
 
             loss += (model_loss*self.cfg.loss.model_mult + img_loss*self.cfg.loss.img_mult)
 
@@ -336,6 +336,8 @@ class SweepLoss(nn.modules.Module):
             feat_mask_right = target_right["feat_mask_tensor"][ibatch, :, :]
             if(torch.sum(feat_mask_left) == 0 or torch.sum(feat_mask_right) == 0):
                 continue
+            if(torch.sum(depth_up_left) == 0 or torch.sum(depth_up_right) == 0):
+                continue
 
             # Right to Left
             # src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr
@@ -347,11 +349,11 @@ class SweepLoss(nn.modules.Module):
                                                               pose_src2target,
                                                               intr_up_right)
 
-        #print(c_loss)
+        # print(c_loss)
         
         loss = (left_loss + right_loss + c_loss*self.cfg.loss.c_mult)
 
-        # if(torch.isnan(loss)):
-        #     stop
+        if(torch.isnan(loss)):
+            stop
 
         return (loss / bsize)
