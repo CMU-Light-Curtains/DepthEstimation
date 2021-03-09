@@ -78,7 +78,7 @@ def load_datum(path, name, indx):
     return datum
 
 # Load
-datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_03_drive_0003_sweep", 1)
+datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 6)
 
 # Undistort LC
 datum.nir_img = cv2.undistort(datum.nir_img, datum.K_lc, datum.D_lc)
@@ -111,6 +111,10 @@ datum.left_feat_int_tensor, datum.left_feat_z_tensor, datum.left_mask_tensor, da
 datum.right_feat_int_tensor, datum.right_feat_z_tensor, datum.right_mask_tensor, datum.right_feat_mask_tensor, _ = img_utils.lcsweep_to_rgbsweep(
     sweep_arr=datum.sweep_arr, dmap_large=datum.right_depth, rgb_intr=datum.large_intr, rgb_size=datum.large_size, lc_intr=datum.K_lc, lc_size=datum.lc_size, M_left2LC=datum.M_right2LC)
 
+# fag = datum.left_feat_mask_tensor
+# fag[torch.isnan(datum.left_feat_mask_tensor)] = 1
+# datum.left_mask_tensor = (torch.sum(fag, dim=0) > 0).float()
+
 # Left
 feat_int_tensor = datum.left_feat_int_tensor
 feat_z_tensor = datum.left_feat_z_tensor
@@ -139,8 +143,8 @@ class Network():
         self.param = dict()
         self.param["d_candi"] = datum["d_candi"]
         self.param["size_rgb"] = datum["large_size"]
-        intrinsics = torch.tensor(datum["large_intr"])
-        intrinsics_up = torch.tensor(datum["large_intr"]).unsqueeze(0)
+        #intrinsics = torch.tensor(datum["large_intr"])[0:3,0:3]
+        intrinsics_up = torch.tensor(datum["large_intr"][0:3,0:3]).unsqueeze(0)
         intrinsics = intrinsics_up / 4; intrinsics[0,2,2] = 1.
         s_width = datum["large_size"][0]/4
         s_height = datum["large_size"][1]/4
@@ -189,6 +193,8 @@ class Network():
             model_name = 'default_stereo_exp7_lc_ilim'
         elif self.mode == 'lc':
             model_name = 'default_sweep'
+        elif self.mode == 'mono_318':
+            model_name = 'default_exp7_lc_ilim_318'
         cfg_path = 'configs/' + model_name + '.json'
         model_path = ''
         with open(cfg_path) as f:
@@ -224,16 +230,42 @@ class Network():
         output_refined = output["output_refined"][-1]
         return output_refined
 
+# RGB Network
+depth_network = Network(datum, mode='mono_318')
+depth_network.set_lc_params(datum['left_img'])
+dpv_output = depth_network.run_lc_network()
+depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
+unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_output, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=True, 
+                                cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
+dpv_truth = img_utils.gen_dpv_withmask(torch.tensor(datum["left_depth"]).unsqueeze(0), (torch.tensor(datum["left_depth"]) > 0).float().unsqueeze(0).unsqueeze(0), depth_network.model_datum["d_candi"])
+unc_field_truth, _ = img_utils.gen_ufield(dpv_truth, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=False, 
+                                cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
+
+# Visualize Top Down
+field_visual = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
+field_visual[:,:,0] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
+field_visual[:,:,1] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
+field_visual[:,:,2] = unc_field_truth[0,:,:].detach().cpu().numpy()*3
+field_visual = cv2.resize(field_visual, None, fx=1, fy=2, interpolation = cv2.INTER_CUBIC)
+rgb_debug = datum["left_img"].copy().astype(np.float32)/255
+rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
+cv2.imshow("field_visual", field_visual)
+cv2.imshow("depth_output", depth_output.squeeze(0).detach().cpu().numpy()/100)
+cv2.imshow("rgb_debug", rgb_debug)
+cv2.waitKey(0)
+"""
+Train a default model that strictly does 318 disable other losses and only uses one image 
+Transfer learn to ILIM that mixes our data too
+"""
+LOOK AT TODO
+
 # LC Network
 lc_network = Network(datum, mode='lc')
 lc_network.set_lc_params(datum["left_img"])
 lc_output = lc_network.run_lc_network().detach().cpu().squeeze(0)
-print(lc_output.shape)
 
 # LC Model Test
-
-# LC Model Test
-d_candi = img_utils.powerf(3, 18, 128, 1.0)
+d_candi = datum["d_candi_up"]
 peak_gt = torch.max(feat_int_tensor, dim=0)[0] / 255
 peak_pred = lc_output[0,:,:]
 sigma_pred = lc_output[1,:,:]
