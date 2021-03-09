@@ -951,6 +951,7 @@ class KITTI_dataset(data.Dataset):
             # Store
             sweep_data["feat_int_tensor"] = feat_int_tensor
             sweep_data["train_mask_tensor"] = train_mask_tensor
+            sweep_data["mask_tensor"] = mask_tensor
             sweep_data["M_cam2LC"] = M_left2LC
             sweep_data["K_lc"] = K_lc
             sweep_data["nir_img"] = nir_img

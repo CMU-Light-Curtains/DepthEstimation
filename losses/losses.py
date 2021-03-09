@@ -244,10 +244,16 @@ class SweepLoss(nn.modules.Module):
         self.cfg = cfg
         self.id = id
 
-    def loss(self, output, depth, feat_int, feat_mask, d_candi):
+    def loss(self, output, depth, feat_int, feat_masks, masks, d_candi):
         # Iterate Batch
         loss = 0.
         for i in range(0, output.shape[0]):
+
+            # Ignore data who is nothing
+            feat_mask = feat_masks[i,:,:,:].float()
+            mask = masks[i,:,:,:].float()
+            if(torch.sum(feat_mask) == 0):
+                continue
 
             # Run Model
             mean_intensities, DPV = img_utils.lc_intensities_to_dist(
@@ -262,14 +268,16 @@ class SweepLoss(nn.modules.Module):
             # Compute Error
             gt = feat_int[i,:,:,:]
             pred = mean_intensities * 255
-            mask = feat_mask[i,:,:,:].float()
-            count = torch.sum(mask) + 1
-            model_loss = (torch.sum(((gt-pred)**2)*mask) / count)
+            model_count = torch.sum(feat_mask)
+            model_loss = (torch.sum(((gt-pred)**2)*feat_mask) / model_count)
 
             # L1 image error
+            img_count = torch.sum(mask)
             peak_gt = torch.max(feat_int[i, :, :, :], dim=0)[0]
             peak_pred = output[i, 0, :, :] * 255
-            img_loss = torch.sum(torch.abs(peak_gt - peak_pred)) / count
+            img_loss = torch.sum(torch.abs(peak_gt - peak_pred)*mask.squeeze(0)) / img_count
+
+            #print(model_count, model_loss, img_loss)
 
             loss += (model_loss*self.cfg.loss.model_mult + img_loss*self.cfg.loss.img_mult)
 
@@ -282,19 +290,21 @@ class SweepLoss(nn.modules.Module):
         depth_map_large = target["dmap_imgsizes"] # 1, 256, 320
         feat_int_tensor_large = target["feat_int_tensor"] # 1, 128, 256, 320
         feat_mask_tensor_large = target["feat_mask_tensor"] # 1, 128, 256, 320
+        mask_tensor_large = target["mask_tensor"] # 1, 128, 256, 320
         d_candi = torch.tensor(target["d_candi"]).float().to(output_large.device) # Double check that this is correct
 
         # Loss
-        large_loss = self.loss(output_large, depth_map_large, feat_int_tensor_large, feat_mask_tensor_large, d_candi)
+        large_loss = self.loss(output_large, depth_map_large, feat_int_tensor_large, feat_mask_tensor_large, mask_tensor_large, d_candi)
 
         # Generate Small Params
         output_small = output["output"][0] # 1, 2, 64, 80
         depth_map_small = target["dmaps"] # 1, 64, 80
         feat_int_tensor_small = F.interpolate(feat_int_tensor_large, size=[int(feat_int_tensor_large.shape[2]/4), int(feat_int_tensor_large.shape[3]/4)], mode='nearest')
         feat_mask_tensor_small = F.interpolate(feat_mask_tensor_large, size=[int(feat_int_tensor_large.shape[2]/4), int(feat_int_tensor_large.shape[3]/4)], mode='nearest')
+        mask_tensor_small = F.interpolate(mask_tensor_large, size=[int(feat_int_tensor_large.shape[2]/4), int(feat_int_tensor_large.shape[3]/4)], mode='nearest')
 
         # Loss
-        small_loss = self.loss(output_small, depth_map_small, feat_int_tensor_small, feat_mask_tensor_small, d_candi)
+        small_loss = self.loss(output_small, depth_map_small, feat_int_tensor_small, feat_mask_tensor_small, mask_tensor_small, d_candi)
 
         return (large_loss + small_loss)
 
@@ -322,6 +332,11 @@ class SweepLoss(nn.modules.Module):
             depth_up_right = target_right["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
             rgb_up_left = output_left["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
             rgb_up_right = output_right["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
+            feat_mask_left = target_left["feat_mask_tensor"][ibatch, :, :]
+            feat_mask_right = target_right["feat_mask_tensor"][ibatch, :, :]
+            if(torch.sum(feat_mask_left) == 0 or torch.sum(feat_mask_right) == 0):
+                continue
+
             # Right to Left
             # src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr
             c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_right, rgb_up_left, depth_up_left,
@@ -331,7 +346,12 @@ class SweepLoss(nn.modules.Module):
             c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_left, rgb_up_right, depth_up_right,
                                                               pose_src2target,
                                                               intr_up_right)
+
+        #print(c_loss)
         
         loss = (left_loss + right_loss + c_loss*self.cfg.loss.c_mult)
+
+        # if(torch.isnan(loss)):
+        #     stop
 
         return (loss / bsize)

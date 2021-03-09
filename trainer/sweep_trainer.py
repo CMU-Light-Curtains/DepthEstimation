@@ -243,9 +243,11 @@ class SweepTrainer(BaseTrainer):
                 model_errors.append(model_error)
                 
                 # Img Error
+                img_mask = gt_input_left["mask_tensor"][b, :, :, :]
+                img_count = torch.sum(img_mask)
                 peak_gt = torch.max(gt_large, dim=0)[0]
                 peak_pred = output_large[0, :, :] * 255
-                img_error = torch.sum(torch.abs(peak_gt - peak_pred)) / count
+                img_error = torch.sum(torch.abs(peak_gt - peak_pred)*img_mask.squeeze(0)) / img_count
                 img_errors.append(img_error)
 
             # String
