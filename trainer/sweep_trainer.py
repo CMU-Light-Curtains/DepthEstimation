@@ -25,7 +25,8 @@ class SweepTrainer(BaseTrainer):
         if self.id == 0:
             self.foutput = {
                 "name": self.cfg.data.exp_name,
-                "error": []
+                "model_error": [],
+                "img_error": []
             }
 
         # Create all variables here
@@ -172,7 +173,8 @@ class SweepTrainer(BaseTrainer):
         self.model.eval()
 
         # Variables
-        errors = []
+        model_errors = []
+        img_errors = []
 
         # Iterate Train Loader
         for items in self.val_loader.enumerate():
@@ -215,7 +217,6 @@ class SweepTrainer(BaseTrainer):
                 self.visualize(model_input_left, gt_input_left, output_left)
 
             # Eval
-            
             for b in range(0, output_left["output"][-1].shape[0]):
                 output_large = output_left["output_refined"][-1][b, :, :, :]
                 gt_large = gt_input_left["feat_int_tensor"][b, :, :, :]
@@ -234,13 +235,18 @@ class SweepTrainer(BaseTrainer):
                 mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
 
                 # Compute Error
-                gt = gt_large[:,:,:]/255.
-                pred = mean_intensities
+                gt = gt_large[:,:,:]
+                pred = mean_intensities * 255
                 mask = mask_large[:,:,:].float()
                 count = torch.sum(mask) + 1
-                loss = (torch.sum(((gt-pred)**2)*mask) / count)*255
-
-                errors.append(loss)
+                model_error = (torch.sum(((gt-pred)**2)*mask) / count)
+                model_errors.append(model_error)
+                
+                # Img Error
+                peak_gt = torch.max(gt_large, dim=0)[0]
+                peak_pred = output_large[0, :, :] * 255
+                img_error = torch.sum(torch.abs(peak_gt - peak_pred)) / count
+                img_errors.append(img_error)
 
             # String
             loader_str = 'Val batch %d / %d, frame_count: %d / %d' \
@@ -249,9 +255,10 @@ class SweepTrainer(BaseTrainer):
             self.i_iter += 1
 
         # Evaluate Errors
-        error = torch.mean(torch.tensor(errors))
-        error_keys = ["error"]
-        error_list = [error]
+        model_errors = torch.mean(torch.tensor(model_errors))
+        img_errors = torch.mean(torch.tensor(img_errors))
+        error_keys = ["model_error", "img_error"]
+        error_list = [model_errors, img_errors]
 
         # Copy to Shared
         for i, e in enumerate(error_list):
@@ -265,7 +272,7 @@ class SweepTrainer(BaseTrainer):
             print(error_list)
 
         # Save Model (Only First ID)
-        self.save_model(error, self.cfg.data.exp_name)
+        self.save_model(model_errors.item(), self.cfg.data.exp_name)
 
         # Log
         if self.id == 0:
@@ -302,6 +309,25 @@ class SweepTrainer(BaseTrainer):
         
     def visualize(self, model_input, gt_input, output):
         import cv2
+
+        # Eval
+        for b in range(0, output["output"][-1].shape[0]):
+            output_large = output["output_refined"][-1][b, :, :, :]
+            feat_int_tensor = gt_input["feat_int_tensor"][b, :, :, :]
+            feat_mask_tensor = gt_input["feat_mask_tensor"][b, :, :, :]
+            depth_large = gt_input["dmap_imgsizes"][b, :, :]
+            d_candi = torch.tensor(gt_input["d_candi"]).float().to(output_large.device)
+            img_refined = model_input["rgb"][b, -1, :, :, :].cpu()  # [1,3,256,384]
+            img_color = img_utils.torchrgb_to_cv2(img_refined)
+
+            # Visualize
+            pred_gt = output_large[0,:,:].cpu().numpy()
+            peak_gt = (torch.max(feat_int_tensor, dim=0)[0] / 255).cpu().numpy()
+            img_color[:,:,0] += peak_gt*10
+            cv2.imshow("img_color", img_color)
+            cv2.imshow("peak_gt", peak_gt)
+            cv2.imshow("pred_gt", pred_gt)
+            cv2.waitKey(0)
 
         # Eval
         for b in range(0, output["output"][-1].shape[0]):

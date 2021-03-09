@@ -2,6 +2,7 @@
 import numpy as np
 import time
 import cv2
+import math
 
 # Custom
 try:
@@ -21,6 +22,11 @@ import external.utils_lib.utils_lib as kittiutils
 import torch.nn.functional as F
 import json
 from easydict import EasyDict
+import warping.view as View
+import torchvision.transforms as transforms
+from models.get_model import get_model
+from utils.torch_utils import bias_parameters, weight_parameters, \
+    load_checkpoint, save_checkpoint, AdamW
 
 def load_datum(path, name, indx):
     datum = dict()
@@ -64,13 +70,15 @@ def load_datum(path, name, indx):
     datum["lc_size"] = [256, 320]
     datum["M_velo2right"] = np.matmul(datum["M_left2right"], datum["M_velo2left"])
     datum["M_velo2LC"] = np.matmul(datum["M_left2LC"], datum["M_velo2left"])
+    datum["d_candi"] = img_utils.powerf(3, 18, 64, 1.)
+    datum["d_candi_up"] = img_utils.powerf(3, 18, 128, 1.)
 
     # Easydict
     datum = EasyDict(datum)
     return datum
 
 # Load
-datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 6)
+datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_03_drive_0003_sweep", 1)
 
 # Undistort LC
 datum.nir_img = cv2.undistort(datum.nir_img, datum.K_lc, datum.D_lc)
@@ -84,17 +92,17 @@ datum["left_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr
 datum["right_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr, datum.M_velo2right, datum.large_size[0], datum.large_size[1], large_params)
 datum["lc_depth"] = kittiutils.generate_depth(datum.velodata, datum.K_lc, datum.M_velo2LC, datum.lc_size[0], datum.lc_size[1], large_params)
 
-# Visualize Depth Check
-left_depth_debug = datum.left_img.copy().astype(np.float32)/255
-left_depth_debug[:,:,0] += datum.left_depth
-right_depth_debug = datum.right_img.copy().astype(np.float32)/255
-right_depth_debug[:,:,0] += datum.right_depth
-lc_depth_debug = datum.nir_img.copy().astype(np.float32)/255
-lc_depth_debug[:,:,0] += datum.lc_depth
-cv2.imshow("left_depth", left_depth_debug)
-cv2.imshow("right_depth", right_depth_debug)
-cv2.imshow("lc_depth", lc_depth_debug)
-cv2.waitKey(1)
+# # Visualize Depth Check
+# left_depth_debug = datum.left_img.copy().astype(np.float32)/255
+# left_depth_debug[:,:,0] += datum.left_depth
+# right_depth_debug = datum.right_img.copy().astype(np.float32)/255
+# right_depth_debug[:,:,0] += datum.right_depth
+# lc_depth_debug = datum.nir_img.copy().astype(np.float32)/255
+# lc_depth_debug[:,:,0] += datum.lc_depth
+# cv2.imshow("left_depth", left_depth_debug)
+# cv2.imshow("right_depth", right_depth_debug)
+# cv2.imshow("lc_depth", lc_depth_debug)
+# cv2.waitKey(1)
 
 # Compute
 start = time.time()
@@ -103,13 +111,14 @@ datum.left_feat_int_tensor, datum.left_feat_z_tensor, datum.left_mask_tensor, da
 datum.right_feat_int_tensor, datum.right_feat_z_tensor, datum.right_mask_tensor, datum.right_feat_mask_tensor, _ = img_utils.lcsweep_to_rgbsweep(
     sweep_arr=datum.sweep_arr, dmap_large=datum.right_depth, rgb_intr=datum.large_intr, rgb_size=datum.large_size, lc_intr=datum.K_lc, lc_size=datum.lc_size, M_left2LC=datum.M_right2LC)
 
+# Left
 feat_int_tensor = datum.left_feat_int_tensor
 feat_z_tensor = datum.left_feat_z_tensor
 mask_tensor = datum.left_mask_tensor
 feat_mask_tensor = datum.left_feat_mask_tensor
 rgb_img = datum.left_img
 depth_img = torch.tensor(datum.left_depth)
-#############
+# Right
 # feat_int_tensor = datum.right_feat_int_tensor
 # feat_z_tensor = datum.right_feat_z_tensor
 # mask_tensor = datum.right_mask_tensor
@@ -117,14 +126,130 @@ depth_img = torch.tensor(datum.left_depth)
 # rgb_img = datum.right_img
 # depth_img = datum.right_depth
 
+# Setup LC Model
+class Network():
+    def __init__(self, datum, mode="lc"):
+        self.transforms = None
+        self.index = 0
+        self.prev_index = -1
+        self.just_started = True
+        self.mode = mode
+
+        # Gen Model Datum
+        self.param = dict()
+        self.param["d_candi"] = datum["d_candi"]
+        self.param["size_rgb"] = datum["large_size"]
+        intrinsics = torch.tensor(datum["large_intr"])
+        intrinsics_up = torch.tensor(datum["large_intr"]).unsqueeze(0)
+        intrinsics = intrinsics_up / 4; intrinsics[0,2,2] = 1.
+        s_width = datum["large_size"][0]/4
+        s_height = datum["large_size"][1]/4
+        focal_length = np.mean([intrinsics_up[0,0,0], intrinsics_up[0,1,1]])
+        h_fov = math.degrees(math.atan(intrinsics_up[0,0, 2] / intrinsics_up[0,0, 0]) * 2)
+        v_fov = math.degrees(math.atan(intrinsics_up[0,1, 2] / intrinsics_up[0,1, 1]) * 2)
+        pixel_to_ray_array = View.normalised_pixel_to_ray_array(\
+                width= int(s_width), height= int(s_height), hfov = h_fov, vfov = v_fov,
+                normalize_z = True)
+        pixel_to_ray_array_2dM = np.reshape(np.transpose( pixel_to_ray_array, axes= [2,0,1] ), [3, -1])
+        pixel_to_ray_array_2dM = torch.from_numpy(pixel_to_ray_array_2dM.astype(np.float32)).unsqueeze(0)
+        left_2_right = torch.tensor(datum["M_left2right"])
+        if self.mode == "stereo" or self.mode == "stereo_lc":
+            src_cam_poses = torch.cat([left_2_right.unsqueeze(0), torch.eye(4).unsqueeze(0)]).unsqueeze(0)
+        elif self.mode == "mono" or self.mode == "mono_lc":
+            src_cam_poses = torch.cat([torch.eye(4).unsqueeze(0), torch.eye(4).unsqueeze(0)]).unsqueeze(0)
+        else:
+            src_cam_poses = torch.cat([torch.eye(4).unsqueeze(0), torch.eye(4).unsqueeze(0)]).unsqueeze(0)
+        self.model_datum = dict()
+        self.model_datum["intrinsics"] = intrinsics.cuda()
+        self.model_datum["intrinsics_up"] = intrinsics_up.cuda()
+        self.model_datum["unit_ray"] = pixel_to_ray_array_2dM.cuda()
+        self.model_datum["src_cam_poses"] = src_cam_poses.cuda()
+        self.model_datum["d_candi"] = self.param["d_candi"]
+        self.model_datum["d_candi_up"] = self.param["d_candi"]
+        self.model_datum["rgb"] = None
+        self.model_datum["prev_output"] = None
+        self.model_datum["prev_lc"] = None
+        self.rgb_pinned = torch.zeros((1,2,3,self.param["size_rgb"][1], self.param["size_rgb"][0])).float().pin_memory()
+        self.dpv_pinned = torch.zeros((1,64,int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        self.pred_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        self.true_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        self.unc_pinned = torch.zeros(1,64, int(self.param["size_rgb"][0])).float().pin_memory()
+        __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
+                            'std': [0.229, 0.224, 0.225]}
+        self.transformer = transforms.Normalize(**__imagenet_stats)
+
+        # Load Model
+        if self.mode == "stereo":
+            model_name = 'default_stereo_ilim'
+        elif self.mode == "mono":
+            model_name = 'default_ilim'
+        elif self.mode == "mono_lc":
+            model_name = 'default_exp7_lc_ilim'
+        elif self.mode == 'stereo_lc':
+            model_name = 'default_stereo_exp7_lc_ilim'
+        elif self.mode == 'lc':
+            model_name = 'default_sweep'
+        cfg_path = 'configs/' + model_name + '.json'
+        model_path = ''
+        with open(cfg_path) as f:
+            self.cfg = EasyDict(json.load(f))
+        self.model = get_model(self.cfg, 0)
+        epoch, weights = load_checkpoint('outputs/checkpoints/' + model_name + '/' + model_name + '_model_best.pth.tar')
+        from collections import OrderedDict
+        new_weights = OrderedDict()
+        model_keys = list(self.model.state_dict().keys())
+        weight_keys = list(weights.keys())
+        for a, b in zip(model_keys, weight_keys):
+            new_weights[a] = weights[b]
+        weights = new_weights
+        self.model.load_state_dict(weights)
+        self.model = self.model.cuda()
+        self.model.eval()
+        print("Model Loaded")
+
+    def set_lc_params(self, img1):
+        image = (img1.astype(np.float32))/255.
+        inp1 = torch.tensor(image).permute(2,0,1)
+        inp1 = inp1[[2,1,0], :, :]
+        inp1 = self.transformer(inp1)
+        inp2 = torch.tensor(image).permute(2,0,1)
+        inp2 = inp2[[2,1,0], :, :]
+        inp2 = self.transformer(inp2)
+        self.rgb_pinned[:] = torch.cat([inp1.unsqueeze(0), inp2.unsqueeze(0)]).unsqueeze(0)
+        self.model_datum["rgb"] = self.rgb_pinned.cuda(non_blocking=False)
+
+    def run_lc_network(self):
+        self.model.eval()
+        output = self.model([self.model_datum])[0]
+        output_refined = output["output_refined"][-1]
+        return output_refined
+
+# LC Network
+lc_network = Network(datum, mode='lc')
+lc_network.set_lc_params(datum["left_img"])
+lc_output = lc_network.run_lc_network().detach().cpu().squeeze(0)
+print(lc_output.shape)
+
+# LC Model Test
+
 # LC Model Test
 d_candi = img_utils.powerf(3, 18, 128, 1.0)
-mean_scaling, _  = torch.max(feat_int_tensor, dim=0)
+peak_gt = torch.max(feat_int_tensor, dim=0)[0] / 255
+peak_pred = lc_output[0,:,:]
+sigma_pred = lc_output[1,:,:]
+inten_sigma = torch.ones(peak_gt.shape)
+mean_scaling = peak_gt
 mean_intensities, _ = img_utils.lc_intensities_to_dist(d_candi=feat_z_tensor.permute(1,2,0), placement=depth_img.unsqueeze(-1), 
-intensity=0, inten_sigma=0.5, noise_sigma=0.1, mean_scaling=mean_scaling.unsqueeze(-1)/255)
+intensity=0, inten_sigma=inten_sigma.unsqueeze(-1), noise_sigma=0.1, mean_scaling=mean_scaling.unsqueeze(-1))
 mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
 
-# Instead of d_candi, i want to use the true pixel depth is that possible (yes)
+# # Viz Peak?
+# print(torch.sum(peak_gt))
+# print(torch.sum(peak_pred))
+cv2.imshow("peak_gt", peak_gt.cpu().numpy())
+cv2.imshow("peak_pred", peak_pred.cpu().numpy())
+#cv2.imshow("sigma_pred", sigma_pred.cpu().numpy())
+cv2.waitKey(0)
 
 # Plotting
 import random
@@ -146,7 +271,6 @@ def mouse_callback(event,x,y,flags,param):
 
         plt.figure(0)
         plt.plot(disp_z, disp_i, c=rgb, marker='*')
-
         #plt.figure(1)
         plt.plot(d_candi, mean_intensities[:,y,x], c=rgb, marker='*')
 
@@ -160,117 +284,11 @@ while 1:
     cv2.waitKey(15)
 
 
-##########################################################################
-
-stop
-
-#dmap_large = torch.tensor(dmap_large)
-
-
-
-stop
-
-
-# Need to figure out how to load some of the networks too
-
-# Load
-sweep_arr = np.load("/media/raaj/Storage/sweep_data/2021_03_05/2021_03_05_drive_0004_sweep/sweep/000021.npy").astype(np.float32)
-velodata = np.fromfile("/media/raaj/Storage/sweep_data/2021_03_05/2021_03_05_drive_0004_sweep/lidar/000021.bin", dtype=np.float32).reshape((-1, 4))
-rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_03_05/2021_03_05_drive_0004_sweep/left_img/000021.png")
-nirimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_03_05/2021_03_05_drive_0004_sweep/nir_img/000021.png")
-rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-nirimg = cv2.resize(nirimg, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-
-
-"""
-Speed up
-Make the true mask tensor
-Integrate with KITTI
-Check if right image works fine by putting viz code etc.
-Try to speed up code
-"""
-
-# Params
-large_intr = np.array([[189.3673075,   0.,        184.471915,    0.       ],
- [  0.,        189.3673075, 131.7250825,   0.       ],
- [  0.,          0.,          1.,          0.,       ]]).astype(np.float32)
-M_velo2cam = np.array([[-0.08417412, -0.99644539, -0.00336614, -0.00763412],
- [ 0.18816988, -0.01257801, -0.98205594, -0.14401643],
- [ 0.97852276, -0.08329711,  0.18855976, -0.19474508],
- [ 0.,          0.,          0.,          1.        ]]).astype(np.float32)
-large_size = [320, 256]
-K_lc = np.array([
-    [893.074542/2, 0.000000, 524.145998/2],
-    [0.000000, 893.177518/2, 646.766885/2],
-    [0.000000, 0.000000, 1.000000]
-]).astype(np.float32)
-D_lc = np.array([-0.033918, 0.027494, -0.001691, -0.001078, 0.000000]).astype(np.float32)
-M_left2LC = np.array([[0.9985846877098083, 0.0018874829402193427, 0.0531516931951046, 0.07084044814109802], 
-[-0.0029097397346049547, 0.9998121857643127, 0.019162006676197052, 0.0055979466997087], 
-[-0.053105540573596954, -0.019289543852210045, 0.9984025955200195, 0.10840931534767151], 
-[0.0, 0.0, 0.0, 1.0]]).astype(np.float32)
-# Half the LC Int
-K_lc /= 2
-K_lc[2,2] = 1.
-lc_size = [256, 320]
-
-# # Right
-# rgbimg = cv2.imread("/media/raaj/Storage/sweep_data/2021_02_25/2021_02_25_drive_0003_sweep/right_img/000014.png")
-# rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-# M_velo2cam = np.array([[-0.08417412, -0.99644539, -0.00336614, -0.75311549],
-#  [ 0.18816988, -0.01257801, -0.98205594, -0.14401643],
-#  [ 0.97852276, -0.08329711,  0.18855976, -0.19474508],
-#  [ 0. ,         0.   ,       0.     ,     1.  ,      ]]).astype(np.float32)
-# M_left2LC = np.array([[0.9985846877098083, 0.0018874829402193427, 0.0531516931951046, 0.07084044814109802], 
-# [-0.0029097397346049547, 0.9998121857643127, 0.019162006676197052, 0.0055979466997087], 
-# [-0.053105540573596954, -0.019289543852210045, 0.9984025955200195, 0.10840931534767151], 
-# [0.0, 0.0, 0.0, 1.0]]).astype(np.float32)
-# M_left2Right = np.array([[ 1.   ,       0.   ,       0.      ,   -0.74548137],
-#  [ 0.   ,       1.        ,  0.    ,      0.        ],
-#  [ 0.     ,     0.     ,     1.   ,       0.        ],
-#  [ 0.    ,      0.       ,   0.      ,    1.        ]]).astype(np.float32)
-# M_right2Left = np.linalg.inv(M_left2Right)
-# M_left2LC = np.matmul(M_right2Left, M_left2LC)
-
-# Undistort LC
-start = time.time()
-nirimg = cv2.undistort(nirimg, K_lc, D_lc)
-for i in range(0, sweep_arr.shape[0]):
-    sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
-    sweep_arr[i, :,:, 1] = cv2.undistort(sweep_arr[i, :,:, 1], K_lc, D_lc)
-end = time.time()
-print(end-start)
-
-# Generate Depth maps
-large_params = {"filtering": 2, "upsample": 0}
-dmap_large = kittiutils.generate_depth(velodata, large_intr, M_velo2cam, large_size[0], large_size[1], large_params)
-dmap_large = torch.tensor(dmap_large)
-dmap_height = dmap_large.shape[0]
-dmap_width = dmap_large.shape[1]
-
-# Compute
-start = time.time()
-feat_int_tensor, feat_z_tensor, mask_tensor, feat_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
-    sweep_arr=sweep_arr, dmap_large=dmap_large, rgb_intr=large_intr, rgb_size=large_size, lc_intr=K_lc, lc_size=lc_size, M_left2LC=M_left2LC)
-end = time.time()
-print(end-start)
-
-# Testing
-dmap_large = torch.tensor(dmap_large)
-print(feat_int_tensor.shape)
-print(feat_z_tensor.shape)
-print(dmap_large.shape)
-"""
-Objective is give, the dmap, i want to sample from feat_int_tensor
-"""
-
 # Gather Operation
 # feat_z_tensor_temp = feat_z_tensor.clone()
 # feat_z_tensor_temp[torch.isnan(feat_z_tensor)] = 1000
 # inds = torch.argmin(torch.abs(dmap_large.reshape(1, 256, 320) - feat_z_tensor_temp), dim=0)  # (320, 240)
 # result = torch.gather(feat_int_tensor, 0, inds.unsqueeze(0))
-
-
 #result = torch.gather(intensity_values, 0, inds.unsqueeze(0))
 
 # # Reduce Tensor Size here itself?
@@ -279,104 +297,3 @@ Objective is give, the dmap, i want to sample from feat_int_tensor
 # feat_z_tensor = F.interpolate(feat_z_tensor.unsqueeze(0), size=[64, 80], mode='nearest').squeeze(0)
 # mask_tensor = F.interpolate(mask_tensor.unsqueeze(0), size=[64, 80], mode='nearest').squeeze(0)
 # rgbimg = cv2.resize(rgbimg, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-
-# def loss_test(output, depth, feat_int, feat_mask, d_candi, position=(100,100)):
-#     print(output.shape) # [1, 2, 256, 320]
-#     print(depth.shape) # [1, 256, 320])
-#     print(feat_int.shape) # [1, 128, 256, 320]
-#     print(feat_mask.shape) # [1, 128, 256, 320]
-#     print(d_candi.shape)
-#     x,y = position
-
-#     """
-#     mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img*0+0.3, 0.1, 0.6)
-#     """
-
-#     for i in range(0, output.shape[0]):
-
-#         mean_intensities, DPV = img_utils.lc_intensities_to_dist(
-#             d_candi = torch.tensor(d_candi).float(), 
-#             placement = depth[i,:,:].unsqueeze(-1), 
-#             intensity = 0, 
-#             inten_sigma = output[i, 1, :, :].unsqueeze(-1), # Change
-#             noise_sigma = 0.1, 
-#             mean_scaling = output[i, 0, :, :].unsqueeze(-1)) # Change
-#         mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
-
-#         gt = feat_int[i,:,:,:]/255.
-#         pred = mean_intensities
-#         mask = feat_mask[i,:,:,:].float()
-#         error = torch.sum(((gt-pred)**2)*mask)
-#         print(error)
-
-#         gt = feat_int[i,:,y,x]/255
-#         pred = mean_intensities[:,y,x]
-
-
-#         #plt.figure(1)
-#         plt.plot(d_candi, gt, c=[0,1,1], marker='.')
-#         plt.plot(d_candi, pred, c=[0,1,1], marker='.')
-
-#         print(mean_intensities.shape)
-
-
-import random
-from matplotlib import pyplot as plt
-def mouse_callback(event,x,y,flags,param):
-    global mouseX,mouseY, combined_image, sweep_arr, dmap_large, feat_int_tensor, feat_mask_tensor
-    if event == cv2.EVENT_LBUTTONDBLCLK:
-        #x = pixel[1]
-        #y = pixel[0]
-        mouseX,mouseY = x,y
-        print(mouseX,mouseY)
-        rgb = (random.random(), random.random(), random.random())
-
-        # Extract vals
-        disp_z = feat_z_tensor[:,y,x]
-        disp_i = feat_int_tensor[:,y,x]/255.
-        print(disp_i)
-        #print(disp_z)
-        first_nan = np.isnan(disp_z).argmax(axis=0)
-        if first_nan:
-            disp_z = disp_z[0:first_nan]
-            disp_i = disp_i[0:first_nan]
-
-        # # Generate d_candi
-        # d_candi = img_utils.powerf(3, 18, 128, 1.0)
-        # output = torch.ones(1, 2, 256, 320)
-        # output[:,0,:,:] = 0.05
-        # output[:,1,:,:] = 1.5
-        # depth = torch.tensor(dmap_large).unsqueeze(0)
-        # loss_test(output, depth, feat_int_tensor.unsqueeze(0), feat_mask_tensor.unsqueeze(0), d_candi, (mouseX, mouseY))
-
-        #plt.figure(2)
-        plt.plot(disp_z, disp_i, c=rgb, marker='*')
-        plt.pause(0.1)
-
-
-cv2.namedWindow('rgbimg')
-cv2.setMouseCallback('rgbimg',mouse_callback)
-
-
-while 1:
-    #cv2.imshow("image", (combined_image))
-    #cv2.imshow("dmap_large", (dmap_large.numpy()/10))
-    cv2.imshow("rgbimg", rgbimg/255. + mask_tensor.squeeze(0).unsqueeze(-1).numpy())
-    #cv2.imshow("mask", mask_tensor.squeeze(0).numpy())
-    cv2.waitKey(15)
-
-
-
-# # Validate Projection?
-# K_lc = torch.tensor(K_lc)
-# K_lc = torch.cat([K_lc, torch.zeros(3,1)], dim=1)
-# proj_points = torch.matmul(K_lc, pts_img)
-# proj_points[0,:] /= proj_points[2,:]
-# proj_points[1,:] /= proj_points[2,:]
-# for i in range(0, proj_points.shape[1]):
-#     try:
-#         cv2.circle(combined_image,(int(proj_points[0,i]), int(proj_points[1,i])), 1, (0,255,0), -1)
-#     except:
-#         pass
-
-# print(proj_points)
