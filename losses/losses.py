@@ -266,20 +266,20 @@ class SweepLoss(nn.modules.Module):
             mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
 
             # Compute Error
-            gt = feat_int[i,:,:,:]
-            pred = mean_intensities * 255
+            gt = feat_int[i,:,:,:] / 255.
+            pred = mean_intensities * 1
             model_count = torch.sum(feat_mask)
             model_loss = (torch.sum(((gt-pred)**2)*feat_mask) / model_count)
 
             # L1 image error
             img_count = torch.sum(mask)
-            peak_gt = torch.max(feat_int[i, :, :, :], dim=0)[0]
-            peak_pred = output[i, 0, :, :] * 255
+            peak_gt = torch.max(feat_int[i, :, :, :], dim=0)[0] / 255.
+            peak_pred = output[i, 0, :, :] * 1
             img_loss = torch.sum(torch.abs(peak_gt - peak_pred)*mask.squeeze(0)) / img_count
 
             # print(model_count, model_loss, img_loss)
 
-            loss += (model_loss*self.cfg.loss.model_mult + img_loss*self.cfg.loss.img_mult)
+            loss += ((model_loss*self.cfg.loss.model_mult + img_loss*self.cfg.loss.img_mult) / 1)
 
         return loss
 

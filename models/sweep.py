@@ -306,10 +306,22 @@ class SweepModel(nn.Module):
                     nn.init.constant_(layer.bias, 0)
 
     def constrain_output(self, input):
+        ll = nn.LeakyReLU(0.1)
         pp = input[:, 0, :, :]
         ps = input[:, 1, :, :]
-        pp = torch.sigmoid(pp)
-        ps = 0.1 + torch.sigmoid(ps) * 4
+
+        # # Relu Constraint
+        # pp = ll(pp)
+        # ps = ll(ps)
+        # pp = torch.clamp(pp, 0, 1)
+        # ps = 0.1 + torch.clamp(ps, 0, 1) * 4
+
+        # Sigmoid Constraint
+        # pp = torch.sigmoid(pp)
+        # ps = 0.1 + torch.sigmoid(ps) * 4
+
+        # No Constraint?
+
         return torch.cat([pp.unsqueeze(1), ps.unsqueeze(1)], dim=1)
 
     def forward_int(self, model_input):

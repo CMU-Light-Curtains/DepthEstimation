@@ -33,7 +33,7 @@
   "loss": {
     "model_mult": 1.0,
     "img_mult": 1.0,
-    "c_mult": 1.0
+    "c_mult": 0.0
   },
   "train": {
     "batch_size": 8,
