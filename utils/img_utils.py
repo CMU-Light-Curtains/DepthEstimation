@@ -12,7 +12,7 @@ import external.deval_lib.pyevaluatedepth_lib as dlib
 import external.utils_lib.utils_lib as kittiutils
 epsilon = torch.finfo(float).eps
 
-def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_size, M_left2LC):
+def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_size, M_left2LC, nir_img=None):
     # Convert to Torch
     sweep_arr_int = torch.tensor(sweep_arr[:,:,:,1]) # [128,640,512]
     sweep_arr_z = torch.tensor(sweep_arr[:,:,:,0]) # [128,640,512]
@@ -42,12 +42,19 @@ def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_s
     proj_points[2,:] = pts_img[2, :] # Copy the Z values
     proj_points = proj_points[:,:].T
 
+    # Set NIR img
+    if nir_img is not None:
+        nir_img = (nir_img.astype(np.float32)/255)
+    else:
+        nir_img = np.zeros((lc_height, lc_width)).astype(np.float32)
+
     # Remove Invalid pixels?
-    feat_int_tensor, feat_z_tensor, mask_tensor = kittiutils.lc_generate(proj_points.numpy(), sweep_arr_int.view(128, -1).numpy(), sweep_arr_z.view(128, -1).numpy(),
-                                                  lc_width, lc_height)
+    feat_int_tensor, feat_z_tensor, mask_tensor, nir_tensor = kittiutils.lc_generate(proj_points.numpy(), sweep_arr_int.view(128, -1).numpy(), sweep_arr_z.view(128, -1).numpy(),
+                                                              lc_width, lc_height, nir_img)
     feat_int_tensor = torch.tensor(feat_int_tensor)
     feat_z_tensor = torch.tensor(feat_z_tensor)
     mask_tensor = torch.tensor(mask_tensor)
+    nir_tensor = torch.tensor(nir_tensor)
 
     # # Remove Invalid pixels?
     # feat_int_tensor = torch.zeros((128, proj_points.shape[0])) # 81920, 2
@@ -85,11 +92,12 @@ def lcsweep_to_rgbsweep(sweep_arr, dmap_large, rgb_intr, rgb_size, lc_intr, lc_s
     feat_int_tensor = feat_int_tensor.reshape(128, dmap_height, dmap_width)
     feat_z_tensor = feat_z_tensor.reshape(128, dmap_height, dmap_width)
     mask_tensor = mask_tensor.reshape(1, dmap_height, dmap_width)
+    nir_tensor = nir_tensor.reshape(1, dmap_height, dmap_width)
 
     # Generate Train Mask
     train_mask_tensor = mask_tensor.repeat(128, 1, 1, 1).squeeze(1) * torch.isnan(feat_z_tensor).bool()
 
-    return feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image
+    return feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, nir_tensor
 
 def sim_lc_ptcloud(pts):
     zval = torch.tensor(pts[:,:,2]).unsqueeze(0)

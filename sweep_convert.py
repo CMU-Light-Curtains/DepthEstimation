@@ -3,6 +3,7 @@ import numpy as np
 import time
 import cv2
 import math
+import copy
 
 # Custom
 try:
@@ -27,6 +28,7 @@ import torchvision.transforms as transforms
 from models.get_model import get_model
 from utils.torch_utils import bias_parameters, weight_parameters, \
     load_checkpoint, save_checkpoint, AdamW
+from lc import light_curtain
 
 def load_datum(path, name, indx):
     datum = dict()
@@ -39,12 +41,15 @@ def load_datum(path, name, indx):
     nir_img_path = path + "/" + date + "/" + name + "/nir_img/" + index_str + ".png"
     velo_path = path + "/" + date + "/" + name + "/lidar/" + index_str + ".bin"
     json_path = path + "/" + date + "/" + name + "/calib.json"
+
+
     # Load Data
     datum["sweep_arr"] = np.load(sweep_path).astype(np.float32)
     datum["velodata"] = np.fromfile(velo_path, dtype=np.float32).reshape((-1, 4))
     datum["left_img"] = cv2.imread(left_img_path)
     datum["right_img"] = cv2.imread(right_img_path)
     datum["nir_img"] = cv2.imread(nir_img_path)
+    datum["nir_img"] = cv2.cvtColor(datum["nir_img"], cv2.COLOR_BGR2GRAY)
     datum["left_img"] = cv2.resize(datum["left_img"], None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
     datum["nir_img"] = cv2.resize(datum["nir_img"], None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
     datum["right_img"] = cv2.resize(datum["right_img"], None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
@@ -68,19 +73,37 @@ def load_datum(path, name, indx):
     datum["K_lc"] /= 2
     datum["K_lc"][2,2] = 1.
     datum["lc_size"] = [256, 320]
+    # datum["lc_size"] = [512, 640]
     datum["M_velo2right"] = np.matmul(datum["M_left2right"], datum["M_velo2left"])
     datum["M_velo2LC"] = np.matmul(datum["M_left2LC"], datum["M_velo2left"])
     datum["d_candi"] = img_utils.powerf(3, 18, 64, 1.)
     datum["d_candi_up"] = img_utils.powerf(3, 18, 128, 1.)
+    datum["M_LC2laser"] = np.array([
+        [0.999998660642566, -0.001633815794167618, 0.0000012624935166435589, 0.19989228458449756],
+        [0.001633815794167618, 0.9999974722179782, -0.0015454518952038837, 0.00034823987032651596],
+        [0.0000012624935166435595, 0.0015454518952038839, 0.9999988015754122, -0.014010022846647934],
+        [0,0,0,1]
+    ]).astype(np.float32)
+    datum["M_LC2left"] = np.linalg.inv(datum["M_left2LC"])
+
+    # Try to double the size of sweep_arr 
+    sweep_arr_large = np.zeros((datum["sweep_arr"].shape[0], datum["sweep_arr"].shape[1]*2, datum["sweep_arr"].shape[2]*2, datum["sweep_arr"].shape[3]))
+    for i in range(0, sweep_arr_large.shape[0]):
+        sweep_arr_large[i,:,:,0] = cv2.resize(datum["sweep_arr"][i,:,:,0], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        sweep_arr_large[i,:,:,1] = cv2.resize(datum["sweep_arr"][i,:,:,1], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    datum["sweep_arr_large"] = sweep_arr_large
+    datum["K_lc_large"] = datum["K_lc"]*2
+    datum["K_lc_large"][2,2] = 1.
+    datum["lc_size_large"] = [512, 640]
 
     # Easydict
     datum = EasyDict(datum)
     return datum
 
 # Load
-datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 6)
+datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 4)
 
-# Undistort LC
+# Undistort Sweep Arr (only small one)
 datum.nir_img = cv2.undistort(datum.nir_img, datum.K_lc, datum.D_lc)
 for i in range(0, datum.sweep_arr.shape[0]):
     datum.sweep_arr[i, :,:, 0] = cv2.undistort(datum.sweep_arr[i, :,:, 0], datum.K_lc, datum.D_lc)
@@ -92,28 +115,33 @@ datum["left_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr
 datum["right_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr, datum.M_velo2right, datum.large_size[0], datum.large_size[1], large_params)
 datum["lc_depth"] = kittiutils.generate_depth(datum.velodata, datum.K_lc, datum.M_velo2LC, datum.lc_size[0], datum.lc_size[1], large_params)
 
+# Upsample Depth
+datum.left_depth = kittiutils.upsample_depth(datum.left_depth, 2, 0.5)
+datum.right_depth = kittiutils.upsample_depth(datum.right_depth, 2, 0.5)
+datum.lc_depth = kittiutils.upsample_depth(datum.lc_depth, 2, 0.5)
+
 # # Visualize Depth Check
 # left_depth_debug = datum.left_img.copy().astype(np.float32)/255
 # left_depth_debug[:,:,0] += datum.left_depth
 # right_depth_debug = datum.right_img.copy().astype(np.float32)/255
 # right_depth_debug[:,:,0] += datum.right_depth
 # lc_depth_debug = datum.nir_img.copy().astype(np.float32)/255
-# lc_depth_debug[:,:,0] += datum.lc_depth
+# lc_depth_debug[:,:] += (datum.lc_depth/25)
 # cv2.imshow("left_depth", left_depth_debug)
 # cv2.imshow("right_depth", right_depth_debug)
 # cv2.imshow("lc_depth", lc_depth_debug)
-# cv2.waitKey(1)
+# cv2.waitKey(0)
 
 # Compute
 start = time.time()
-datum.left_feat_int_tensor, datum.left_feat_z_tensor, datum.left_mask_tensor, datum.left_feat_mask_tensor, _ = img_utils.lcsweep_to_rgbsweep(
-    sweep_arr=datum.sweep_arr, dmap_large=datum.left_depth, rgb_intr=datum.large_intr, rgb_size=datum.large_size, lc_intr=datum.K_lc, lc_size=datum.lc_size, M_left2LC=datum.M_left2LC)
+datum.left_feat_int_tensor, datum.left_feat_z_tensor, datum.left_mask_tensor, datum.left_feat_mask_tensor, datum.nir_warped_tensor = img_utils.lcsweep_to_rgbsweep(
+    sweep_arr=datum.sweep_arr, dmap_large=datum.left_depth, rgb_intr=datum.large_intr, rgb_size=datum.large_size, lc_intr=datum.K_lc, lc_size=datum.lc_size, M_left2LC=datum.M_left2LC, nir_img=datum.nir_img)
 datum.right_feat_int_tensor, datum.right_feat_z_tensor, datum.right_mask_tensor, datum.right_feat_mask_tensor, _ = img_utils.lcsweep_to_rgbsweep(
     sweep_arr=datum.sweep_arr, dmap_large=datum.right_depth, rgb_intr=datum.large_intr, rgb_size=datum.large_size, lc_intr=datum.K_lc, lc_size=datum.lc_size, M_left2LC=datum.M_right2LC)
 
-# fag = datum.left_feat_mask_tensor
-# fag[torch.isnan(datum.left_feat_mask_tensor)] = 1
-# datum.left_mask_tensor = (torch.sum(fag, dim=0) > 0).float()
+# # Visualize Warped NIR
+# cv2.imshow("warped_nir", datum.nir_warped_tensor.squeeze(0).numpy())
+# cv2.waitKey(0)
 
 # Left
 feat_int_tensor = datum.left_feat_int_tensor
@@ -174,10 +202,10 @@ class Network():
         self.model_datum["prev_output"] = None
         self.model_datum["prev_lc"] = None
         self.rgb_pinned = torch.zeros((1,2,3,self.param["size_rgb"][1], self.param["size_rgb"][0])).float().pin_memory()
-        self.dpv_pinned = torch.zeros((1,64,int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
-        self.pred_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
-        self.true_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
-        self.unc_pinned = torch.zeros(1,64, int(self.param["size_rgb"][0])).float().pin_memory()
+        # self.dpv_pinned = torch.zeros((1,64,int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        # self.pred_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        # self.true_depth_pinned = torch.zeros((int(self.param["size_rgb"][1]), int(self.param["size_rgb"][0]))).float().pin_memory()
+        # self.unc_pinned = torch.zeros(1,64, int(self.param["size_rgb"][0])).float().pin_memory()
         __imagenet_stats = {'mean': [0.485, 0.456, 0.406],\
                             'std': [0.229, 0.224, 0.225]}
         self.transformer = transforms.Normalize(**__imagenet_stats)
@@ -241,28 +269,130 @@ dpv_truth = img_utils.gen_dpv_withmask(torch.tensor(datum["left_depth"]).unsquee
 unc_field_truth, _ = img_utils.gen_ufield(dpv_truth, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=False, 
                                 cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
 
-# Visualize Top Down
-field_visual = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
-field_visual[:,:,0] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
-field_visual[:,:,1] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
-field_visual[:,:,2] = unc_field_truth[0,:,:].detach().cpu().numpy()*3
-field_visual = cv2.resize(field_visual, None, fx=1, fy=2, interpolation = cv2.INTER_CUBIC)
-rgb_debug = datum["left_img"].copy().astype(np.float32)/255
-rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
-cv2.imshow("field_visual", field_visual)
-cv2.imshow("depth_output", depth_output.squeeze(0).detach().cpu().numpy()/100)
-cv2.imshow("rgb_debug", rgb_debug)
-cv2.waitKey(0)
+# Visualize Unc Field Function
+def visualize_unc_field(unc_field_predicted, unc_field_truth, debugmap, datum):
+    field_visual = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
+    field_visual[:,:,0] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
+    field_visual[:,:,1] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
+    field_visual[:,:,2] = unc_field_truth[0,:,:].detach().cpu().numpy()*3
+    field_visual = cv2.resize(field_visual, None, fx=1, fy=2, interpolation = cv2.INTER_CUBIC)
+    rgb_debug = datum["left_img"].copy().astype(np.float32)/255
+    rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
+    cv2.imshow("field_visual", field_visual)
+    cv2.imshow("depth_output", depth_output.squeeze(0).detach().cpu().numpy()/100)
+    cv2.imshow("rgb_debug", rgb_debug)
+    cv2.waitKey(0)
+
+# Visualize Unc Field
+# visualize_unc_field(unc_field_predicted, unc_field_truth, debugmap, datum)
+
+# def setup_lc(datum):
+#     param = dict()
+#     param["intr_rgb"] = datum["large_intr"].copy()
+#     param["intr_lc"] = datum["K_lc"].copy()
+#     param["lTc"] = datum["M_LC2laser"].copy()
+#     param["rTc"] = datum["M_LC2left"].copy()
+#     N = param["N"]
+#     self.S_RANGE = param["s_range"]
+#     self.E_RANGE = param["e_range"]
+#     param["d_candi"] = img_utils.powerf(self.S_RANGE, self.E_RANGE, N, 1.)
+#     param["d_candi_up"] = param["d_candi"]
+#     param["r_candi"] = param["d_candi"]
+#     param["r_candi_up"] = param["d_candi"]
+#     param['cTr'] = np.linalg.inv(param['rTc'])
+#     param["device"] = torch.device(0)
+#     self.real_param = copy.deepcopy(param)
+#     self.real_lc = light_curtain.LightCurtain()
+#     if not self.real_lc.initialized:
+#         self.real_lc.init(copy.deepcopy(self.real_param))
+
+class LC():
+    def __init__(self, datum):
+        param = dict()
+        param["intr_rgb"] = datum["large_intr"][0:3,0:3].copy()
+        param["intr_lc"] = datum["K_lc_large"].copy()
+        param["lTc"] = datum["M_LC2laser"].copy()
+        param["rTc"] = datum["M_LC2left"].copy()
+        N = len(datum["d_candi_up"])
+        param["d_candi"] = datum["d_candi_up"]
+        param["d_candi_up"] = param["d_candi"]
+        param["r_candi"] = param["d_candi"]
+        param["r_candi_up"] = param["d_candi"]
+        param['cTr'] = np.linalg.inv(param['rTc'])
+        param["device"] = torch.device(0)
+        param["size_lc"] = datum["lc_size_large"]
+        param["laser_fov"] = 40
+        param["laser_timestep"] = 0.000035
+        param["dist_lc"] = datum["D_lc"]
+        param["size_rgb"] = datum["large_size"]
+        param["dist_rgb"] = [0,0,0,0,0]
+        param["name"] = "sweep_convert"
+        param["expand_A"] = 128
+        param["expand_B"] = 128
+        self.real_param = copy.deepcopy(param)
+        self.real_lc = light_curtain.LightCurtain()
+        if not self.real_lc.initialized:
+            self.real_lc.init(copy.deepcopy(self.real_param))
+
+        # Planner LC
+        LC_SCALE = float(param['size_rgb'][0]) / float(param['size_lc'][0]) # 0.625
+        param['laser_timestep'] = 2.5e-5 / LC_SCALE
+        param['intr_lc'] = np.array([
+            [param['intr_lc'][0,0]*LC_SCALE, 0, param['intr_lc'][0,2]*LC_SCALE],
+            [0, param['intr_lc'][1,1]*LC_SCALE, param['intr_lc'][1,2]*LC_SCALE],
+            [0, 0, 1]
+        ])
+        param['size_lc'] = [int(param['size_lc'][0]*LC_SCALE), int(param['size_lc'][1]*LC_SCALE)]
+
+        # Can we crop the top and bottom?
+        TOP_CUT = 72
+        BOT_CUT = 72
+        param['size_lc'] = [param['size_lc'][0], param['size_lc'][1] - TOP_CUT - BOT_CUT]
+        param['intr_lc'][1,2] -=  (TOP_CUT/2 + BOT_CUT/2)
+
+        # Initialize
+        self.algo_param = copy.deepcopy(param)
+        self.algo_lc = light_curtain.LightCurtain()
+        if not self.algo_lc.initialized:
+            self.algo_lc.init(copy.deepcopy(self.algo_param))
+
+        # Load Flow Field
+        self.algo_lc.fw_large.load_flowfield()
+
+        stop
+
+        # Pin Memory
+        self.intr_r_tensor = torch.tensor(self.real_param['intr_rgb']).cuda()
+
+        # Init Field
+        self.init_unc_field()
+
+        # Gather
+        self.unc_scores = []
+
+
+# Setup LC
+lc = LC(datum)
+
+
 """
 Train a default model that strictly does 318 disable other losses and only uses one image 
 Transfer learn to ILIM that mixes our data too
 """
-LOOK AT TODO
+LOOK
+#LOOK AT TODO
 
 # LC Network
 lc_network = Network(datum, mode='lc')
 lc_network.set_lc_params(datum["left_img"])
 lc_output = lc_network.run_lc_network().detach().cpu().squeeze(0)
+
+"""
+LC Network is just not training. Saturates to 0? Try to use RELU or leaky relu?
+Start writing the bayesian stuff
+Generate that Max image thing using NIR image, use the same function
+Hole filling of depth image using simple kernel?
+"""
 
 # LC Model Test
 d_candi = datum["d_candi_up"]

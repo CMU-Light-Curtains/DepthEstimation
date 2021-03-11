@@ -18,11 +18,12 @@ using namespace Eigen;
 namespace py = pybind11;
 
 std::vector<Eigen::MatrixXf> lc_generate(const Eigen::MatrixXf& proj_points, const Eigen::MatrixXf& sweep_arr_int, const Eigen::MatrixXf& sweep_arr_z,
-                int lc_width, int lc_height){
+                int lc_width, int lc_height, const Eigen::MatrixXf& nir_img){
     // Gen
     Eigen::MatrixXf feat_int_tensor = Eigen::MatrixXf::Zero(128, proj_points.rows());
     Eigen::MatrixXf feat_z_tensor = Eigen::MatrixXf::Zero(128, proj_points.rows());
     Eigen::MatrixXf mask_tensor = Eigen::MatrixXf::Zero(1, proj_points.rows());
+    Eigen::MatrixXf nir_tensor = Eigen::MatrixXf::Zero(1, proj_points.rows());
 
     // Gen
     for(auto i=0; i<proj_points.rows(); i++){
@@ -30,6 +31,9 @@ std::vector<Eigen::MatrixXf> lc_generate(const Eigen::MatrixXf& proj_points, con
         auto z_val = proj_points(i,2);
         if(lc_pix_pos[0] < 0 | lc_pix_pos[1] < 0 | lc_pix_pos[0] >= lc_width | lc_pix_pos[1] >= lc_height)
             continue;
+        if(z_val == 0)
+            continue;
+        nir_tensor(0,i) = nir_img(lc_pix_pos[1], lc_pix_pos[0]); 
         if(z_val > 18)
             continue;
         int index = lc_pix_pos[1]*lc_width + lc_pix_pos[0];
@@ -42,7 +46,52 @@ std::vector<Eigen::MatrixXf> lc_generate(const Eigen::MatrixXf& proj_points, con
         mask_tensor(0,i) = 1;
     }
 
-    return {feat_int_tensor, feat_z_tensor, mask_tensor};
+    return {feat_int_tensor, feat_z_tensor, mask_tensor, nir_tensor};
+}
+
+Eigen::MatrixXf upsample_depth(const Eigen::MatrixXf& depth, int filtering, float maxdiff){
+    // Filtering
+    int height = depth.rows();
+    int width = depth.cols();
+    Eigen::MatrixXf depth_upsampled = Eigen::MatrixXf::Zero(height, width);
+    int offset = filtering;
+    for(int v=offset; v<height-offset-1; v++){
+        for(int u=offset; u<width-offset-1; u++){
+            float z = depth(v,u);
+            bool bad = false;
+
+            // If valid just assign
+            if(z != 0){
+                depth_upsampled(v,u) = z;
+                continue;
+            }
+
+            // Check neighbours
+            float max_z = 0; float min_z = 100000000; float sum_z = 0; float count_z = 0;
+            for(int vv=v-offset; vv<v+offset+1; vv++){
+                for(int uu=u-offset; uu<u+offset+1; uu++){
+                    if(vv == v && uu == u) continue;
+                    float zn = depth(vv,uu);
+                    if(zn == 0) continue;
+                    count_z += 1;
+                    sum_z += zn;
+                    if(zn > max_z) max_z = zn;
+                    if(zn < min_z) min_z = zn;
+                }
+            }
+
+            // No neighbours
+            if(count_z == 0) continue;
+
+            // Otherwise check diff
+            float mean_z = sum_z / count_z;
+            if(std::fabs(max_z - min_z) < maxdiff){
+                depth_upsampled(v,u) = mean_z;
+            }
+        }
+    }
+
+    return depth_upsampled;
 }
 
 Eigen::MatrixXf upsample_velodyne(const Eigen::MatrixXf& velodata_cam, py::dict& params){
@@ -190,6 +239,7 @@ Eigen::MatrixXf generate_depth(const Eigen::MatrixXf& velodata, const Eigen::Mat
 PYBIND11_MODULE(utils_lib, m) {
     m.def("generate_depth", &generate_depth, "generate_depth");
     m.def("lc_generate", &lc_generate, "lc_generate");
+    m.def("upsample_depth", &upsample_depth, "upsample_depth");
 
     #ifdef VERSION_INFO
         m.attr("__version__") = VERSION_INFO;
