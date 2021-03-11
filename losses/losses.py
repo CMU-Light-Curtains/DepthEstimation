@@ -255,27 +255,36 @@ class SweepLoss(nn.modules.Module):
             if(torch.sum(feat_mask) == 0):
                 continue
 
-            # Run Model
-            mean_intensities, DPV = img_utils.lc_intensities_to_dist(
-                d_candi = d_candi, 
-                placement = depth[i,:,:].unsqueeze(-1), 
-                intensity = 0, 
-                inten_sigma = output[i, 1, :, :].unsqueeze(-1), # Change
-                noise_sigma = 0.1, 
-                mean_scaling = output[i, 0, :, :].unsqueeze(-1)) # Change
-            mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
+            # # Run Model
+            # mean_intensities, DPV = img_utils.lc_intensities_to_dist(
+            #     d_candi = d_candi, 
+            #     placement = depth[i,:,:].unsqueeze(-1), 
+            #     intensity = 0, 
+            #     inten_sigma = output[i, 1, :, :].unsqueeze(-1), # Change
+            #     noise_sigma = 0.1, 
+            #     mean_scaling = output[i, 0, :, :].unsqueeze(-1)) # Change
+            # mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
 
-            # Compute Error
-            gt = feat_int[i,:,:,:] / 255.
-            pred = mean_intensities * 1
-            model_count = torch.sum(feat_mask)
-            model_loss = (torch.sum(((gt-pred)**2)*feat_mask) / model_count)
+            # # Compute Error
+            model_loss = 0
+            # gt = feat_int[i,:,:,:] / 255.
+            # pred = mean_intensities * 1
+            # model_count = torch.sum(feat_mask)
+            # model_loss = (torch.sum(((gt-pred)**2)*feat_mask) / model_count)
 
-            # L1 image error
+            # # L1 image error
+            # img_count = torch.sum(mask)
+            # peak_gt = torch.max(feat_int[i, :, :, :], dim=0)[0] / 255.
+            # peak_pred = output[i, 0, :, :] * 1
+            # img_loss = torch.sum(torch.abs(peak_gt - peak_pred)*mask.squeeze(0)) / img_count
+
+            # MSLE error
             img_count = torch.sum(mask)
             peak_gt = torch.max(feat_int[i, :, :, :], dim=0)[0] / 255.
             peak_pred = output[i, 0, :, :] * 1
-            img_loss = torch.sum(torch.abs(peak_gt - peak_pred)*mask.squeeze(0)) / img_count
+            peak_gt = peak_gt*mask.squeeze(0)
+            peak_pred = peak_pred*mask.squeeze(0)
+            img_loss = torch.sqrt(torch.sum((torch.log(peak_gt + img_utils.epsilon) - torch.log(peak_pred + img_utils.epsilon))**2) / img_count)
 
             # print(model_count, model_loss, img_loss)
 
@@ -324,32 +333,32 @@ class SweepLoss(nn.modules.Module):
         pose_src2target = torch.inverse(T_left2right)
         pose_src2target = torch.unsqueeze(pose_src2target, 0).to(device)
         c_loss = 0
-        for ibatch in range(int(bsize.item()/2)):
-            #if self.cfg.loss.rsc_mul == 0: break
-            intr_up_left = target_left["intrinsics_up"][ibatch, :, :].unsqueeze(0)
-            intr_up_right = target_right["intrinsics_up"][ibatch, :, :].unsqueeze(0)
-            depth_up_left = target_left["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
-            depth_up_right = target_right["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
-            rgb_up_left = output_left["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
-            rgb_up_right = output_right["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
-            feat_mask_left = target_left["feat_mask_tensor"][ibatch, :, :]
-            feat_mask_right = target_right["feat_mask_tensor"][ibatch, :, :]
-            if(torch.sum(feat_mask_left) == 0 or torch.sum(feat_mask_right) == 0):
-                continue
-            if(torch.sum(depth_up_left) == 0 or torch.sum(depth_up_right) == 0):
-                continue
+        # for ibatch in range(int(bsize.item()/2)):
+        #     #if self.cfg.loss.rsc_mul == 0: break
+        #     intr_up_left = target_left["intrinsics_up"][ibatch, :, :].unsqueeze(0)
+        #     intr_up_right = target_right["intrinsics_up"][ibatch, :, :].unsqueeze(0)
+        #     depth_up_left = target_left["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
+        #     depth_up_right = target_right["dmap_imgsizes"][ibatch, :, :].unsqueeze(0)
+        #     rgb_up_left = output_left["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
+        #     rgb_up_right = output_right["output_refined"][0][ibatch, :, :, :].unsqueeze(0)
+        #     feat_mask_left = target_left["feat_mask_tensor"][ibatch, :, :]
+        #     feat_mask_right = target_right["feat_mask_tensor"][ibatch, :, :]
+        #     if(torch.sum(feat_mask_left) == 0 or torch.sum(feat_mask_right) == 0):
+        #         continue
+        #     if(torch.sum(depth_up_left) == 0 or torch.sum(depth_up_right) == 0):
+        #         continue
 
-            # Right to Left
-            # src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr
-            c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_right, rgb_up_left, depth_up_left,
-                                                              pose_target2src,
-                                                              intr_up_left)
-            # Left to Right
-            c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_left, rgb_up_right, depth_up_right,
-                                                              pose_src2target,
-                                                              intr_up_right)
+        #     # Right to Left
+        #     # src_rgb_img, target_rgb_img, target_depth_map, pose_target2src, intr
+        #     c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_right, rgb_up_left, depth_up_left,
+        #                                                       pose_target2src,
+        #                                                       intr_up_left)
+        #     # Left to Right
+        #     c_loss = c_loss + lc_stereo_consistency_loss(rgb_up_left, rgb_up_right, depth_up_right,
+        #                                                       pose_src2target,
+        #                                                       intr_up_right)
 
-        # print(c_loss)
+        # # print(c_loss)
         
         loss = (left_loss + right_loss + c_loss*self.cfg.loss.c_mult)
 

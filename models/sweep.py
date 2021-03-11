@@ -317,8 +317,8 @@ class SweepModel(nn.Module):
         # ps = 0.1 + torch.clamp(ps, 0, 1) * 4
 
         # Sigmoid Constraint
-        # pp = torch.sigmoid(pp)
-        # ps = 0.1 + torch.sigmoid(ps) * 4
+        pp = torch.sigmoid(pp)
+        ps = 0.1 + torch.sigmoid(ps) * 4
 
         # No Constraint?
 

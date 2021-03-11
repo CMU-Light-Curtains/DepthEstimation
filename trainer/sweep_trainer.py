@@ -235,8 +235,8 @@ class SweepTrainer(BaseTrainer):
                 mean_intensities = mean_intensities.permute(2,0,1) # 128, 256, 320
 
                 # Compute Error
-                gt = gt_large[:,:,:]
-                pred = mean_intensities * 255
+                gt = gt_large[:,:,:] / 255.
+                pred = mean_intensities
                 mask = mask_large[:,:,:].float()
                 count = torch.sum(mask) + 1
                 model_error = (torch.sum(((gt-pred)**2)*mask) / count)
@@ -245,8 +245,8 @@ class SweepTrainer(BaseTrainer):
                 # Img Error
                 img_mask = gt_input_left["mask_tensor"][b, :, :, :]
                 img_count = torch.sum(img_mask)
-                peak_gt = torch.max(gt_large, dim=0)[0]
-                peak_pred = output_large[0, :, :] * 255
+                peak_gt = torch.max(gt_large, dim=0)[0] / 255
+                peak_pred = output_large[0, :, :]
                 img_error = torch.sum(torch.abs(peak_gt - peak_pred)*img_mask.squeeze(0)) / img_count
                 img_errors.append(img_error)
 
@@ -328,7 +328,7 @@ class SweepTrainer(BaseTrainer):
             img_color[:,:,0] += peak_gt*10
             cv2.imshow("img_color", img_color)
             cv2.imshow("peak_gt", peak_gt)
-            cv2.imshow("pred_gt", pred_gt)
+            cv2.imshow("pred_gt", pred_gt/255)
             cv2.waitKey(0)
 
         # Eval
