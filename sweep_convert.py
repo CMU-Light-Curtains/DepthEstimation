@@ -29,6 +29,7 @@ from models.get_model import get_model
 from utils.torch_utils import bias_parameters, weight_parameters, \
     load_checkpoint, save_checkpoint, AdamW
 from lc import light_curtain
+from external.perception_lib import viewer
 
 def load_datum(path, name, indx):
     datum = dict()
@@ -95,13 +96,15 @@ def load_datum(path, name, indx):
     datum["K_lc_large"] = datum["K_lc"]*2
     datum["K_lc_large"][2,2] = 1.
     datum["lc_size_large"] = [512, 640]
+    datum["nir_img_large"] = cv2.imread(nir_img_path)
+    datum["nir_img_large"] = cv2.cvtColor(datum["nir_img_large"], cv2.COLOR_BGR2GRAY)
 
     # Easydict
     datum = EasyDict(datum)
     return datum
 
 # Load
-datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 4)
+datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 10)
 
 # Undistort Sweep Arr (only small one)
 datum.nir_img = cv2.undistort(datum.nir_img, datum.K_lc, datum.D_lc)
@@ -114,11 +117,34 @@ large_params = {"filtering": 2, "upsample": 0}
 datum["left_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr, datum.M_velo2left, datum.large_size[0], datum.large_size[1], large_params)
 datum["right_depth"] = kittiutils.generate_depth(datum.velodata, datum.large_intr, datum.M_velo2right, datum.large_size[0], datum.large_size[1], large_params)
 datum["lc_depth"] = kittiutils.generate_depth(datum.velodata, datum.K_lc, datum.M_velo2LC, datum.lc_size[0], datum.lc_size[1], large_params)
+datum["lc_depth_large"] = kittiutils.generate_depth(datum.velodata, datum.K_lc_large, datum.M_velo2LC, datum.lc_size_large[0], datum.lc_size_large[1], large_params)
 
 # Upsample Depth
 datum.left_depth = kittiutils.upsample_depth(datum.left_depth, 2, 0.5)
 datum.right_depth = kittiutils.upsample_depth(datum.right_depth, 2, 0.5)
 datum.lc_depth = kittiutils.upsample_depth(datum.lc_depth, 2, 0.5)
+datum.lc_depth_large = kittiutils.upsample_depth(datum.lc_depth_large, 2, 0.5)
+
+# # Need this for it to work? Need to debug this
+# pool_val = 4
+# datum.lc_depth_large = img_utils.minpool(torch.Tensor(datum.lc_depth_large).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
+# datum.lc_depth_large = cv2.resize(datum.lc_depth_large, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
+
+Can I fill this with the upsampeld points or something?
+
+# # Need to visualize pt cloud?
+# viz = None
+# viz = viewer.Visualizer("V")
+# viz.start()
+
+# # Pointcloud test
+# if viz is not None:
+#     left_cloud = img_utils.tocloud(torch.tensor(datum.left_depth).unsqueeze(0), img_utils.cv2_to_torchrgb(datum.left_img.astype(np.float32)/255), torch.tensor(datum.large_intr), None)
+#     nir_cloud = img_utils.tocloud(torch.tensor(datum.lc_depth_large).unsqueeze(0), torch.tensor(datum.nir_img_large.astype(np.float32)/255).repeat(3,1,1), torch.tensor(datum.K_lc_large), None)
+#     viz.addCloud(left_cloud, 2)
+#     viz.addCloud(nir_cloud, 2)
+#     # self.viz.addCloud(cloud_truth, 5)
+#     viz.swapBuffer()
 
 # # Visualize Depth Check
 # left_depth_debug = datum.left_img.copy().astype(np.float32)/255
@@ -130,6 +156,7 @@ datum.lc_depth = kittiutils.upsample_depth(datum.lc_depth, 2, 0.5)
 # cv2.imshow("left_depth", left_depth_debug)
 # cv2.imshow("right_depth", right_depth_debug)
 # cv2.imshow("lc_depth", lc_depth_debug)
+# cv2.imshow("lc_depth_large", datum.lc_depth_large/25)
 # cv2.waitKey(0)
 
 # Compute
@@ -263,6 +290,13 @@ depth_network = Network(datum, mode='mono_318')
 depth_network.set_lc_params(datum['left_img'])
 dpv_output = depth_network.run_lc_network()
 depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
+
+# DPV Tensor Gaussian instead of network
+temp_depth = torch.zeros((1, datum["large_size"][1], datum["large_size"][0])).cuda() + 10.
+dpv_output = torch.log(img_utils.gen_dpv_withmask(temp_depth, temp_depth.unsqueeze(0)*0+1, datum.d_candi, 10.0))
+depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
+
+# Generate Unc Field
 unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_output, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=True, 
                                 cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
 dpv_truth = img_utils.gen_dpv_withmask(torch.tensor(datum["left_depth"]).unsqueeze(0), (torch.tensor(datum["left_depth"]) > 0).float().unsqueeze(0).unsqueeze(0), depth_network.model_datum["d_candi"])
@@ -270,7 +304,7 @@ unc_field_truth, _ = img_utils.gen_ufield(dpv_truth, depth_network.model_datum["
                                 cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
 
 # Visualize Unc Field Function
-def visualize_unc_field(unc_field_predicted, unc_field_truth, debugmap, datum):
+def visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debugmap, datum):
     field_visual = np.zeros((unc_field_truth.shape[1], unc_field_truth.shape[2], 3))
     field_visual[:,:,0] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
     field_visual[:,:,1] = unc_field_predicted[0,:,:].detach().cpu().numpy()*3
@@ -284,27 +318,7 @@ def visualize_unc_field(unc_field_predicted, unc_field_truth, debugmap, datum):
     cv2.waitKey(0)
 
 # Visualize Unc Field
-# visualize_unc_field(unc_field_predicted, unc_field_truth, debugmap, datum)
-
-# def setup_lc(datum):
-#     param = dict()
-#     param["intr_rgb"] = datum["large_intr"].copy()
-#     param["intr_lc"] = datum["K_lc"].copy()
-#     param["lTc"] = datum["M_LC2laser"].copy()
-#     param["rTc"] = datum["M_LC2left"].copy()
-#     N = param["N"]
-#     self.S_RANGE = param["s_range"]
-#     self.E_RANGE = param["e_range"]
-#     param["d_candi"] = img_utils.powerf(self.S_RANGE, self.E_RANGE, N, 1.)
-#     param["d_candi_up"] = param["d_candi"]
-#     param["r_candi"] = param["d_candi"]
-#     param["r_candi_up"] = param["d_candi"]
-#     param['cTr'] = np.linalg.inv(param['rTc'])
-#     param["device"] = torch.device(0)
-#     self.real_param = copy.deepcopy(param)
-#     self.real_lc = light_curtain.LightCurtain()
-#     if not self.real_lc.initialized:
-#         self.real_lc.init(copy.deepcopy(self.real_param))
+# visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debugmap, datum)
 
 class LC():
     def __init__(self, datum):
@@ -329,6 +343,9 @@ class LC():
         param["name"] = "sweep_convert"
         param["expand_A"] = 128
         param["expand_B"] = 128
+        param["unc_ang"] = 0.
+        param["unc_shift"] = 1.
+        param["unc_span"] = 0.3
         self.real_param = copy.deepcopy(param)
         self.real_lc = light_curtain.LightCurtain()
         if not self.real_lc.initialized:
@@ -359,21 +376,167 @@ class LC():
         # Load Flow Field
         self.algo_lc.fw_large.load_flowfield()
 
-        stop
-
         # Pin Memory
         self.intr_r_tensor = torch.tensor(self.real_param['intr_rgb']).cuda()
 
         # Init Field
         self.init_unc_field()
 
-        # Gather
-        self.unc_scores = []
+        # # Gather
+        # self.unc_scores = []
 
+    def init_unc_field(self):
+        init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 10.
+        self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 10.0))
+        print(self.final.shape)
+
+    # def get_depth_lc(self, depth_r, pool_val=4):
+    #     # Warp Depth Image to LC
+    #     pts_rgb = img_utils.depth_to_pts(torch.Tensor(depth_r).unsqueeze(0), self.real_param['intr_rgb'])
+    #     pts_rgb = pts_rgb.reshape((pts_rgb.shape[0], pts_rgb.shape[1] * pts_rgb.shape[2]))
+    #     pts_rgb = torch.cat([pts_rgb, torch.ones(1, pts_rgb.shape[1])])
+    #     pts_rgb = pts_rgb.numpy().T
+    #     thick_rgb = np.ones((pts_rgb.shape[0], 1)).astype(np.float32)
+    #     uniform_params = {"filtering": 2}
+    #     depth_lc, _, _ = pylc.transformPoints(pts_rgb, thick_rgb, self.real_param['intr_lc'], self.real_param['cTr'],
+    #                                         self.real_param['size_lc'][0], self.real_param['size_lc'][1],
+    #                                         uniform_params)
+        
+    #     depth_lc = img_utils.minpool(torch.Tensor(depth_lc).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
+    #     depth_lc = cv2.resize(depth_lc, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
+    #     return depth_lc
+
+    def integrate(self, DPVs):
+        # Keep Renormalize
+        curr_dist = torch.clamp(torch.exp(self.final), img_utils.epsilon, 1.)
+
+        # Update
+        for dpv in DPVs:
+            dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
+            curr_dist = curr_dist * dpv
+            curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
+        # # Update
+        # curr_dist_log = torch.log(curr_dist)
+        # for dpv in DPVs:
+        #     dpv = torch.clamp(dpv, img_utils.epsilon, 1.)
+        #     curr_dist_log += torch.log(dpv)
+        # curr_dist = torch.exp(curr_dist_log)
+        # curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
+        # Spread
+        for i in range(0, 1):
+            curr_dist = img_utils.spread_dpv_hack(curr_dist, 3)
+
+        # Keep Renormalize
+        curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)
+
+        # Back to Log space
+        self.final = torch.log(curr_dist)
+
+    def run(self, datum, dpv_r_tensor):
+
+        # Extract variables
+        depth_lc = datum.lc_depth_large
+        depth_r_tensor = torch.tensor(datum.left_depth).unsqueeze(0).cuda()
+        intr_r_tensor = torch.tensor(datum.large_intr).unsqueeze(0).cuda()
+
+        # Make a DPV out of the Depth Map
+        mask_truth = (depth_r_tensor > 0.).float()
+        dpv_truth = img_utils.gen_dpv_withmask(depth_r_tensor, mask_truth.unsqueeze(0), self.algo_lc.d_candi, 0.1)
+        depth_truth = img_utils.dpv_to_depthmap(dpv_truth, self.algo_lc.d_candi, BV_log=False) * mask_truth
+
+        # Make Unc Field Truth (RGB) (LC)
+        unc_field_truth_r, debugmap = img_utils.gen_ufield(dpv_truth, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=False, cfgx=self.real_param)
+        unc_field_truth_lc = self.algo_lc.fw_large.preprocess(unc_field_truth_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
+        unc_field_truth_lc = self.algo_lc.fw_large.transformZTheta(unc_field_truth_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
+        unc_field_truth_lc[:,:,0:50] = np.nan
+        unc_field_truth_lc[:,:,-50:-1] = np.nan
+
+        # Setup Planner
+        params = {"step": [0.75], "std_div": 5.}
+        plan_func = self.algo_lc.plan_default
+        # params = {"step": 3, "interval": 15, "std_div": 3.}
+        # plan_func = self.algo_lc.plan_m1
+
+        # Expand and Integrate
+        dpv_r_tensor = torch.exp(img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True))
+        for i in range(0,1):
+            self.integrate([dpv_r_tensor])      
+
+        # Sensing
+        iterations = 200
+        mode = "sim"
+        for i in range(0, iterations):
+
+            # Generate UField (in RGB)
+            unc_field_predicted_r, _ = img_utils.gen_ufield(self.final, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=True, cfgx=self.real_param)
+
+            # Score (Need to compute in LC space as it is zoomed in sadly)
+            unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
+            unc_field_predicted_lc = self.algo_lc.fw_large.transformZTheta(unc_field_predicted_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
+            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True)
+            # cv2.imshow("FAGA", unc_field_truth_lc.squeeze(0).cpu().numpy())
+            # cv2.imshow("FAGB", unc_field_predicted_lc.squeeze(0).cpu().numpy())
+            # cv2.waitKey(1)
+
+            # Plan Paths
+            lc_paths = list(plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True))
+            # field_visual = self.algo_lc.field_visual
+            # field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+            # cv2.imshow("field_visual", field_visual)
+            # cv2.waitKey(0)
+
+            # Generate DPV
+            lc_DPVs = []
+            for lc_path in lc_paths:
+                # Simulated Measurement
+                output_lc, thickness_lc = self.real_lc.lightcurtain_large.get_return(depth_lc, lc_path, True)
+                output_lc[np.isnan(output_lc[:, :, 0])] = 0
+                thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+                # Transform to LC
+                sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
+                # Gen DPV
+                lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, 10) # May have to pass values here
+                lc_DPVs.append(lc_DPV)
+
+            # Integrate Measurement
+            self.integrate(lc_DPVs)
+
+            # Gen Depth removing uncertainties
+            z = torch.exp(self.final.squeeze(0))
+            d_candi_expanded = torch.tensor(self.algo_lc.d_candi).unsqueeze(1).unsqueeze(1).cuda()
+            mean = torch.sum(d_candi_expanded * z, dim=0)
+            variance = torch.sum(((d_candi_expanded - mean) ** 2) * z, dim=0)
+            mask_var = (variance < 2.0).float()
+            final_depth = (mean * mask_var).cpu().numpy()
+
+            # Return
+            field_visual = self.algo_lc.field_visual
+            field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+            cv2.imshow("field_visual", field_visual)
+            cv2.waitKey(0)
+
+            # # Plan and Sense
+            # if mode == "sim":
+
+
+
+
+
+
+            # elif mode == "real":
+            #     pass
+
+        print(dpv_r_tensor.shape)  
+
+        pass
 
 # Setup LC
 lc = LC(datum)
+lc.run(datum, dpv_output)
 
+stop
 
 """
 Train a default model that strictly does 318 disable other losses and only uses one image 

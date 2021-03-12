@@ -231,6 +231,10 @@ def torchrgb_to_cv2(input, demean=True):
         input[2, :, :] = input[2, :, :] * __imagenet_stats["std"][2] + __imagenet_stats["mean"][2]
     return cv2.cvtColor(input[:, :, :].cpu().numpy().transpose(1, 2, 0), cv2.COLOR_BGR2RGB)
 
+def cv2_to_torchrgb(input):
+    input = cv2.cvtColor(input, cv2.COLOR_BGR2RGB)
+    return torch.tensor(input).permute(2,0,1)
+
 def powerf(d_min, d_max, nDepth, power):
     f = lambda x: d_min + (d_max - d_min) * x
     x = np.linspace(start=0, stop=1, num=nDepth)
