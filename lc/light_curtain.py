@@ -1087,23 +1087,32 @@ class LightCurtain:
         self.sensed_arr[:] = sensed_arr[:]
         return self.sensed_arr.cuda(non_blocking=True)
 
-    def gen_lc_dpv(self, sensed_arr, std_div):
+    def gen_lc_dpv_approx(self, sensed_arr, std_div):
         depth_sensed = sensed_arr[0,:,:]
         mask_sense = (depth_sensed > 0).float()
         thickness_sensed = sensed_arr[2,:,:] * mask_sense
         int_sensed = sensed_arr[1,:,:] * mask_sense
 
-        # # Compute DPV
-        # z_img = depth_sensed
-        # int_img = int_sensed / 255.
-        # unc_img = (thickness_sensed / std_div) ** 2
-        # A = mapping(int_img)
-        # DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+        # Compute DPV
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / std_div) ** 2
+        A = mapping(int_img)
+        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
 
+        return DPV
+
+    def gen_lc_dpv_true(self, sensed_arr, std_div):
+        depth_sensed = sensed_arr[0,:,:]
+        mask_sense = (depth_sensed > 0).float()
+        thickness_sensed = sensed_arr[2,:,:] * mask_sense
+        int_sensed = sensed_arr[1,:,:] * mask_sense
+
+        # Compute DPV
         z_img = torch.tensor(depth_sensed).float().to(self.device).unsqueeze(-1)
         int_img = torch.tensor(int_sensed / 255.).float().to(self.device).unsqueeze(-1)
-        unc_img = torch.tensor((thickness_sensed / 5) ** 2).float().to(self.device).unsqueeze(-1)
-        mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img*0+0.3, 0.1, 0.6)
+        unc_img = torch.tensor((thickness_sensed / std_div) ** 2).float().to(self.device).unsqueeze(-1)
+        mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img, 0.1, 0.2)
         DPV = DPV.permute(2,0,1)
 
         return DPV

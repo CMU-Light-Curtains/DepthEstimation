@@ -125,12 +125,12 @@ datum.right_depth = kittiutils.upsample_depth(datum.right_depth, 2, 0.5)
 datum.lc_depth = kittiutils.upsample_depth(datum.lc_depth, 2, 0.5)
 datum.lc_depth_large = kittiutils.upsample_depth(datum.lc_depth_large, 2, 0.5)
 
-# # Need this for it to work? Need to debug this
-# pool_val = 4
-# datum.lc_depth_large = img_utils.minpool(torch.Tensor(datum.lc_depth_large).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
-# datum.lc_depth_large = cv2.resize(datum.lc_depth_large, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
+# Need this for it to work? Need to debug this
+pool_val = 4
+datum.lc_depth_large = img_utils.minpool(torch.Tensor(datum.lc_depth_large).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
+datum.lc_depth_large = cv2.resize(datum.lc_depth_large, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
 
-Can I fill this with the upsampeld points or something?
+# Can I fill this with the upsampeld points or something?
 
 # # Need to visualize pt cloud?
 # viz = None
@@ -249,7 +249,7 @@ class Network():
         elif self.mode == 'lc':
             model_name = 'default_sweep'
         elif self.mode == 'mono_318':
-            model_name = 'default_exp7_lc_ilim_318'
+            model_name = 'default_318_ilim'
         cfg_path = 'configs/' + model_name + '.json'
         model_path = ''
         with open(cfg_path) as f:
@@ -288,13 +288,13 @@ class Network():
 # RGB Network
 depth_network = Network(datum, mode='mono_318')
 depth_network.set_lc_params(datum['left_img'])
-dpv_output = depth_network.run_lc_network()
+dpv_output = depth_network.run_lc_network().detach()
 depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
 
-# DPV Tensor Gaussian instead of network
-temp_depth = torch.zeros((1, datum["large_size"][1], datum["large_size"][0])).cuda() + 10.
-dpv_output = torch.log(img_utils.gen_dpv_withmask(temp_depth, temp_depth.unsqueeze(0)*0+1, datum.d_candi, 10.0))
-depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
+# # DPV Tensor Gaussian instead of network
+# temp_depth = torch.zeros((1, datum["large_size"][1], datum["large_size"][0])).cuda() + 10.
+# dpv_output = torch.log(img_utils.gen_dpv_withmask(temp_depth, temp_depth.unsqueeze(0)*0+1, datum.d_candi, 10.0))
+# depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
 
 # Generate Unc Field
 unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_output, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=True, 
@@ -436,6 +436,11 @@ class LC():
 
     def run(self, datum, dpv_r_tensor):
 
+        # Tensors for real sweep
+        feat_z_tensor = torch.tensor(datum.sweep_arr_large[:,:,:,0]).cuda()
+        feat_int_tensor = torch.tensor(datum.sweep_arr_large[:,:,:,1]).cuda()
+        feat_z_tensor[torch.isnan(feat_z_tensor)] = 1000
+
         # Extract variables
         depth_lc = datum.lc_depth_large
         depth_r_tensor = torch.tensor(datum.left_depth).unsqueeze(0).cuda()
@@ -475,7 +480,7 @@ class LC():
             # Score (Need to compute in LC space as it is zoomed in sadly)
             unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
             unc_field_predicted_lc = self.algo_lc.fw_large.transformZTheta(unc_field_predicted_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
-            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True)
+            # unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True)
             # cv2.imshow("FAGA", unc_field_truth_lc.squeeze(0).cpu().numpy())
             # cv2.imshow("FAGB", unc_field_predicted_lc.squeeze(0).cpu().numpy())
             # cv2.waitKey(1)
@@ -494,10 +499,20 @@ class LC():
                 output_lc, thickness_lc = self.real_lc.lightcurtain_large.get_return(depth_lc, lc_path, True)
                 output_lc[np.isnan(output_lc[:, :, 0])] = 0
                 thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+
+                # Sampling intensities from real sensor
+                sampling_depth = torch.tensor(output_lc[:,:,2]).cuda()
+                inds = torch.argmin(torch.abs(sampling_depth.reshape(1, sampling_depth.shape[0], sampling_depth.shape[1]) - feat_z_tensor), dim=0)
+                result = torch.gather(feat_int_tensor, 0, inds.unsqueeze(0)).squeeze(0)
+                output_lc[:,:,3] = result.cpu().numpy()
+
                 # Transform to LC
                 sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
+
                 # Gen DPV
-                lc_DPV = self.real_lc.gen_lc_dpv(sensed_arr, 10) # May have to pass values here
+                #lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
+                lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2) # May have to pass values here
+                # Add
                 lc_DPVs.append(lc_DPV)
 
             # Integrate Measurement
@@ -515,6 +530,7 @@ class LC():
             field_visual = self.algo_lc.field_visual
             field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
             cv2.imshow("field_visual", field_visual)
+            #cv2.imshow("final_depth", final_depth/100)
             cv2.waitKey(0)
 
             # # Plan and Sense
