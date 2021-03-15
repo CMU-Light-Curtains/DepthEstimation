@@ -328,7 +328,7 @@ class SweepTrainer(BaseTrainer):
             img_color[:,:,0] += peak_gt*10
             cv2.imshow("img_color", img_color)
             cv2.imshow("peak_gt", peak_gt)
-            cv2.imshow("pred_gt", pred_gt/255)
+            cv2.imshow("pred_gt", pred_gt)
             cv2.waitKey(0)
 
         # Eval
