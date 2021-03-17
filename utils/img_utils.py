@@ -474,7 +474,7 @@ def gen_ufield(dpv_predicted, d_candi, intr_up, visualizer=None, img=None, BV_lo
             maxd = 100.
             mind = 0.
             quash_limit = False
-        elif "ilim" in cfg.data.dataset_path:
+        elif "ilim" in cfg.data.dataset_path or "sweep" in cfg.data.dataset_path:
             pshift = 0
             zstart = 1.0
             zend = zstart + 0.3
