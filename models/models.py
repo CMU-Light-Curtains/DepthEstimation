@@ -484,10 +484,14 @@ class BaseModel(nn.Module):
         self.viz = None
 
         # LC Init
-        self.lc = None
+        self.algo_lc = None
+        self.real_lc = None
         if self.cfg.lc.enabled:
             from lc import light_curtain
-            self.lc = light_curtain.LightCurtain()
+            self.algo_lc = light_curtain.LightCurtain()
+            # Special Case
+            if "sweep" in self.cfg.data.dataset_split:
+                self.real_lc = light_curtain.LightCurtain()
             print("Setup LC")
 
     def set_viz(self, viz):
@@ -682,13 +686,6 @@ class BaseModel(nn.Module):
             # Decoder
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=d_net_features)
             # [B,128,256,384]
-
-            # # LC
-            # if lc is not None:
-            #     BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
-            #     #self.lc_process(BV_downsampled, model_input, lc, "low", 5)
-            #     self.lc_process(BV_cur_refined, model_input, lc, "high", 10, viz=True, score=True)
-            #     pass
 
             return {"output": [BV_cur], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
@@ -912,28 +909,6 @@ class BaseModel(nn.Module):
 
             return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
 
-        elif self.nmode == "exp8":
-
-            # Encoder
-            BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
-            last_features.append(model_input["rgb"][:, -1, :, :, :])
-
-            # Decoder
-            BV_cur_refined = self.base_decoder(torch.exp(BV_cur), img_features=last_features)
-
-            # Downsample
-            BV_downsampled = F.interpolate(BV_cur_refined, scale_factor=0.25, mode='nearest')
-
-            # LC
-            if lc is not None:
-                self.lc_process(BV_cur, model_input, lc)
-                pass
-
-            # Decoder
-            BV_cur_refined_2 = self.base_decoder2(torch.exp(BV_downsampled), img_features=last_features)
-
-            return {"output": [BV_cur], "output_refined": [BV_cur_refined, BV_cur_refined_2], "flow": None, "flow_refined": None}
-
         elif self.nmode == "exp7_lc":
             # Encoder
             BV_cur, cost_volumes, last_features, first_features, warped_features = self.forward_exp(model_input)
@@ -967,8 +942,8 @@ class BaseModel(nn.Module):
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=last_features)
 
             # LC
-            if self.lc is not None:
-                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+            if self.algo_lc is not None:
+                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.algo_lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
             else:
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
@@ -1006,8 +981,12 @@ class BaseModel(nn.Module):
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=d_net_features)
 
             # LC
-            if self.lc is not None:
-                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+            if self.real_lc is not None and self.algo_lc is not None and model_input["camside"] == "left":
+                NOTWORKING
+                BV_lc, score = self.lc_process_real(BV_cur_refined.detach().clone(), model_input, self.algo_lc, self.real_lc, viz=True, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
+                return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
+            elif self.algo_lc is not None:
+                BV_lc, score = self.lc_process(BV_cur_refined.detach().clone(), model_input, self.algo_lc, mode="high", viz=False, iterations=self.cfg.lc.iterations, planner=self.cfg.lc.planner, params=self.cfg.lc.params)
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "output_lc": BV_lc, "flow": None, "flow_refined": None}
             else:
                 return {"output": [BV_cur, BV_cur_upd], "output_refined": [BV_cur_refined], "flow": None, "flow_refined": None}
@@ -1018,6 +997,147 @@ class BaseModel(nn.Module):
             raise Exception("Nmode wrong")
 
         pass
+
+    def lc_process_real(self, BV_cur_all, model_input, algo_lc, real_lc, iterations=5, viz=False, score=False, planner="default", params=None):
+        # Iterate each batch
+        final_fused = []
+        unc_scores_all = []
+        for b in range(0, model_input["dmaps"].shape[0]):
+            # Extract
+            intr = model_input["intrinsics_up"][b, :, :]
+            dmap = F.interpolate(model_input["dmaps"][b,:,:].unsqueeze(0).unsqueeze(0), scale_factor=4, mode='nearest').squeeze(0)
+            mask = F.interpolate(model_input["masks"][b,:,:,:].unsqueeze(0), scale_factor=4, mode='nearest')
+            img = model_input["rgb"][b, -1, :, :, :]
+            feat_z_tensor = model_input["sweep_arr_tensor"][b, :, :, :, 0]
+            feat_int_tensor = model_input["sweep_arr_tensor"][b, :, :, :, 1]
+            # Remove Nan?
+            feat_z_tensor[torch.isnan(feat_z_tensor)] = 1000
+
+            # Expand it
+            feat_int_tensor = F.interpolate(feat_int_tensor.unsqueeze(0), size=[feat_int_tensor.shape[1]*2, feat_int_tensor.shape[2]*2], mode='bicubic').squeeze(0)
+            feat_z_tensor = F.interpolate(feat_z_tensor.unsqueeze(0), size=[feat_z_tensor.shape[1]*2, feat_z_tensor.shape[2]*2], mode='bicubic').squeeze(0)
+
+            # True Depth
+            true_depth = dmap.squeeze(0).cpu().numpy()
+
+            # DPV Truth
+            if viz or score:
+                true_dpv = img_utils.gen_dpv_withmask(dmap, mask, algo_lc.d_candi, 0.3)
+                unc_field_truth, _ = img_utils.gen_ufield(true_dpv, algo_lc.d_candi, intr.squeeze(0), BV_log=False, cfg=self.cfg)
+
+                # Make Unc Field Truth (RGB) (LC)
+                algo_lc.fw_large.load_flowfield()
+                unc_field_truth_lc = algo_lc.fw_large.preprocess(unc_field_truth.squeeze(0), algo_lc.d_candi, algo_lc.d_candi_up)
+                unc_field_truth_lc = algo_lc.fw_large.transformZTheta(unc_field_truth_lc, algo_lc.d_candi_up, algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
+                unc_field_truth_lc[:,:,0:50] = np.nan
+                unc_field_truth_lc[:,:,-50:-1] = np.nan
+                unc_field_truth = unc_field_truth_lc
+
+            # Upsample
+            BV_cur = BV_cur_all[b, :, :, :].unsqueeze(0)
+            final = BV_cur.detach().clone()
+            if final.shape[1] != algo_lc.expand_A:
+                final = img_utils.upsample_dpv(final, N=algo_lc.expand_A, BV_log=True)
+
+            # # Simulate a mid point spread start            
+            # iterations = 20
+            # final = torch.log(img_utils.gen_dpv_withmask(final[:,0,:,:]*0+15, final[:,0,:,:].unsqueeze(0)*0+1, algo_lc.d_candi, 10.0))
+            # if final.shape[1] != algo_lc.expand_A:
+            #     final = img_utils.upsample_dpv(final, N=algo_lc.expand_A, BV_log=True)
+
+            # Bayesian Iterations
+            unc_scores = []
+            for i in range(0, iterations):
+
+                # Generate UField
+                unc_field_predicted, debugmap = img_utils.gen_ufield(final, algo_lc.d_candi, intr.squeeze(0), BV_log=True, cfg=self.cfg)
+
+                # rgb_debug = img_utils.torchrgb_to_cv2(img)
+                # rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
+                # import cv2
+                # cv2.imshow("rgb", rgb_debug)
+                # cv2.waitKey(0)
+                            
+                # Score
+                if score:
+                    unc_score = img_utils.compute_unc_rmse(unc_field_truth, unc_field_predicted, algo_lc.d_candi)
+                    unc_scores.append(unc_score.item())
+
+                # Plan
+                print("START")
+                if planner == "default":
+                    lc_paths, field_visual = algo_lc.plan_default_high(unc_field_predicted.squeeze(0), params)
+                elif planner == "m1":
+                    lc_paths, field_visual = algo_lc.plan_m1_high(unc_field_predicted.squeeze(0), params)
+                elif planner == "sweep":
+                    lc_paths, field_visual = algo_lc.plan_sweep_high(unc_field_predicted.squeeze(0), params)
+                print("END")
+
+                # Generate DPV
+                lc_DPVs = []
+                for lc_path in lc_paths:
+                    # Simulated Measurement
+                    depth_lc = np.ones((feat_int_tensor.shape[1], feat_int_tensor.shape[2])).astype(np.float32)*1000
+                    output_lc, thickness_lc = real_lc.lightcurtain_large.get_return(depth_lc, lc_path, True)
+                    output_lc[np.isnan(output_lc[:, :, 0])] = 0
+                    thickness_lc[np.isnan(thickness_lc[:, :])] = 0
+
+                    # Sampling intensities from real sensor
+                    sampling_depth = torch.tensor(output_lc[:,:,2]).to(final.device)
+                    inds = torch.argmin(torch.abs(sampling_depth.reshape(1, sampling_depth.shape[0], sampling_depth.shape[1]) - feat_z_tensor), dim=0)
+                    result = torch.gather(feat_int_tensor, 0, inds.unsqueeze(0)).squeeze(0)
+                    output_lc[:,:,3] = result.cpu().numpy()
+
+                    # Transform to LC
+                    sensed_arr = real_lc.transform_measurement(output_lc, thickness_lc)
+
+                    # Gen DPV
+                    #peak_img = torch.clamp(datum.nir_warped_tensor.squeeze(0) + 0.2, 0, 1)
+                    peak_img = None
+                    # lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
+                    lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2, peak_img) # May have to pass values here
+                    # Add
+                    lc_DPVs.append(lc_DPV)
+
+                # # Viz
+                if viz:
+                    import cv2
+                    unc_field_truth_image = unc_field_truth[0,:,:].cpu().numpy()
+                    unc_field_truth_image = cv2.resize(unc_field_truth_image, (field_visual[:,:,2].shape[1],field_visual[:,:,2].shape[0]))
+                    field_visual[:,:,2] = unc_field_truth_image*3
+                    field_visual = cv2.flip(field_visual, 0)
+                    cv2.imshow("field_visual", field_visual)
+                    #cv2.imshow("final_depth", final_depth.squeeze(0).cpu().numpy()/100)
+                    print("WAIT")
+                    cv2.waitKey(0)
+                    print("OK")
+
+                # Keep Renormalize
+                curr_dist = torch.clamp(torch.exp(final), img_utils.epsilon, 1.)
+
+                # Update
+                for lcdpv in lc_DPVs:
+                    lcdpv[torch.isnan(lcdpv)] = 0. # Check why this is happening
+                    lcdpv = torch.clamp(lcdpv, img_utils.epsilon, 1.)
+                    curr_dist = curr_dist * lcdpv
+                    curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
+
+                # Spread
+                for i in range(0, params.spread_iter):
+                    curr_dist = img_utils.spread_dpv_hack(curr_dist, params.spread_n)
+
+                # Keep Renormalize
+                curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)
+
+                # Back to Log space
+                final = torch.log(curr_dist)
+
+            if final.shape[1] != BV_cur.shape[1]:
+                final = img_utils.upsample_dpv(final, N=BV_cur.shape[1], BV_log=True)
+            final_fused.append(final)
+            unc_scores_all.append(unc_scores)
+
+        return torch.cat(final_fused, dim=0), unc_scores_all
 
     def lc_process(self, BV_cur_all, model_input, lc, mode="low", iterations=5, viz=False, score=False, planner="default", params=None):
         # Iterate each batch
@@ -1165,13 +1285,27 @@ class BaseModel(nn.Module):
         return torch.cat(final_fused, dim=0), unc_scores_all
         
     def forward(self, inputs):
-        # Setup LC if setup
-        if self.lc is not None:
-            if not self.lc.initialized:
-                lc_params = self.lc.gen_params_from_model_input(inputs[0])
-                lc_params = self.lc.expand_params(lc_params, self.cfg, 64, 128)
-                self.lc.init(lc_params)
+        # Setup Algo LC if setup
+        if self.algo_lc is not None:
+            if not self.algo_lc.initialized:
+                if "algo_lc_config" in self.cfg.lc:
+                    algo_lc_config = np.load(self.cfg.lc.algo_lc_config,  allow_pickle=True).item()
+                    algo_lc_config = self.algo_lc.expand_params(algo_lc_config, self.cfg, 128, 128, "_algo")
+                    algo_lc_config["device"] = inputs[0]["rgb"].device
+                    self.algo_lc.init(algo_lc_config)
+                else:
+                    lc_params = self.algo_lc.gen_params_from_model_input(inputs[0])
+                    lc_params = self.algo_lc.expand_params(lc_params, self.cfg, 64, 128)
+                    self.algo_lc.init(lc_params)
+        # Setup Real LC if setup
+        if self.real_lc is not None:
+            if not self.real_lc.initialized:
+                if "real_lc_config" in self.cfg.lc:
+                    real_lc_config = np.load(self.cfg.lc.real_lc_config,  allow_pickle=True).item()
+                    real_lc_config = self.real_lc.expand_params(real_lc_config, self.cfg, 128, 128, "_real")
+                    self.real_lc.init(real_lc_config)
 
+        # Network
         outputs = []
         for input in inputs:
             outputs.append(self.forward_int(input))

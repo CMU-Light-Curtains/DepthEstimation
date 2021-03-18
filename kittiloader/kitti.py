@@ -934,24 +934,32 @@ class KITTI_dataset(data.Dataset):
             nir_img = nir_img - 0.5
             nir_img = torch.tensor(nir_img).unsqueeze(0)
 
-            # Unwarp
-            for i in range(0, sweep_arr.shape[0]):
-                sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
-                sweep_arr[i, :,:, 1] = cv2.undistort(sweep_arr[i, :,:, 1], K_lc, D_lc)
-            # Generate Feature Tensor
-            if mode == "left":
-                feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
-                sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_left2LC))
-                M_cam2LC = M_left2LC
-            elif mode == "right":
-                feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
-                sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_right2LC))
-                M_cam2LC = M_right2LC
+            # # Sweep Arr
+            # sweep_arr_large = np.zeros((sweep_arr.shape[0], sweep_arr.shape[1]*2, sweep_arr.shape[2]*2, sweep_arr.shape[3]))
+            # for i in range(0, sweep_arr_large.shape[0]):
+            #     sweep_arr_large[i,:,:,0] = cv2.resize(sweep_arr[i,:,:,0], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+            #     sweep_arr_large[i,:,:,1] = cv2.resize(sweep_arr[i,:,:,1], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
             # Store
-            sweep_data["feat_int_tensor"] = feat_int_tensor
-            sweep_data["train_mask_tensor"] = train_mask_tensor
-            sweep_data["mask_tensor"] = mask_tensor
+            sweep_data["sweep_arr"] = torch.tensor(sweep_arr)
+            # # Unwarp
+            # for i in range(0, sweep_arr.shape[0]):
+            #     sweep_arr[i, :,:, 0] = cv2.undistort(sweep_arr[i, :,:, 0], K_lc, D_lc)
+            #     sweep_arr[i, :,:, 1] = cv2.undistort(sweep_arr[i, :,:, 1], K_lc, D_lc)
+            # # Generate Feature Tensor
+            # if mode == "left":
+            #     feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
+            #     sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_left2LC))
+            #     M_cam2LC = M_left2LC
+            # elif mode == "right":
+            #     feat_int_tensor, feat_z_tensor, mask_tensor, train_mask_tensor, combined_image = img_utils.lcsweep_to_rgbsweep(
+            #     sweep_arr=sweep_arr, dmap_large=torch.tensor(dmap_large), rgb_intr=large_intr, rgb_size=large_size, lc_intr=torch.tensor(K_lc), lc_size=lc_size, M_left2LC=torch.tensor(M_right2LC))
+            #     M_cam2LC = M_right2LC
+
+            # Store
+            # sweep_data["feat_int_tensor"] = feat_int_tensor
+            # sweep_data["train_mask_tensor"] = train_mask_tensor
+            # sweep_data["mask_tensor"] = mask_tensor
             sweep_data["M_cam2LC"] = M_left2LC
             sweep_data["K_lc"] = K_lc
             sweep_data["nir_img"] = nir_img

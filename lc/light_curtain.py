@@ -328,7 +328,7 @@ class LightCurtain:
         else:
             self.transform_needed = False
 
-    def expand_params(self, PARAMS, cfg, expand_A, expand_B):
+    def expand_params(self, PARAMS, cfg, expand_A, expand_B, add_name=""):
         d_candi_expand = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_A, cfg.var.qpower)
         d_candi_expand_upsample = img_utils.powerf(cfg.var.d_min, cfg.var.d_max, expand_B, cfg.var.qpower)
         PARAMS["d_candi"] = d_candi_expand
@@ -337,14 +337,7 @@ class LightCurtain:
         PARAMS["r_candi_up"] = PARAMS["d_candi_up"]
         PARAMS["expand_A"] = expand_A
         PARAMS["expand_B"] = expand_B
-        PARAMS["name"] = cfg.data.exp_name
-
-        if "intr_lc" in cfg.lc: PARAMS["intr_lc"] = np.array(cfg.lc["intr_lc"]).astype(np.float32)
-        if "rTc" in cfg.lc: PARAMS["rTc"] = np.array(cfg.lc["rTc"]).astype(np.float32)
-        if "lTc" in cfg.lc: PARAMS["lTc"] = np.array(cfg.lc["lTc"]).astype(np.float32)
-        if "dist_lc" in cfg.lc: PARAMS["dist_lc"] = cfg.lc["dist_lc"]
-        if "laser_fov" in cfg.lc: PARAMS["laser_fov"] = cfg.lc["laser_fov"]
-
+        PARAMS["name"] = cfg.data.exp_name + add_name
         return PARAMS
 
     def gen_params_from_model_input(self, model_input):

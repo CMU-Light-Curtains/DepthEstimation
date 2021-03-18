@@ -254,19 +254,22 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
     feat_mask_tensor = []
     nir_img_tensor = []
     mask_tensor = []
+    sweep_arr_tensor = []
     if len(local_info_valid[camside + "_cam_sweep"][0]):
         for i in range(0, len(local_info_valid["src_dats"])):
             cam_sweep = local_info_valid[camside + "_cam_sweep"][i]
             K_lc = cam_sweep["K_lc"]
             M_cam2LC = cam_sweep["M_cam2LC"]
-            feat_int_tensor.append(cam_sweep["feat_int_tensor"].unsqueeze(0))
-            feat_mask_tensor.append(cam_sweep["train_mask_tensor"].unsqueeze(0))
+            # feat_int_tensor.append(cam_sweep["feat_int_tensor"].unsqueeze(0))
+            # feat_mask_tensor.append(cam_sweep["train_mask_tensor"].unsqueeze(0))
             nir_img_tensor.append(cam_sweep["nir_img"].unsqueeze(0))
-            mask_tensor.append(cam_sweep["mask_tensor"].unsqueeze(0))
-        feat_int_tensor = torch.cat(feat_int_tensor).to(device)
-        feat_mask_tensor = torch.cat(feat_mask_tensor).to(device)
+            sweep_arr_tensor.append(cam_sweep["sweep_arr"].unsqueeze(0))
+            # mask_tensor.append(cam_sweep["mask_tensor"].unsqueeze(0))
+        # feat_int_tensor = torch.cat(feat_int_tensor).to(device)
+        # feat_mask_tensor = torch.cat(feat_mask_tensor).to(device)
         nir_img_tensor = torch.cat(nir_img_tensor).to(device)
-        mask_tensor = torch.cat(mask_tensor).to(device)
+        if camside == "left": sweep_arr_tensor = torch.cat(sweep_arr_tensor).to(device)
+        # mask_tensor = torch.cat(mask_tensor).to(device)
 
     model_input = {
         "intrinsics": intrinsics,
@@ -284,6 +287,8 @@ def generate_model_input(id, local_info_valid, cfg, camside="left"):
         "K_lc": K_lc,
         "M_cam2LC": M_cam2LC,
         "nir_img_tensor": nir_img_tensor,
+        "camside": camside,
+        "sweep_arr_tensor": sweep_arr_tensor
     }
 
     gt_input = {
