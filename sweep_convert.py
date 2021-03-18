@@ -43,7 +43,6 @@ def load_datum(path, name, indx):
     velo_path = path + "/" + date + "/" + name + "/lidar/" + index_str + ".bin"
     json_path = path + "/" + date + "/" + name + "/calib.json"
 
-
     # Load Data
     datum["sweep_arr"] = np.load(sweep_path).astype(np.float32)
     datum["velodata"] = np.fromfile(velo_path, dtype=np.float32).reshape((-1, 4))
@@ -344,8 +343,8 @@ class LC():
         param["expand_A"] = 128
         param["expand_B"] = 128
         param["unc_ang"] = 0.
-        param["unc_shift"] = 1.
-        param["unc_span"] = 0.3
+        param["unc_shift"] = 1.0
+        param["unc_span"] = 0.5 # THIS PARAMETER MATTERS ALOT!
         self.real_param = copy.deepcopy(param)
         self.real_lc = light_curtain.LightCurtain()
         if not self.real_lc.initialized:
@@ -389,22 +388,6 @@ class LC():
         init_depth = torch.zeros((1, self.real_param["size_rgb"][1], self.real_param["size_rgb"][0])).cuda() + 10.
         self.final = torch.log(img_utils.gen_dpv_withmask(init_depth, init_depth.unsqueeze(0)*0+1, self.algo_lc.d_candi, 10.0))
         print(self.final.shape)
-
-    # def get_depth_lc(self, depth_r, pool_val=4):
-    #     # Warp Depth Image to LC
-    #     pts_rgb = img_utils.depth_to_pts(torch.Tensor(depth_r).unsqueeze(0), self.real_param['intr_rgb'])
-    #     pts_rgb = pts_rgb.reshape((pts_rgb.shape[0], pts_rgb.shape[1] * pts_rgb.shape[2]))
-    #     pts_rgb = torch.cat([pts_rgb, torch.ones(1, pts_rgb.shape[1])])
-    #     pts_rgb = pts_rgb.numpy().T
-    #     thick_rgb = np.ones((pts_rgb.shape[0], 1)).astype(np.float32)
-    #     uniform_params = {"filtering": 2}
-    #     depth_lc, _, _ = pylc.transformPoints(pts_rgb, thick_rgb, self.real_param['intr_lc'], self.real_param['cTr'],
-    #                                         self.real_param['size_lc'][0], self.real_param['size_lc'][1],
-    #                                         uniform_params)
-        
-    #     depth_lc = img_utils.minpool(torch.Tensor(depth_lc).unsqueeze(0).unsqueeze(0), pool_val, 1000).squeeze(0).squeeze(0).numpy()
-    #     depth_lc = cv2.resize(depth_lc, (0,0), fx=pool_val, fy=pool_val, interpolation = cv2.INTER_NEAREST)
-    #     return depth_lc
 
     def integrate(self, DPVs):
         # Keep Renormalize
@@ -475,15 +458,19 @@ class LC():
         for i in range(0, iterations):
 
             # Generate UField (in RGB)
-            unc_field_predicted_r, _ = img_utils.gen_ufield(self.final, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=True, cfgx=self.real_param)
+            unc_field_predicted_r, debugmap = img_utils.gen_ufield(self.final, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=True, cfgx=self.real_param)
 
             # Score (Need to compute in LC space as it is zoomed in sadly)
             unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
             unc_field_predicted_lc = self.algo_lc.fw_large.transformZTheta(unc_field_predicted_lc, self.algo_lc.d_candi_up, self.algo_lc.d_candi_up, "transform_" + "large").unsqueeze(0)
-            # unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True)
+            unc_score = img_utils.compute_unc_rmse(unc_field_truth_lc, unc_field_predicted_lc, self.algo_lc.d_candi, True); print(unc_score)
             # cv2.imshow("FAGA", unc_field_truth_lc.squeeze(0).cpu().numpy())
             # cv2.imshow("FAGB", unc_field_predicted_lc.squeeze(0).cpu().numpy())
             # cv2.waitKey(1)
+
+            # RGB Debug
+            rgb_debug = datum["left_img"].copy().astype(np.float32)/255
+            rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
 
             # Plan Paths
             lc_paths = list(plan_func(unc_field_predicted_r.squeeze(0), self.algo_lc.planner_large, self.algo_lc.fw_large, "high", params, yield_mode=True))
@@ -510,8 +497,10 @@ class LC():
                 sensed_arr = self.real_lc.transform_measurement(output_lc, thickness_lc)
 
                 # Gen DPV
-                #lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
-                lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2) # May have to pass values here
+                #peak_img = torch.clamp(datum.nir_warped_tensor.squeeze(0) + 0.2, 0, 1)
+                peak_img = None
+                # lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
+                lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2, peak_img) # May have to pass values here
                 # Add
                 lc_DPVs.append(lc_DPV)
 
@@ -530,19 +519,9 @@ class LC():
             field_visual = self.algo_lc.field_visual
             field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
             cv2.imshow("field_visual", field_visual)
-            #cv2.imshow("final_depth", final_depth/100)
+            cv2.imshow("rgb_debug", rgb_debug)
+            cv2.imshow("final_depth", final_depth/100)
             cv2.waitKey(0)
-
-            # # Plan and Sense
-            # if mode == "sim":
-
-
-
-
-
-
-            # elif mode == "real":
-            #     pass
 
         print(dpv_r_tensor.shape)  
 

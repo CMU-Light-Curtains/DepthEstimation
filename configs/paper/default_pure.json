@@ -1,6 +1,6 @@
 {
   "data": {
-    "exp_name": "default_exp7_lc",
+    "exp_name": "default_pure",
     "model_name": "base",
     "loss_name": "base",
     "trainer_name": "default",
@@ -21,25 +21,21 @@
     "crop_w": 384,
     "pnoise": 0.0,
     "mload": true,
-    "nmode": "exp7_lc",
+    "nmode": "default",
     "bn_avg": true
   },
   "lidar": {
     "enabled": false
   },
   "lc": {
-    "enabled": false,
-    "iterations": 5,
-    "planner": "default",
-    "params": {"step": [0.5], "spread_iter": 2, "spread_n": 5},
-    "use_lc_prob": 0.7
+    "enabled": false
   },
   "loss": {
     "ce_mul": 1.0,
-    "dsc_mul": 1.0,
-    "rsc_mul": 1.0,
-    "smooth_mul": 0.5,
-    "dc_mul": 0.25,
+    "dsc_mul": 0.0,
+    "rsc_mul": 0.0,
+    "smooth_mul": 0.0,
+    "dc_mul": 0.0,
     "rsc_low_mul": 0.0
   },
   "train": {

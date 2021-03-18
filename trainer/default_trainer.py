@@ -78,6 +78,13 @@ class DefaultTrainer(BaseTrainer):
         self.prev_lc = None
         self.first_run = True
 
+        # Recurse
+        self.self_recurse = 1
+        self.clear_prev_on_recurse = False
+        if "self_recurse" in self.cfg.train:
+            self.self_recurse = self.cfg.train.self_recurse
+            self.clear_prev_on_recurse = self.cfg.train.clear_prev_on_recurse
+
         # Light Curtain Module
         self.lc = None
         if self.cfg.lc.enabled:
@@ -134,6 +141,7 @@ class DefaultTrainer(BaseTrainer):
             if frame_count == 0:
                 self._log.info(self.id, "Reset Previous Output")
                 self.prev_output = {"left": None, "right": None}
+                self.prev_lc = {"left": None, "right": None}
 
             # Create inputs
             local_info["d_candi"] = self.d_candi
@@ -144,43 +152,53 @@ class DefaultTrainer(BaseTrainer):
             else:
                 model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
                 model_input_right, gt_input_right = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "right")
-            model_input_left["prev_output"] = self.prev_output["left"]
-            model_input_right["prev_output"] = self.prev_output["right"]
-            model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
 
-            # Set LC
-            if self.prev_lc is not None:
-                model_input_left["prev_lc"] = self.prev_lc["left"]
-                model_input_right["prev_lc"] = self.prev_lc["right"]
+            # Recurse
+            for m in range(0, self.self_recurse):
 
-            # Setup LC
-            if self.lc is not None:
-                if not self.lc.initialized:
-                    lc_params = self.lc.gen_params_from_model_input(model_input_left)
-                    lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
-                    self.lc.init(lc_params)
+                # Set Prev
+                model_input_left["prev_output"] = self.prev_output["left"]
+                model_input_right["prev_output"] = self.prev_output["right"]
+                model_input_left["epoch"] = self.i_epoch; model_input_right["epoch"] = self.i_epoch
 
-            # Model
-            output_left, output_right = self.model([model_input_left, model_input_right])
+                # Set LC
+                if self.prev_lc is not None:
+                    model_input_left["prev_lc"] = self.prev_lc["left"]
+                    model_input_right["prev_lc"] = self.prev_lc["right"]
 
-            # Set Prev from last one
-            output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
-            output_right_intp = F.interpolate(output_right["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
-            self.prev_output = {"left": output_left_intp, "right": output_right_intp}
+                # Setup LC
+                if self.lc is not None:
+                    if not self.lc.initialized:
+                        lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                        lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                        self.lc.init(lc_params)
 
-            # Set LC is available
-            if "output_lc" in output_left.keys():
-                output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
-                output_right_lc = F.interpolate(output_right["output_lc"].detach(), scale_factor=0.25, mode='nearest')
-                self.prev_lc = {"left": output_left_lc, "right": output_right_lc}
+                # Model
+                output_left, output_right = self.model([model_input_left, model_input_right])
 
-            # Loss Function
-            loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
+                # Set Prev from last one
+                output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+                output_right_intp = F.interpolate(output_right["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+                self.prev_output = {"left": output_left_intp, "right": output_right_intp}
 
-            # Opt
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+                # Set LC is available
+                if "output_lc" in output_left.keys():
+                    output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                    output_right_lc = F.interpolate(output_right["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                    self.prev_lc = {"left": output_left_lc, "right": output_right_lc}
+
+                # Loss Function
+                loss = self.loss_func([output_left, output_right], [gt_input_left, gt_input_right])
+
+                # Opt
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+            # Reset Stage
+            if self.clear_prev_on_recurse:
+                self.prev_output = {"left": None, "right": None}
+                self.prev_lc = {"left": None, "right": None}
 
             # String
             loader_str = 'Train batch %d / %d, iter: %d, frame_count: %d / %d; Epoch: %d / %d, loss = %.5f' \
@@ -237,34 +255,44 @@ class DefaultTrainer(BaseTrainer):
                 model_input_left, gt_input_left = batch_scheduler.generate_stereo_input(self.id, local_info, self.cfg, "left")
             else:
                 model_input_left, gt_input_left = batch_scheduler.generate_model_input(self.id, local_info, self.cfg, "left")
-            model_input_left["prev_output"] = self.prev_output["left"]
-            model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
-            # Set LC
-            if self.prev_lc is not None:
-                model_input_left["prev_lc"] = self.prev_lc["left"]
+            # Recurse
+            for m in range(0, self.self_recurse):
 
-            # Setup LC
-            if self.lc is not None:
-                if not self.lc.initialized:
-                    lc_params = self.lc.gen_params_from_model_input(model_input_left)
-                    lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
-                    self.lc.init(lc_params)
+                # Set Prev
+                model_input_left["prev_output"] = self.prev_output["left"]
+                model_input_left["epoch"] = self.i_epoch # Not sure if this will work during runtime/eval
 
-            # Model
-            start = time.time()
-            output_left = self.model([model_input_left])[0]
-            #output_right = self.model(model_input_right)
-            print("Forward: " + str(time.time() - start))
+                # Set LC
+                if self.prev_lc is not None:
+                    model_input_left["prev_lc"] = self.prev_lc["left"]
 
-            # Set Prev
-            output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
-            self.prev_output = {"left": output_left_intp, "right": None}
+                # Setup LC
+                if self.lc is not None:
+                    if not self.lc.initialized:
+                        lc_params = self.lc.gen_params_from_model_input(model_input_left)
+                        lc_params = self.lc.expand_params(lc_params, self.cfg, 128, 128)
+                        self.lc.init(lc_params)
 
-            # Set LC is available
-            if "output_lc" in output_left.keys():
-                output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
-                self.prev_lc = {"left": output_left_lc, "right": None}
+                # Model
+                start = time.time()
+                output_left = self.model([model_input_left])[0]
+                #output_right = self.model(model_input_right)
+                print("Forward: " + str(time.time() - start))
+
+                # Set Prev
+                output_left_intp = F.interpolate(output_left["output_refined"][-1].detach(), scale_factor=0.25, mode='nearest')
+                self.prev_output = {"left": output_left_intp, "right": None}
+
+                # Set LC is available
+                if "output_lc" in output_left.keys():
+                    output_left_lc = F.interpolate(output_left["output_lc"].detach(), scale_factor=0.25, mode='nearest')
+                    self.prev_lc = {"left": output_left_lc, "right": None}
+
+            # Reset Stage
+            if self.clear_prev_on_recurse:
+                self.prev_output = {"left": None, "right": None}
+                self.prev_lc = {"left": None, "right": None}
 
             # Visualization
             if self.cfg.var.viz:

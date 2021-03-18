@@ -471,7 +471,7 @@ class BaseModel(nn.Module):
         if self.nmode == "exp7_lc":
             self.based_3d = Base3D(5, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "lc":
-            self.based_3d = Base3D(3, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
+            self.based_3d = Base3D(4, dres_count=2, feature_dim=32, bn_running_avg=self.bn_avg, id=self.id)
         if self.nmode == "default_df3":
             self.base_decoder2 = BaseDecoder(int(self.feature_dim), int(self.feature_dim/2), 3, D = self.D)
         if self.nmode == "exp8":
@@ -978,11 +978,11 @@ class BaseModel(nn.Module):
             BV_cur, cost_volumes, d_net_features, _ = self.forward_encoder(model_input)
             d_net_features.append(model_input["rgb"][:, -1, :, :, :])
 
-            # # Prev Output
-            # if model_input["prev_output"] is None:
-            #     prev_output = torch.log(torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D))
-            # else:
-            #     prev_output = model_input["prev_output"].unsqueeze(1)
+            # Prev Output
+            if model_input["prev_output"] is None:
+                prev_output = torch.log(torch.zeros(BV_cur.unsqueeze(1).shape).to(BV_cur.device) + 1./float(self.D))
+            else:
+                prev_output = model_input["prev_output"].unsqueeze(1)
 
             # Prev LC Prob
             if self.cfg["eval"]:
@@ -998,17 +998,12 @@ class BaseModel(nn.Module):
                 prev_lc = model_input["prev_lc"].unsqueeze(1)
 
             # Volume
-            comb_volume = torch.cat([BV_cur.unsqueeze(1), prev_lc, d_net_features[0].unsqueeze(1)], dim=1)
+            comb_volume = torch.cat([BV_cur.unsqueeze(1), prev_output, prev_lc, d_net_features[0].unsqueeze(1)], dim=1)
             BV_resi = self.based_3d(comb_volume, prob=False)
             BV_cur_upd = F.log_softmax(BV_cur + BV_resi, dim=1)
 
             # Decoder
             BV_cur_refined = self.base_decoder(torch.exp(BV_cur_upd), img_features=d_net_features)
-
-            # WRONG!
-            # I CANNOT TAKE IN PREV FRAME FOR 318 due to real data not there!
-            # Just train without LC for 3 days, then fit to ilim?
-            # Add flag for the thing
 
             # LC
             if self.lc is not None:
@@ -1153,8 +1148,8 @@ class BaseModel(nn.Module):
                     curr_dist = curr_dist / torch.sum(curr_dist, dim=1).unsqueeze(1)
 
                 # Spread
-                for i in range(0, 2):
-                    curr_dist = img_utils.spread_dpv_hack(curr_dist, 5)
+                for i in range(0, params.spread_iter):
+                    curr_dist = img_utils.spread_dpv_hack(curr_dist, params.spread_n)
 
                 # Keep Renormalize
                 curr_dist = torch.clamp(curr_dist, img_utils.epsilon, 1.)

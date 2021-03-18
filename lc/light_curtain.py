@@ -337,6 +337,14 @@ class LightCurtain:
         PARAMS["r_candi_up"] = PARAMS["d_candi_up"]
         PARAMS["expand_A"] = expand_A
         PARAMS["expand_B"] = expand_B
+        PARAMS["name"] = cfg.data.exp_name
+
+        if "intr_lc" in cfg.lc: PARAMS["intr_lc"] = np.array(cfg.lc["intr_lc"]).astype(np.float32)
+        if "rTc" in cfg.lc: PARAMS["rTc"] = np.array(cfg.lc["rTc"]).astype(np.float32)
+        if "lTc" in cfg.lc: PARAMS["lTc"] = np.array(cfg.lc["lTc"]).astype(np.float32)
+        if "dist_lc" in cfg.lc: PARAMS["dist_lc"] = cfg.lc["dist_lc"]
+        if "laser_fov" in cfg.lc: PARAMS["laser_fov"] = cfg.lc["laser_fov"]
+
         return PARAMS
 
     def gen_params_from_model_input(self, model_input):
@@ -1102,17 +1110,23 @@ class LightCurtain:
 
         return DPV
 
-    def gen_lc_dpv_true(self, sensed_arr, std_div):
+    def gen_lc_dpv_true(self, sensed_arr, std_div, peak_img=None):
         depth_sensed = sensed_arr[0,:,:]
         mask_sense = (depth_sensed > 0).float()
         thickness_sensed = sensed_arr[2,:,:] * mask_sense
         int_sensed = sensed_arr[1,:,:] * mask_sense
 
+        # Peak
+        if peak_img is not None:
+            peak_img = torch.tensor(peak_img).float().to(self.device).unsqueeze(-1)
+        else:
+            peak_img = torch.ones(depth_sensed.shape).float().to(self.device).unsqueeze(-1) * 0.2
+
         # Compute DPV
         z_img = torch.tensor(depth_sensed).float().to(self.device).unsqueeze(-1)
         int_img = torch.tensor(int_sensed / 255.).float().to(self.device).unsqueeze(-1)
         unc_img = torch.tensor((thickness_sensed / std_div) ** 2).float().to(self.device).unsqueeze(-1)
-        mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img, 0.1, 0.2)
+        mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img, 0.1, peak_img)
         DPV = DPV.permute(2,0,1)
 
         return DPV

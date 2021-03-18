@@ -31,7 +31,7 @@
     "enabled": false,
     "iterations": 5,
     "planner": "default",
-    "params": {"step": [0.5]},
+    "params": {"step": [0.5], "spread_iter": 2, "spread_n": 5},
     "use_lc_prob": 0.7
   },
   "loss": {
