@@ -1188,7 +1188,13 @@ class BaseModel(nn.Module):
             for i in range(0, iterations):
 
                 # Generate UField
-                unc_field_predicted, _ = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True, cfg=self.cfg)
+                unc_field_predicted, debugmap = img_utils.gen_ufield(final, lc.d_candi, intr.squeeze(0), BV_log=True, cfg=self.cfg)
+
+                # rgb_debug = img_utils.torchrgb_to_cv2(img)
+                # rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
+                # import cv2
+                # cv2.imshow("rgb", rgb_debug)
+                # cv2.waitKey(1)
 
                 # # Add epsilon and renormalize in case some are nan
                 # unc_field_predicted[torch.isnan(unc_field_predicted)] = 0.
