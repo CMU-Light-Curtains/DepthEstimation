@@ -28,11 +28,15 @@ Triangulation Light Curtains were introduced in 2019 and developed by the Illumi
 
 ![Intro](https://raw.githubusercontent.com/soulslicer/adap-fusion/master/pics/intro.png)
 
-Neural RGBD introduced the world to Depth Probability Fields (DPV), where instead of predicting depth per pixel, we predict a distribution per pixel. To help us visualize the uncertainty, we collapsed the distribution along the surface of the road so that you can visualize the Uncertainty Field (UF). You can read more details in [here](https://github.com/soulslicer/probabilistic-depth/blob/main/pics/explanation.pdf). One can see that Monocular RGB depth estimation has significant uncertainty. 
+Neural RGBD introduced the world to Depth Probability Fields (DPV), where instead of predicting depth per pixel, we predict a distribution per pixel. To help us visualize the uncertainty, we collapsed the distribution along the surface of the road so that you can visualize the Uncertainty Field (UF). You can read more details in [here](https://github.com/soulslicer/probabilistic-depth/blob/main/pics/explanation.pdf). One can see that Monocular RGB depth estimation has significant uncertainty.
 
-![Intro](https://github.com/soulslicer/adap-fusion/blob/master/pics/together.png?raw=true)
+![Together](https://github.com/soulslicer/adap-fusion/blob/master/pics/together.png?raw=true)
 
 We show how errors in Monocular Depth Estimation are corrected when used in tandem with an Adaptive Sensor such as a Triangulating Light Curtain (Yellow Points and Red lines are Ground Truth). (b) We predict a per-pixel Depth Probability Volume from Monocular RGB and we observe large per-pixel uncertainties (σ=3m) as seen in the Bird's Eye View /  Top-Down Uncertainty Field slice. (c) We actively drive the Light Curtain sensor's Laser to exploit and sense multiple regions along a curve that maximize information gained. (d) We feed these measurements back recursively to get a refined depth estimate, along with a reduction in uncertainty.
+
+![Network](https://github.com/soulslicer/adap-fusion/blob/master/pics/network.png?raw=true)
+
+Our Light Curtain (LC) Fusion Network can take in RGB images from a single monocular image, multiple temporally consistent monocular images, or a stereo camera pair to generate a Depth Probability Volume (DPV) prior. We then recursively drive our Triangulation Light Curtain's laser line to plan and place curtains on regions that are uncertain and refine them. This is then fed back on the next timestep to get much more refined DPV estimate.
 
 ## Installation
 
@@ -42,6 +46,7 @@ We show how errors in Monocular Depth Estimation are corrected when used in tand
     # Use the raw_kitti_downloader script
     # Link kitti to a folder in this project folder
     ln -s {absolute_kitti_path} kitti
+    # Alternatively download from http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/kitti.zip
 - Install Python Deps
     torch, matplotlib, numpy, cv2, pykitti, tensorboardX
 - Compile external deps
@@ -52,37 +57,42 @@ We show how errors in Monocular Depth Estimation are corrected when used in tand
     sudo sh compile_3.X.sh
     # Ensure everything compiled correctly with no errors
 - Download pre-trained models
-    # https://drive.google.com/file/d/1XN5lrFobInkcJ4F6cHgAd385eX9Galfw/view?usp=sharing
-    unzip output.zip
+    # sh download_models.sh
 ```
 
-## Running
+## 1. Running Training Code
+
+In this code, we demonstrate how we use the KITTI dataset and the Triangulation Light Curtain Simulator to simulate the response of light curtains and feed information back to the network
 
 ```
-# Eval
-- Moving Monocular Depth Estimation
-    python3 train.py --config configs/default_mono.json --eval --viz
-- Moving Monocular Depth Estimation with Feedback
-    python3 train.py --config configs/default_mono_feedback.json --eval --viz
-- Stereo Depth Estimation
-    python3 train.py --config configs/default_stereo.json --eval --viz
-- Stereo Depth Estimation with Feedback
-    python3 train.py --config configs/default_stereo_feedback.json --eval --viz
-- Moving Monocular Lidar Upsampling
-    python3 train.py --config configs/default_mono_upsample.json --eval --viz
+# Eval KITTI
+- Monocular RGB Depth Estimation
+    python3 train.py --config configs/default_exp7_lc.json --eval --viz
+- Monocular RGB Depth Estimation + LC Fusion
+    python3 train.py --config configs/default_exp7_lc.json --lc --eval --viz
+- Monocular RGB Depth Estimation + LC Fusion (Debug)
+    python3 train.py --config configs/default_exp7_lc.json --lc --eval --viz --lc_debug
 
-# Training
-    Training only works with Python 3 as it uses distributed training
-    To train, simply remove the eval and viz flags. Use the `batch_size` flag to change batch size. It automatically splits it among the GPUs available
-    `pkill -f -multi` to clear memory if crashes
+# Training KITTI
+- Training only works with Python 3 as it uses distributed training. 
+- Simply remove the eval and viz flags. Use the `batch_size` flag to change batch size. It automatically splits it among the GPUs available
+- `pkill -f -multi` to clear memory if crashes
+
+# ILIM
+- To train with the ILIM dataset, download http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/ilim.zip
+- Train with configs/default_exp7_lc_ilim.json instead
 ```
 
-## Math?
+## 2. Running with Real Light Curtain
 
-Coming soon. Disclaimer: This is a template code that I have written to extend some research I am working on. Please be sure to cite this if you use this code
-
-## References
+Obviously you do not have a light curtain with you. Hence, we have devised a mechanism which you can actually run the actual light curtain device from the comfort of your own home. To do this, we have over 600 static scenes that we swept a planar light curtain at 0.1m intervals from 3m to 18m, complete with stereo data and LIDAR data. The code below demonstrates how our planning, placement and update algorithm works when used with the real curtain.
 
 ```
-Uses code from https://github.com/lliuz/ARFlow (ARFlow) and https://github.com/NVlabs/neuralrgbd (NeuralRGBD)
+- Download the light curtain sweep dataset from http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/sweep.zip
+- Modify path in sweep_convert.py
+- python3 sweep_convert.py
 ```
+
+## 3. Light Curtain Model
+
+Wip
