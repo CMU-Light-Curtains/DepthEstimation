@@ -57,10 +57,10 @@ Our Light Curtain (LC) Fusion Network can take in RGB images from a single monoc
     sudo sh compile_3.X.sh
     # Ensure everything compiled correctly with no errors
 - Download pre-trained models
-    # sh download_models.sh
+    sh download_models.sh
 ```
 
-## 1. Running Training Code
+## 1. Simulated Light Curtain
 
 In this code, we demonstrate how we use the KITTI dataset and the Triangulation Light Curtain Simulator to simulate the response of light curtains and feed information back to the network
 
@@ -83,9 +83,21 @@ In this code, we demonstrate how we use the KITTI dataset and the Triangulation 
 - Train with configs/default_exp7_lc_ilim.json instead
 ```
 
-## 2. Running with Real Light Curtain
+## 2. Real Light Curtain
 
 Obviously you do not have a light curtain with you. Hence, we have devised a mechanism which you can actually run the actual light curtain device from the comfort of your own home. To do this, we have over 600 static scenes that we swept a planar light curtain at 0.1m intervals from 3m to 18m, complete with stereo data and LIDAR data. The code below demonstrates how our planning, placement and update algorithm works when used with the real curtain.
+
+![Sweep](https://github.com/soulslicer/adap-fusion/blob/master/pics/sweep.png?raw=true)
+
+```
+This step is optional and is for training the model with the ILIM dataset
+- Download the ILIM dataset
+    http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/ilim.zip
+- Train on KITTI from 3m to 18m
+    python3 train.py --config configs/default_318.json
+- Train on ILIM from 3m to 18m
+    python3 train.py --config configs/default_318_lc_ilim.json --init_model (PATH TO PRETRAINED KITTI MODEL HERE) --lc
+```
 
 ```
 - Download the light curtain sweep dataset from http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/sweep.zip
@@ -93,6 +105,6 @@ Obviously you do not have a light curtain with you. Hence, we have devised a mec
 - python3 sweep_convert.py
 ```
 
-## 3. Light Curtain Model
-
-Wip
+```
+Others
+```
