@@ -104,6 +104,8 @@ def load_datum(path, name, indx):
 
 # Load
 datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_05_drive_0004_sweep", 10)
+#datum = load_datum("/media/raaj/Storage/sweep_data", "2021_03_12_drive_0004_sweep", 81)
+#datum = load_datum("/media/raaj/Storage/sweep_data", "2021_02_25_drive_0003_sweep", 0)
 
 # Undistort Sweep Arr (only small one)
 datum.nir_img = cv2.undistort(datum.nir_img, datum.K_lc, datum.D_lc)
@@ -236,7 +238,7 @@ class Network():
                             'std': [0.229, 0.224, 0.225]}
         self.transformer = transforms.Normalize(**__imagenet_stats)
 
-        # Load Model
+        # Load Params
         if self.mode == "stereo":
             model_name = 'default_stereo_ilim'
         elif self.mode == "mono":
@@ -249,10 +251,18 @@ class Network():
             model_name = 'default_sweep'
         elif self.mode == 'mono_318':
             model_name = 'default_318_ilim'
+        elif self.mode == 'mono_lc_318':
+            model_name = 'default_318_lc_ilim'
         cfg_path = 'configs/' + model_name + '.json'
         model_path = ''
         with open(cfg_path) as f:
             self.cfg = EasyDict(json.load(f))
+        # Update Params
+        # self.cfg.train.self_recurse = 2
+        # self.cfg.train.clear_prev_on_recurse = True
+        # self.cfg.lc.enabled = True
+
+        # Load Network
         self.model = get_model(self.cfg, 0)
         epoch, weights = load_checkpoint('outputs/checkpoints/' + model_name + '/' + model_name + '_model_best.pth.tar')
         from collections import OrderedDict
@@ -278,6 +288,19 @@ class Network():
         self.rgb_pinned[:] = torch.cat([inp1.unsqueeze(0), inp2.unsqueeze(0)]).unsqueeze(0)
         self.model_datum["rgb"] = self.rgb_pinned.cuda(non_blocking=False)
 
+    def set_dmap(self, dmap):
+        dmap_small = img_utils.minpool(torch.Tensor(dmap).cuda().unsqueeze(0).unsqueeze(0), 4, 1000).squeeze(0)
+        self.model_datum["dmaps"] = dmap_small
+        self.model_datum["masks"] = (dmap_small > 0).unsqueeze(0).float()
+
+    def set_lc_dpv(self, lc_dpv):
+        lc_dpv = F.interpolate(lc_dpv.detach(), scale_factor=0.25, mode='nearest')
+        self.model_datum["prev_lc"] = lc_dpv
+
+    def set_prev_dpv(self, dpv):
+        dpv = F.interpolate(dpv.detach(), scale_factor=0.25, mode='nearest')
+        self.model_datum["prev_output"] = dpv
+
     def run_lc_network(self):
         self.model.eval()
         output = self.model([self.model_datum])[0]
@@ -287,6 +310,7 @@ class Network():
 # RGB Network
 depth_network = Network(datum, mode='mono_318')
 depth_network.set_lc_params(datum['left_img'])
+depth_network.set_dmap(datum['left_depth'])
 dpv_output = depth_network.run_lc_network().detach()
 depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
 
@@ -311,13 +335,14 @@ def visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debu
     field_visual = cv2.resize(field_visual, None, fx=1, fy=2, interpolation = cv2.INTER_CUBIC)
     rgb_debug = datum["left_img"].copy().astype(np.float32)/255
     rgb_debug[:,:,0] += debugmap[0,:,:].detach().cpu().numpy()
+    field_visual = cv2.flip(field_visual, 0)
     cv2.imshow("field_visual", field_visual)
     cv2.imshow("depth_output", depth_output.squeeze(0).detach().cpu().numpy()/100)
     cv2.imshow("rgb_debug", rgb_debug)
     cv2.waitKey(0)
 
 # Visualize Unc Field
-# visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debugmap, datum)
+visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debugmap, datum)
 
 class LC():
     def __init__(self, datum):
@@ -350,6 +375,9 @@ class LC():
         if not self.real_lc.initialized:
             self.real_lc.init(copy.deepcopy(self.real_param))
 
+        # Save to Json
+        np.save("real_param.npy", self.real_param)
+
         # Planner LC
         LC_SCALE = float(param['size_rgb'][0]) / float(param['size_lc'][0]) # 0.625
         param['laser_timestep'] = 2.5e-5 / LC_SCALE
@@ -371,6 +399,9 @@ class LC():
         self.algo_lc = light_curtain.LightCurtain()
         if not self.algo_lc.initialized:
             self.algo_lc.init(copy.deepcopy(self.algo_param))
+
+        # Save to Json
+        np.save("algo_param.npy", self.algo_param)
 
         # Load Flow Field
         self.algo_lc.fw_large.load_flowfield()
@@ -442,23 +473,30 @@ class LC():
         unc_field_truth_lc[:,:,-50:-1] = np.nan
 
         # Setup Planner
-        params = {"step": [0.75], "std_div": 5.}
+        params = {"step": [0.5], "std_div": 5.}
         plan_func = self.algo_lc.plan_default
-        # params = {"step": 3, "interval": 15, "std_div": 3.}
-        # plan_func = self.algo_lc.plan_m1
+        #params = {"step": 3, "interval": 15, "std_div": 3.}
+        #plan_func = self.algo_lc.plan_m1
 
         # Expand and Integrate
         dpv_r_tensor = torch.exp(img_utils.upsample_dpv(dpv_r_tensor, N=self.real_lc.expand_A, BV_log=True))
         for i in range(0,1):
             self.integrate([dpv_r_tensor])      
 
+        # Hack
+        # self.final = torch.log(img_utils.gen_dpv_withmask(self.final[:,0,:,:]*0+10, self.final[:,0,:,:].unsqueeze(0)*0+1, self.algo_lc.d_candi, 3.0))
+
         # Sensing
-        iterations = 200
+        iterations = 20
         mode = "sim"
         for i in range(0, iterations):
 
             # Generate UField (in RGB)
             unc_field_predicted_r, debugmap = img_utils.gen_ufield(self.final, self.algo_lc.d_candi, intr_r_tensor.squeeze(0), BV_log=True, cfgx=self.real_param)
+
+            # Remove stuff
+            unc_field_truth_lc[:,:,0:120] = np.nan
+            unc_field_truth_lc[:,:,270:320] = np.nan
 
             # Score (Need to compute in LC space as it is zoomed in sadly)
             unc_field_predicted_lc = self.algo_lc.fw_large.preprocess(unc_field_predicted_r.squeeze(0), self.algo_lc.d_candi, self.algo_lc.d_candi_up)
@@ -499,8 +537,8 @@ class LC():
                 # Gen DPV
                 #peak_img = torch.clamp(datum.nir_warped_tensor.squeeze(0) + 0.2, 0, 1)
                 peak_img = None
-                # lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
-                lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2, peak_img) # May have to pass values here
+                lc_DPV = self.real_lc.gen_lc_dpv_approx(sensed_arr, 5) # May have to pass values here
+                # lc_DPV = self.real_lc.gen_lc_dpv_true(sensed_arr, 2, peak_img) # May have to pass values here
                 # Add
                 lc_DPVs.append(lc_DPV)
 
@@ -518,18 +556,36 @@ class LC():
             # Return
             field_visual = self.algo_lc.field_visual
             field_visual[:,:,2] = unc_field_truth_lc[0,:,:].cpu().numpy()*3
+            field_visual = cv2.flip(field_visual, 0)
             cv2.imshow("field_visual", field_visual)
             cv2.imshow("rgb_debug", rgb_debug)
             cv2.imshow("final_depth", final_depth/100)
             cv2.waitKey(0)
 
-        print(dpv_r_tensor.shape)  
+        # Squeeze back to 64
+        return img_utils.upsample_dpv(self.final, N=64, BV_log=True) 
 
         pass
 
 # Setup LC
 lc = LC(datum)
-lc.run(datum, dpv_output)
+corrected_dpv = lc.run(datum, dpv_output)
+
+# Put back to network
+depth_network.set_prev_dpv(dpv_output.clone())
+depth_network.set_lc_dpv(corrected_dpv.clone())
+dpv_output = depth_network.run_lc_network().detach()
+depth_output = img_utils.dpv_to_depthmap(dpv_output, depth_network.model_datum["d_candi"], BV_log=True)
+
+# Generate Unc Field
+unc_field_predicted, debugmap = img_utils.gen_ufield(dpv_output, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=True, 
+                                cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
+dpv_truth = img_utils.gen_dpv_withmask(torch.tensor(datum["left_depth"]).unsqueeze(0), (torch.tensor(datum["left_depth"]) > 0).float().unsqueeze(0).unsqueeze(0), depth_network.model_datum["d_candi"])
+unc_field_truth, _ = img_utils.gen_ufield(dpv_truth, depth_network.model_datum["d_candi"], depth_network.model_datum["intrinsics_up"].squeeze(0), BV_log=False, 
+                                cfgx={"unc_ang": 0, "unc_shift": 1, "unc_span": 0.3})
+
+visualize_unc_field(unc_field_predicted, unc_field_truth, depth_output, debugmap, datum)
+
 
 stop
 
@@ -537,7 +593,7 @@ stop
 Train a default model that strictly does 318 disable other losses and only uses one image 
 Transfer learn to ILIM that mixes our data too
 """
-LOOK
+# LOOK
 #LOOK AT TODO
 
 # LC Network
@@ -590,9 +646,9 @@ def mouse_callback(event,x,y,flags,param):
             disp_i = disp_i[0:first_nan]
 
         plt.figure(0)
-        plt.plot(disp_z, disp_i, c=rgb, marker='*')
+        plt.plot(disp_z, disp_i, marker='*')
         #plt.figure(1)
-        plt.plot(d_candi, mean_intensities[:,y,x], c=rgb, marker='*')
+        #plt.plot(d_candi, mean_intensities[:,y,x], c=rgb, marker='*')
 
         plt.pause(0.1)
 
@@ -600,7 +656,7 @@ cv2.namedWindow('rgbimg')
 cv2.setMouseCallback('rgbimg',mouse_callback)
 
 while 1:
-    cv2.imshow("rgbimg", rgb_img/255. + mask_tensor.squeeze(0).unsqueeze(-1).numpy())
+    cv2.imshow("rgbimg", rgb_img/255)
     cv2.waitKey(15)
 
 
