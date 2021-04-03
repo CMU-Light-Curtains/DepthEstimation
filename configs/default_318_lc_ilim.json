@@ -33,7 +33,9 @@
     "iterations": 10,
     "planner": "default",
     "params": {"step": [0.5], "spread_iter": 1, "spread_n": 3},
-    "use_lc_prob": 0.7
+    "use_lc_prob": 0.6,
+    "self_recurse": 2,
+    "clear_prev_on_recurse": true
   },
   "loss": {
     "ce_mul": 1.0,
