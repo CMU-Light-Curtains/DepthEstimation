@@ -601,7 +601,7 @@ class LightCurtain:
                             & (spline[:,1] >= 0) & (spline[:,1] < field_visual.shape[0])]
 
             # Draw Spline
-            # for spixel in spline: field_visual[spixel[1], spixel[0]] = (0,1,1)
+            for spixel in spline: field_visual[spixel[1], spixel[0]] = (1,0,0)
 
             # Create Empty Field
             empty_field = field_preprocessed_range_temp*0
@@ -873,19 +873,19 @@ class LightCurtain:
         thickness_sensed = torch.tensor(thickness_sensed).to(self.device) * mask_sense
         int_sensed = torch.tensor(int_sensed).to(self.device) * mask_sense
 
-        # Compute DPV (Paper Implementation)
-        z_img = depth_sensed.unsqueeze(-1)
-        int_img = (int_sensed / 255.).unsqueeze(-1)
-        unc_img = (thickness_sensed / 5.).unsqueeze(-1)
-        mean_intensities, DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
-        DPV = DPV.permute(2,0,1)
+        # # Compute DPV (Paper Implementation)
+        # z_img = depth_sensed.unsqueeze(-1)
+        # int_img = (int_sensed / 255.).unsqueeze(-1)
+        # unc_img = (thickness_sensed / 5.).unsqueeze(-1)
+        # mean_intensities, DPV = img_utils.lc_intensities_to_dist(d_candi_cuda, z_img, int_img, unc_img, 0.1, 0.6)
+        # DPV = DPV.permute(2,0,1)
 
-        # # Compute DPV (Approximated Implementation)
-        # z_img = depth_sensed
-        # int_img = int_sensed / 255.
-        # unc_img = (thickness_sensed / 10.) ** 2
-        # A = mapping(int_img)
-        # DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
+        # Compute DPV (Approximated Implementation)
+        z_img = depth_sensed
+        int_img = int_sensed / 255.
+        unc_img = (thickness_sensed / 10.) ** 2
+        A = mapping(int_img)
+        DPV = mixed_model(self.d_candi, z_img, unc_img, A, 1. - A)
 
         # Save information at pixel wanted
         pixel_wanted = [150, 66]
@@ -1118,7 +1118,7 @@ class LightCurtain:
         # Compute DPV
         z_img = torch.tensor(depth_sensed).float().to(self.device).unsqueeze(-1)
         int_img = torch.tensor(int_sensed / 255.).float().to(self.device).unsqueeze(-1)
-        unc_img = torch.tensor((thickness_sensed / std_div) ** 2).float().to(self.device).unsqueeze(-1)
+        unc_img = torch.tensor((thickness_sensed / std_div) ** 1).float().to(self.device).unsqueeze(-1)
         mean_intensities, DPV = img_utils.lc_intensities_to_dist(torch.tensor(self.d_candi).float().to(self.device), z_img, int_img, unc_img, 0.1, peak_img)
         DPV = DPV.permute(2,0,1)
 
