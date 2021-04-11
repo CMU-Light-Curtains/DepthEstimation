@@ -101,8 +101,7 @@ This step is optional and is for training the model with the ILIM dataset
 
 ```
 - Download the light curtain sweep dataset from http://megatron.sp.cs.cmu.edu/raaj/data3/Public/raaj/sweep.zip
-- Modify path in sweep_convert.py
-- python3 sweep_convert.py
+- Run the notebooks (namely lc_error.ipynb)
 ```
 
 ```
