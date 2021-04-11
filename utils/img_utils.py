@@ -389,6 +389,20 @@ def compute_unc_rmse(unc_field_truth, unc_field_predicted, d_candi, plot=False):
         plt.pause(0.05)
     return unc_field_rmse
 
+def compute_unc_rmse_cust(unc_field_truth, unc_field_predicted, d_candi):
+    # Get Depth comparison
+    unc_field_truth_depth = dpv_to_depthmap(unc_field_truth.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
+    unc_field_predicted_depth = dpv_to_depthmap(unc_field_predicted.unsqueeze(2), d_candi, BV_log=False).squeeze(0).squeeze(0)
+    unc_field_predicted_depth[0] = 0
+    unc_field_predicted_depth[-1] = 0
+    unc_field_mask = ~torch.isnan(unc_field_truth_depth) & ~torch.isnan(unc_field_predicted_depth)
+    unc_field_truth_depth[~unc_field_mask] = 0.
+    unc_field_predicted_depth[~unc_field_mask] = 0.
+    unc_field_rmse = torch.sqrt(torch.sum((unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask)**2)/torch.sum(unc_field_mask))
+    unc_field_rmse = torch.sum(torch.abs(unc_field_truth_depth*unc_field_mask - unc_field_predicted_depth*unc_field_mask))/torch.sum(unc_field_mask)
+    
+    return ((unc_field_truth_depth*unc_field_mask).cpu().numpy(), (unc_field_predicted_depth*unc_field_mask).cpu().numpy())
+
 spread_kernel = None
 spread_conv = None
 def spread_dpv_hack(dpv, N=5):
